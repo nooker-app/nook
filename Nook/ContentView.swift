@@ -508,6 +508,10 @@ private struct FeedSidebar: View {
                 SyncFolderFooter(store: store, onChoose: onChooseSyncFolder)
                 UpdateBanner(updateController: updateController)
             }
+            // The footer floats over the sidebar list (safe-area inset), so
+            // without a background the rows scroll through it verbatim. Glass
+            // keeps it legible while staying native to the translucent sidebar.
+            .glassEffect(.regular, in: Rectangle())
         }
         .alert("New Folder", isPresented: $isCreatingFolder) {
             TextField("Folder Name", text: $newFolderName)

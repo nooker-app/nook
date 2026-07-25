@@ -27,6 +27,7 @@ struct RootView: View {
     /// Drives the tutorial's hand-off from the welcome cover into the live app
     /// (add the sample feed, then hint the list). In-memory, shared via environment.
     @State private var tour = TourCoordinator()
+    @State private var tabChrome = TabBarChrome()
 
     var body: some View {
         ZStack {
@@ -187,6 +188,7 @@ struct RootView: View {
         .tint(Color("AccentColor"))
         // Share the tutorial coordinator with both shells and the welcome cover.
         .environment(tour)
+        .environment(tabChrome)
     }
 
     /// Presents the one-time list-title-translation promo — but only for a user
@@ -355,7 +357,69 @@ private struct RegularShell: View {
 /// The selected tab. The shared store has one selection scope, so switching tabs
 /// re-asserts the newly-active tab's scope (feeds/starred change
 /// `feedSelection`/`smartSelection`, so returning to Home must restore its filter).
-private enum AppTab: Hashable { case home, feeds, starred, settings }
+private enum AppTab: Hashable, CaseIterable { case home, feeds, starred, settings }
+
+/// Drives the custom liquid-glass tab bar's collapse state from list scrolls,
+/// Instagram-style: sustained scrolling down collapses the bar to the active
+/// tab's pill; scrolling up, nearing the top, tapping the pill, or switching
+/// tabs restores it. Hysteresis mirrors the reader's chrome auto-hide so
+/// momentum jitter can't flicker the bar.
+@MainActor
+@Observable
+final class TabBarChrome {
+    private(set) var collapsed = false
+    /// True while an article reader is pushed; the bar pops away entirely.
+    /// Driven by `ReaderPushingList`'s pushed state (the store's
+    /// `selectedArticleID` deliberately survives a pop for retention, so it
+    /// can't serve as this signal).
+    private(set) var readerOpen = false
+    /// Non-observed bookkeeping: only `collapsed` flips invalidate views.
+    @ObservationIgnored private var lastY: CGFloat = 0
+    @ObservationIgnored private var accum: CGFloat = 0
+
+    func setReaderOpen(_ open: Bool) {
+        guard readerOpen != open else { return }
+        readerOpen = open
+        // Coming back from the reader always shows the full bar.
+        if !open { expand() }
+    }
+
+    func noteScroll(offsetY: CGFloat) {
+        let delta = offsetY - lastY
+        lastY = offsetY
+        // A different list took over (tab switch, push/pop) — resync silently.
+        if abs(delta) > 300 {
+            accum = 0
+            return
+        }
+        // The bar always shows near the top.
+        if offsetY < 60 {
+            accum = 0
+            setCollapsed(false)
+            return
+        }
+        if (delta > 0) != (accum > 0) { accum = 0 }
+        accum += delta
+        if accum > 44 {
+            setCollapsed(true)
+        } else if accum < -44 {
+            setCollapsed(false)
+        }
+    }
+
+    func expand() {
+        accum = 0
+        setCollapsed(false)
+    }
+
+    private func setCollapsed(_ value: Bool) {
+        guard collapsed != value else { return }
+        accum = 0
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            collapsed = value
+        }
+    }
+}
 
 /// A navigable source in the Feeds tab.
 private enum FeedTarget: Hashable {
@@ -374,6 +438,7 @@ private enum FeedTarget: Hashable {
 private struct CompactShell: View {
     @Bindable var store: ReaderStore
     @Environment(TourCoordinator.self) private var tour
+    @Environment(TabBarChrome.self) private var tabChrome
     @AppStorage(TourFlags.seenListHintKey) private var seenListHint = false
     @State private var selection: AppTab = .home
     @State private var homeFilter: SmartSource = .unread
@@ -398,6 +463,7 @@ private struct CompactShell: View {
                         .renderingMode(.template)
                         .accessibilityLabel(Text("Home"))
                 }
+                .modifier(NativeTabBarHider())
                 .tag(AppTab.home)
 
             FeedsTab(store: store, path: $feedsPath)
@@ -410,6 +476,7 @@ private struct CompactShell: View {
                         .renderingMode(.template)
                         .accessibilityLabel(Text("Feeds"))
                 }
+                .modifier(NativeTabBarHider())
                 .tag(AppTab.feeds)
 
             StarredTab(store: store)
@@ -418,6 +485,7 @@ private struct CompactShell: View {
                         .renderingMode(.template)
                         .accessibilityLabel(Text("Starred"))
                 }
+                .modifier(NativeTabBarHider())
                 .tag(AppTab.starred)
 
             SettingsView(store: store, isTab: true)
@@ -426,11 +494,14 @@ private struct CompactShell: View {
                         .renderingMode(.template)
                         .accessibilityLabel(Text("Settings"))
                 }
+                .modifier(NativeTabBarHider())
                 .tag(AppTab.settings)
         }
-        // Shrink the tab bar into a compact pill while scrolling the list, so the
-        // content gets the focus; it expands again on scroll-up / at the top.
-        .modifier(TabBarMinimizeOnScroll())
+        // The custom liquid-glass tab bar (iOS 26): glass capsule background,
+        // solid (no-glass) sliding pill under the selected item, shrinking in
+        // place while the list scrolls down and popping away when the reader
+        // opens. Below iOS 26 the native bar stays.
+        .modifier(LiquidGlassTabBarHost(selection: $selection))
         // The list spotlight is owned and drawn here at the shell — always mounted,
         // so unlike a TabView child it reliably reacts to the tutorial hand-off and
         // renders on top. Keep it showing as long as we're on Home (don't tie the
@@ -451,6 +522,9 @@ private struct CompactShell: View {
         .onChange(of: selection) { _, tab in
             applySelection(tab)
             tryStartListHint()
+            // Switching tabs always restores the full bar (matches the native
+            // minimize behavior and Instagram's).
+            tabChrome.expand()
         }
         // Tutorial hand-off: the welcome cover asks to add the starter feed (jump
         // to Feeds, where Add Feed opens); once the Add Feed sheet is dismissed the
@@ -578,12 +652,130 @@ private struct CompactShell: View {
 
 /// Minimizes the tab bar as the user scrolls down (restoring on scroll-up / at
 /// the top) on iOS 26+, where the behavior is native; a no-op on earlier iOS.
-private struct TabBarMinimizeOnScroll: ViewModifier {
+/// Hides the system tab bar wherever the custom liquid-glass bar replaces it
+/// (iOS 26); earlier systems keep the native bar untouched.
+private struct NativeTabBarHider: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
-            content.tabBarMinimizeBehavior(.onScrollDown)
+            content.toolbarVisibility(.hidden, for: .tabBar)
         } else {
             content
+        }
+    }
+}
+
+/// Mounts the custom tab bar as a bottom safe-area inset (iOS 26): descendant
+/// lists inset their content and scroll UNDER the strip — exactly the native
+/// floating-bar behavior the glass needs to refract. Below iOS 26 this is a
+/// no-op and the native bar stays. Opening the reader (a pushed article)
+/// dismisses the bar with a slide-down + shrink-away pop; closing brings it
+/// back the same way.
+private struct LiquidGlassTabBarHost: ViewModifier {
+    @Binding var selection: AppTab
+    @Environment(TabBarChrome.self) private var chrome
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
+                ZStack {
+                    if !chrome.readerOpen {
+                        LiquidGlassTabBar(
+                            selection: $selection,
+                            collapsed: chrome.collapsed,
+                            onExpand: { chrome.expand() }
+                        )
+                        .transition(
+                            .move(edge: .bottom)
+                                .combined(with: .scale(scale: 0.6, anchor: .bottom))
+                                .combined(with: .opacity)
+                        )
+                    }
+                }
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: chrome.readerOpen)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// The custom bottom bar, Instagram-on-iOS-26 style: a liquid-glass capsule
+/// holding the tab icons, the selected item sitting on a solid (no-glass) pill
+/// that slides between items like a segmented control. While the list scrolls
+/// down the whole bar shrinks in place; scrolling up (or tapping it) restores
+/// the full size.
+@available(iOS 26, *)
+private struct LiquidGlassTabBar: View {
+    @Binding var selection: AppTab
+    let collapsed: Bool
+    var onExpand: () -> Void
+
+    /// Drives the segmented-control slide of the selection pill.
+    @Namespace private var selectionNamespace
+
+    var body: some View {
+        GlassEffectContainer {
+            HStack(spacing: 2) {
+                tabButton(.home, label: Text("Home"))
+                tabButton(.feeds, label: Text("Feeds"))
+                tabButton(.starred, label: Text("Starred"))
+                tabButton(.settings, label: Text("Settings"))
+            }
+            .padding(5)
+            .glassEffect(.regular.interactive(), in: Capsule())
+        }
+        // Scroll-down minimizes the bar in place (the whole capsule scales,
+        // nothing rearranges); any touch or scroll-up restores it.
+        .scaleEffect(collapsed ? 0.72 : 1, anchor: .bottom)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.top, 2)
+        // Hug the home indicator: sit right on the bottom safe-area edge.
+        .padding(.bottom, 0)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: collapsed)
+    }
+
+    private func tabButton(_ tab: AppTab, label: Text) -> some View {
+        Button {
+            if collapsed { onExpand() }
+            selection = tab
+        } label: {
+            icon(for: tab)
+                .foregroundStyle(selection == tab ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .frame(width: 74, height: 56)
+                .background {
+                    // The selected item's seat is deliberately NOT glass — a
+                    // solid adaptive fill inside the glass capsule — and it
+                    // slides between items segmented-control style via the
+                    // shared geometry id.
+                    if selection == tab {
+                        Capsule()
+                            .fill(Color(uiColor: .secondarySystemFill))
+                            .matchedGeometryEffect(id: "selection", in: selectionNamespace)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: selection)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selection == tab ? [.isSelected] : [])
+    }
+
+    @ViewBuilder
+    private func icon(for tab: AppTab) -> some View {
+        switch tab {
+        case .home:
+            Image(uiImage: TabGlyph.nest).renderingMode(.template)
+        case .feeds:
+            Image(uiImage: TabGlyph.symbol(selection == .feeds ? "square.stack.fill" : "square.stack"))
+                .renderingMode(.template)
+        case .starred:
+            Image(uiImage: TabGlyph.symbol(selection == .starred ? "star.fill" : "star"))
+                .renderingMode(.template)
+        case .settings:
+            Image(uiImage: TabGlyph.symbol(selection == .settings ? "gearshape.fill" : "gearshape"))
+                .renderingMode(.template)
         }
     }
 }
@@ -1145,6 +1337,7 @@ private struct ReaderPushingList<Top: View>: View {
     /// what this pushed reader shows.
     @State private var pushed: Article?
     @State private var isSearching = false
+    @Environment(TabBarChrome.self) private var tabChrome
 
     init(
         store: ReaderStore,
@@ -1164,6 +1357,12 @@ private struct ReaderPushingList<Top: View>: View {
             ArticleList(store: store, selection: selectionBinding, managesSearch: false, onShowAllArticles: onShowAllArticles)
         }
         .modifier(CompactSearchButton(searchText: $store.searchText, isSearching: $isSearching, enabled: providesSearch))
+        // The custom glass tab bar pops away while a reader is pushed and
+        // returns on pop (the store's selection survives pops, so the pushed
+        // state here is the reliable signal).
+        .onChange(of: pushed == nil) { _, popped in
+            tabChrome.setReaderOpen(!popped)
+        }
         .navigationDestination(item: $pushed) { _ in
             // Drive the reader from the binding (not the closure's snapshot) so
             // previous/next swipe can move it in place.
@@ -1610,6 +1809,8 @@ private struct ArticleList: View {
     /// Gates the tutorial-spotlight frame publisher below: mounted only while
     /// the list spotlight is requested or showing, never in steady state.
     @Environment(TourCoordinator.self) private var tour
+    /// Collapse driver for the custom liquid-glass tab bar (iPhone shell).
+    @Environment(TabBarChrome.self) private var tabChrome
     /// Shared, on-device title translator for the opt-in "translate list titles"
     /// experiment. Reading its `state(for:)` in `row` observes streaming updates.
     private let titleTranslator = ListTitleTranslator.shared
@@ -1728,6 +1929,15 @@ private struct ArticleList: View {
         // source of mid-scroll jank. Queued rows start once the scroll settles.
         .onScrollPhaseChange { _, newPhase in
             titleTranslator.setScrolling(newPhase != .idle)
+        }
+        // Feed the custom tab bar's collapse hysteresis (iPhone shell; the
+        // chrome is inert on iPad where no custom bar reads it). Bounded to the
+        // scrollable range so elastic overscroll can't masquerade as scrolling.
+        .onScrollGeometryChange(for: CGFloat.self) { geo in
+            let maxY = max(0, geo.contentSize.height - geo.containerSize.height)
+            return min(max(0, geo.contentOffset.y + geo.contentInsets.top), maxY)
+        } action: { _, y in
+            tabChrome.noteScroll(offsetY: y)
         }
         .refreshable { await refreshCurrent() }
         .overlay {
