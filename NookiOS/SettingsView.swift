@@ -17,6 +17,10 @@ struct SettingsView: View {
     /// into a "Data" section here). Defaults to sheet presentation (iPad),
     /// leaving that path unchanged.
     var isTab: Bool = false
+    /// Reports whether the settings ROOT list is on screen (false while a
+    /// detail screen is pushed). The iPhone shell uses it to hide the custom
+    /// tab bar on detail screens, like the reader push does.
+    var onRootVisibilityChange: ((Bool) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @AppStorage(TourFlags.hasCompletedWelcomeKey) private var hasCompletedWelcome = false
     @AppStorage(TourFlags.seenReaderGestureHintKey) private var seenReaderGestureHint = false
@@ -126,6 +130,8 @@ struct SettingsView: View {
                 }
             }
             .warmListBackground()
+            .onAppear { onRootVisibilityChange?(true) }
+            .onDisappear { onRootVisibilityChange?(false) }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

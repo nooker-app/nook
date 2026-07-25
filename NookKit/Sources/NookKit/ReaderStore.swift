@@ -118,6 +118,25 @@ public final class ReaderStore {
     private static let backgroundFilterThreshold = 600
     var lastRefreshedAt: Date?
     public var errorMessage: String?
+    /// What the launch pipeline is doing right now, for the splash screen's
+    /// progress readout on slow launches (large libraries, cold iCloud reads).
+    /// Nil once the library is installed (or when no folder is configured).
+    public private(set) var bootstrapPhase: BootstrapPhase?
+
+    /// Coarse stages of bringing the sync folder online, surfaced on the splash.
+    public enum BootstrapPhase: Sendable {
+        case connectingFolder
+        case readingLibrary
+        case mergingDevices
+
+        public var label: String {
+            switch self {
+            case .connectingFolder: String(localized: "Connecting your sync folder…", bundle: .module)
+            case .readingLibrary: String(localized: "Reading your library…", bundle: .module)
+            case .mergingDevices: String(localized: "Merging changes from your devices…", bundle: .module)
+            }
+        }
+    }
     /// Mirrors the "show unread badge" preference. Held in the store (not only
     /// the view) so the Dock badge is a deterministic function of store state
     /// rather than of SwiftUI view-lifecycle timing.
@@ -2753,7 +2772,8 @@ public final class ReaderStore {
     }
 
     nonisolated private static func loadSyncFolder(
-        storage: ReaderStorage, directoryURL: URL, deviceID: String
+        storage: ReaderStorage, directoryURL: URL, deviceID: String,
+        onPhase: @escaping @Sendable (BootstrapPhase) -> Void = { _ in }
     ) throws -> SyncFolderLoad {
         let own: DeviceStateDocument
         if let fromDisk = storage.loadOwnShard(deviceID: deviceID) {
@@ -2764,12 +2784,14 @@ public final class ReaderStore {
             own = DeviceStateDocument(deviceID: deviceID)
             try? storage.saveShard(own)
         }
+        onPhase(.readingLibrary)
         let replica = try ReplicaStore(syncDirectory: directoryURL, deviceID: deviceID)
         let snapshot = try replica.reconcile(storage: storage)
         try replica.publishIfNeeded(to: storage)
         // The one-time v1→v2 user-state seed is rare; the main actor runs the
         // full legacy path when this flags true.
         let hasLegacySeed = (try? replica.pendingLegacyStateSeed(from: storage)) != nil
+        onPhase(.mergingDevices)
         let peers = ((try? storage.loadShards()) ?? []).filter { $0.deviceID != deviceID }
         var folded = HLC.zero
         for shard in peers { folded = folded.witnessed(shard.maxObservedHLC) }
@@ -2795,8 +2817,12 @@ public final class ReaderStore {
     private func bringSyncFolderOnline(storage: ReaderStorage, directoryURL: URL) async throws {
         let deviceID = deviceID
         let generationBefore = ownShard.generation
-        let load = try await Task.detached(priority: .userInitiated) {
-            try Self.loadSyncFolder(storage: storage, directoryURL: directoryURL, deviceID: deviceID)
+        bootstrapPhase = .connectingFolder
+        defer { bootstrapPhase = nil }
+        let load = try await Task.detached(priority: .userInitiated) { [weak self] in
+            try Self.loadSyncFolder(storage: storage, directoryURL: directoryURL, deviceID: deviceID) { phase in
+                Task { @MainActor in self?.bootstrapPhase = phase }
+            }
         }.value
 
         if load.hasLegacySeed || ownShard.generation != generationBefore {

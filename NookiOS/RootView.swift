@@ -177,7 +177,7 @@ struct RootView: View {
                 }
 
             if !isReady {
-                SplashView()
+                SplashView(store: store)
                     .transition(.opacity)
                     .zIndex(1)
             }
@@ -373,6 +373,17 @@ final class TabBarChrome {
     /// `selectedArticleID` deliberately survives a pop for retention, so it
     /// can't serve as this signal).
     private(set) var readerOpen = false
+    /// True while a Settings detail screen is pushed — the bar hides there too.
+    private(set) var settingsDetailOpen = false
+
+    /// Whether the bar (and its reserved bottom inset) should be gone.
+    var barHidden: Bool { readerOpen || settingsDetailOpen }
+
+    func setSettingsDetailOpen(_ open: Bool) {
+        guard settingsDetailOpen != open else { return }
+        settingsDetailOpen = open
+        if !open { expand() }
+    }
     /// Non-observed bookkeeping: only `collapsed` flips invalidate views.
     @ObservationIgnored private var lastY: CGFloat = 0
     @ObservationIgnored private var accum: CGFloat = 0
@@ -420,8 +431,12 @@ final class TabBarChrome {
         }
     }
 
-    /// The scroll settled: the next gesture may minimize the bar again.
-    func noteScrollIdle() {
+    /// The scroll settled — or a fresh gesture began. Either way the expand
+    /// hold is spent: it only ever protects the remainder of the scroll that
+    /// was in flight when the user tapped, never the NEXT scroll (a hold that
+    /// outlived its gesture made the first scroll after a tab switch or a
+    /// reader pop fail to minimize the bar).
+    func releaseExpandHold() {
         holdExpandedUntilIdle = false
     }
 
@@ -507,7 +522,16 @@ private struct CompactShell: View {
                 .modifier(NativeTabBarHider())
                 .tag(AppTab.starred)
 
-            SettingsView(store: store, isTab: true)
+            SettingsView(store: store, isTab: true, onRootVisibilityChange: { visible in
+                if visible {
+                    tabChrome.setSettingsDetailOpen(false)
+                } else if selection == .settings {
+                    // Root disappeared while Settings is the active tab = a
+                    // detail screen pushed. (A tab switch flips `selection`
+                    // first, so it never trips this.)
+                    tabChrome.setSettingsDetailOpen(true)
+                }
+            })
                 .tabItem {
                     Image(uiImage: TabGlyph.symbol(selection == .settings ? "gearshape.fill" : "gearshape"))
                         .renderingMode(.template)
@@ -682,22 +706,39 @@ private struct CompactShell: View {
 /// Minimizes the tab bar as the user scrolls down (restoring on scroll-up / at
 /// the top) on iOS 26+, where the behavior is native; a no-op on earlier iOS.
 /// Hides the system tab bar wherever the custom liquid-glass bar replaces it
-/// (iOS 26); earlier systems keep the native bar untouched.
+/// (iOS 26) and reserves the bar's footprint as a bottom safe-area inset on
+/// each tab — applied per tab (not on the TabView) because insets added
+/// outside the paging container don't reliably reach the nested navigation
+/// stacks' scroll views and fixed bottom content (Settings buttons overlapped
+/// the bar). Earlier systems keep the native bar untouched.
 private struct NativeTabBarHider: ViewModifier {
+    @Environment(TabBarChrome.self) private var chrome
+
+    /// The expanded bar's visual footprint: 44pt items + 8pt capsule padding
+    /// + 6pt breathing room.
+    static let barFootprint: CGFloat = 58
+
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
-            content.toolbarVisibility(.hidden, for: .tabBar)
+            content
+                .toolbarVisibility(.hidden, for: .tabBar)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear
+                        .frame(height: chrome.barHidden ? 0 : Self.barFootprint)
+                        .allowsHitTesting(false)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: chrome.barHidden)
+                }
         } else {
             content
         }
     }
 }
 
-/// Mounts the custom tab bar as a bottom safe-area inset (iOS 26): descendant
-/// lists inset their content and scroll UNDER the strip — exactly the native
-/// floating-bar behavior the glass needs to refract. Below iOS 26 this is a
-/// no-op and the native bar stays. Opening the reader (a pushed article)
-/// dismisses the bar with a slide-down + shrink-away pop; closing brings it
+/// Overlays the custom tab bar at the bottom of the shell (iOS 26); each tab
+/// reserves its footprint via `NativeTabBarHider`, so content lays out above
+/// it while still scrolling under the glass strip. Below iOS 26 this is a
+/// no-op and the native bar stays. Pushing a reader or a Settings detail
+/// dismisses the bar with a slide-down + shrink-away pop; popping brings it
 /// back the same way.
 private struct LiquidGlassTabBarHost: ViewModifier {
     @Binding var selection: AppTab
@@ -706,9 +747,9 @@ private struct LiquidGlassTabBarHost: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
-            content.safeAreaInset(edge: .bottom, spacing: 0) {
+            content.overlay(alignment: .bottom) {
                 ZStack {
-                    if !chrome.readerOpen {
+                    if !chrome.barHidden {
                         LiquidGlassTabBar(
                             selection: $selection,
                             collapsed: chrome.collapsed,
@@ -722,7 +763,7 @@ private struct LiquidGlassTabBarHost: ViewModifier {
                         )
                     }
                 }
-                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: chrome.readerOpen)
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: chrome.barHidden)
             }
         } else {
             content
@@ -1469,8 +1510,14 @@ private struct ReaderPushingList<Top: View>: View {
 /// icon's twig layers drop in from above under gravity and assemble into the
 /// nest, matching the app icon.
 struct SplashView: View {
+    /// When set, a slow launch shows what the pipeline is doing under the
+    /// wordmark (large libraries / cold iCloud reads can hold the splash well
+    /// past the brand animation).
+    var store: ReaderStore? = nil
+
     @State private var assembled = false
     @State private var showWordmark = false
+    @State private var showProgress = false
 
     var body: some View {
         ZStack {
@@ -1488,13 +1535,35 @@ struct SplashView: View {
                 .offset(y: 78 + (showWordmark ? 0 : 6))
                 .opacity(showWordmark ? 1 : 0)
                 .animation(.easeOut(duration: 0.3), value: showWordmark)
+
+            // Progress readout for launches that outlast the brand beat: shown
+            // only once the animation has finished AND bootstrap is still busy,
+            // so fast launches never flash it.
+            if showProgress, let phase = store?.bootstrapPhase {
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .tint(Color(.displayP3, red: 0.26, green: 0.19, blue: 0.10))
+                    Text(phase.label)
+                        .font(.footnote)
+                        .foregroundStyle(Color(.displayP3, red: 0.26, green: 0.19, blue: 0.10).opacity(0.7))
+                        .contentTransition(.opacity)
+                }
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 64)
+                .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: showProgress)
         .task {
             // Static launch background → drop the twigs → reveal the wordmark.
             try? await Task.sleep(for: .milliseconds(120))
             assembled = true
             try? await Task.sleep(for: .seconds(NestAssemblyView.duration))
             showWordmark = true
+            // The brand beat ends ~1.85s after launch; anything still loading
+            // beyond ~2.4s deserves an explanation.
+            try? await Task.sleep(for: .milliseconds(1200))
+            showProgress = true
         }
     }
 }
@@ -2014,11 +2083,12 @@ private struct ArticleList: View {
         // Hold new title translations while the list is in motion: their row-
         // height reveal animations and streaming text updates are the main
         // source of mid-scroll jank. Queued rows start once the scroll settles.
-        .onScrollPhaseChange { _, newPhase in
+        .onScrollPhaseChange { oldPhase, newPhase in
             titleTranslator.setScrolling(newPhase != .idle)
-            // A settled scroll re-arms the tab bar's minimize (a user tap holds
-            // it expanded only for the remainder of the in-flight scroll).
-            if newPhase == .idle { tabChrome.noteScrollIdle() }
+            // The tab bar's expand hold protects only the scroll in flight when
+            // the user tapped: settling OR starting a fresh gesture releases it,
+            // so the first scroll after arriving on this screen minimizes.
+            if newPhase == .idle || oldPhase == .idle { tabChrome.releaseExpandHold() }
         }
         // Feed the custom tab bar's collapse hysteresis (iPhone shell; the
         // chrome is inert on iPad where no custom bar reads it). Bounded to the

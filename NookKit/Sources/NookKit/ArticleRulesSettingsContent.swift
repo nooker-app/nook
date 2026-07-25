@@ -1,5 +1,11 @@
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
 public extension Color {
     /// A color from a "#RRGGBB" string (Nook category badges). Falls back to gray.
     init(nookHex hex: String) {
@@ -310,7 +316,11 @@ private struct CategoryRow: View {
                 Button {
                     draft.colorHex = hex
                 } label: {
-                    Label { Text(verbatim: hex) } icon: { Image(systemName: "circle.fill").foregroundStyle(Color(nookHex: hex)) }
+                    // System menus ignore SwiftUI foreground styling on item
+                    // icons and tint them uniformly — which made every swatch
+                    // the same color. A pre-rendered non-template image keeps
+                    // its real color through the menu system.
+                    Label { Text(verbatim: hex) } icon: { Self.swatchImage(for: hex) }
                 }
             }
         } label: {
@@ -319,6 +329,27 @@ private struct CategoryRow: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .accessibilityLabel(Text("Category color", bundle: .module))
+    }
+
+    /// A filled circle rasterized in the palette color, marked "original" so
+    /// the menu renderer can't re-tint it.
+    private static func swatchImage(for hex: String) -> Image {
+        let side: CGFloat = 16
+        #if canImport(UIKit)
+        let rendered = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+            UIColor(Color(nookHex: hex)).setFill()
+            UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: side, height: side)).fill()
+        }
+        return Image(uiImage: rendered.withRenderingMode(.alwaysOriginal))
+        #else
+        let rendered = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor(Color(nookHex: hex)).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        }
+        rendered.isTemplate = false
+        return Image(nsImage: rendered)
+        #endif
     }
 }
 
