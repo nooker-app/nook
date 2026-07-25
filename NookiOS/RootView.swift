@@ -706,12 +706,26 @@ private struct CompactShell: View {
 /// Minimizes the tab bar as the user scrolls down (restoring on scroll-up / at
 /// the top) on iOS 26+, where the behavior is native; a no-op on earlier iOS.
 /// Hides the system tab bar wherever the custom liquid-glass bar replaces it
-/// (iOS 26) and reserves the bar's footprint as a bottom safe-area inset on
-/// each tab — applied per tab (not on the TabView) because insets added
-/// outside the paging container don't reliably reach the nested navigation
-/// stacks' scroll views and fixed bottom content (Settings buttons overlapped
-/// the bar). Earlier systems keep the native bar untouched.
+/// (iOS 26); earlier systems keep the native bar untouched.
 private struct NativeTabBarHider: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.toolbarVisibility(.hidden, for: .tabBar)
+        } else {
+            content
+        }
+    }
+}
+
+/// Reserves the custom tab bar's footprint as a bottom safe-area inset.
+/// Applied to each screen's content INSIDE its NavigationStack — insets added
+/// outside the stack (on the tab child or the TabView) don't reliably reach
+/// the nested scroll views and fixed bottom content, which left Settings
+/// buttons and list tails covered by the floating bar. Collapses to zero
+/// whenever the bar is away (reader/detail pushes). No-op below iOS 26 and
+/// where `enabled` is false (the iPad settings sheet).
+struct TabBarInset: ViewModifier {
+    var enabled: Bool = true
     @Environment(TabBarChrome.self) private var chrome
 
     /// The expanded bar's visual footprint: 44pt items + 8pt capsule padding
@@ -719,15 +733,13 @@ private struct NativeTabBarHider: ViewModifier {
     static let barFootprint: CGFloat = 58
 
     func body(content: Content) -> some View {
-        if #available(iOS 26, *) {
-            content
-                .toolbarVisibility(.hidden, for: .tabBar)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear
-                        .frame(height: chrome.barHidden ? 0 : Self.barFootprint)
-                        .allowsHitTesting(false)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: chrome.barHidden)
-                }
+        if enabled, #available(iOS 26, *) {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear
+                    .frame(height: chrome.barHidden ? 0 : Self.barFootprint)
+                    .allowsHitTesting(false)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.85), value: chrome.barHidden)
+            }
         } else {
             content
         }
@@ -1273,6 +1285,8 @@ private struct FeedsTab: View {
                 }
             }
             .refreshable { await store.refreshAllAndWait() }
+            // Keep the library list's tail above the floating tab bar.
+            .modifier(TabBarInset())
             // Native re-tap semantics: at the Feeds root, re-tapping the tab
             // scrolls the library list back to the top.
             .onChange(of: tabChrome.scrollToTopSignal) { _, _ in
@@ -1470,6 +1484,9 @@ private struct ReaderPushingList<Top: View>: View {
             top()
             ArticleList(store: store, selection: selectionBinding, managesSearch: false, onShowAllArticles: onShowAllArticles)
         }
+        // Keep the list tail above the floating tab bar (inside the stack, so
+        // the inset actually reaches the scroll view).
+        .modifier(TabBarInset())
         .modifier(CompactSearchButton(searchText: $store.searchText, isSearching: $isSearching, enabled: providesSearch))
         // The custom glass tab bar pops away while a reader is pushed and
         // returns on pop (the store's selection survives pops, so the pushed

@@ -39,47 +39,47 @@ struct SettingsView: View {
             List {
                 Section {
                     NavigationLink {
-                        GeneralSettingsScreen()
+                        detail(GeneralSettingsScreen())
                     } label: {
                         Label("General", systemImage: "gearshape")
                     }
                     NavigationLink {
-                        ReadingSettingsScreen()
+                        detail(ReadingSettingsScreen())
                     } label: {
                         Label("Reading", systemImage: "book")
                     }
                     NavigationLink {
-                        ReaderSettingsScreen()
+                        detail(ReaderSettingsScreen())
                     } label: {
                         Label("Reader", systemImage: "textformat")
                     }
                     NavigationLink {
-                        FeedsSettingsScreen(store: store)
+                        detail(FeedsSettingsScreen(store: store))
                     } label: {
                         Label("Feeds", systemImage: "dot.radiowaves.up.forward")
                     }
                     NavigationLink {
-                        ArticleRulesSettingsScreen(store: store)
+                        detail(ArticleRulesSettingsScreen(store: store))
                     } label: {
                         Label("Article Rules", systemImage: "tag")
                     }
                     NavigationLink {
-                        FiltersSettingsScreen(store: store)
+                        detail(FiltersSettingsScreen(store: store))
                     } label: {
                         Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
                     }
                     NavigationLink {
-                        OfflineSettingsScreen(store: store)
+                        detail(OfflineSettingsScreen(store: store))
                     } label: {
                         Label("Offline", systemImage: "arrow.down.circle")
                     }
                     NavigationLink {
-                        ExperimentalSettingsScreen()
+                        detail(ExperimentalSettingsScreen())
                     } label: {
                         Label("Experimental", systemImage: "flask")
                     }
                     NavigationLink {
-                        AboutSettingsScreen()
+                        detail(AboutSettingsScreen())
                     } label: {
                         Label("About", systemImage: "info.circle")
                     }
@@ -130,8 +130,13 @@ struct SettingsView: View {
                 }
             }
             .warmListBackground()
+            // Keep the last section above the floating tab bar (iPhone tab only).
+            .modifier(TabBarInset(enabled: isTab))
+            // The bar returns the moment a pop STARTS (this appear fires at
+            // transition start); hiding is signalled by each detail's onAppear
+            // below — the root's onDisappear would land only after the push
+            // transition finished, hiding the bar visibly late.
             .onAppear { onRootVisibilityChange?(true) }
-            .onDisappear { onRootVisibilityChange?(false) }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -150,6 +155,13 @@ struct SettingsView: View {
                 opmlImport: $opmlImport
             ))
         }
+    }
+
+    /// Wraps a pushed detail screen: its `onAppear` fires as the push
+    /// transition STARTS, so the tab bar hides immediately with the
+    /// transition instead of after it settles.
+    private func detail<Content: View>(_ content: Content) -> some View {
+        content.onAppear { onRootVisibilityChange?(false) }
     }
 }
 
