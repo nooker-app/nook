@@ -14,12 +14,23 @@ public final class ReaderStore {
             // badge and sidebar counts always stay live — including a read toggle
             // made while a refresh is in flight. Only the filter+sort is
             // debounced/coalesced.
+            //
+            // Single-bit read/star toggles bypass this chain (see `setRead`/
+            // `setStarred`): they mutate one element under `suppressArticlesDidSet`
+            // and apply O(1) count deltas instead — the filter engine matches only
+            // title/summary/categories, never read/star state, so the O(n)
+            // reclassification here would be pure waste on the article-open path.
+            guard !suppressArticlesDidSet else { return }
             recomputeFilteredIDs()
             recomputeCounts()
             updateUnreadBadge()
             scheduleArticleFilter(debounced: true)
         }
     }
+    /// Reentrancy guard for the incremental single-article mutation path. The
+    /// property stays stored + observable (views tracking `articles` still see
+    /// the write); only the didSet recomputes are skipped.
+    private var suppressArticlesDidSet = false
 
     // Sidebar badge counts, recomputed in a single pass whenever `articles`
     // changes, so rendering a feed/folder/source badge is an O(1)/O(feeds)
@@ -1893,18 +1904,45 @@ public final class ReaderStore {
     /// and we haven't already started (or finished) it this session. Idempotent.
     public func ensureReaderContent(for article: Article) {
         guard readerContentStates[article.id] == nil else { return }
-        // Saved offline → serve the stored copy instantly (a single small file
-        // read, no network) so it opens even with no connection — and regardless
-        // of the reader-content-by-default toggle, since the user explicitly saved
-        // this article's full content.
-        if let html = OfflineArticleStore.shared.content(for: article.id),
-           !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            readerContentStates[article.id] = .ready(html)
+        // Saved offline → serve the stored copy (no network) so it opens even
+        // with no connection, regardless of the reader-content-by-default
+        // toggle. The disk read, block parse, and styled-text warm all happen
+        // off the transition frames now (mirroring the extraction path below);
+        // the synchronous `.loading` write keeps this idempotent.
+        if OfflineArticleStore.shared.isSaved(article.id) {
+            readerContentStates[article.id] = .loading
+            Task { await loadOfflineReaderContent(for: article) }
             return
         }
         guard usesReaderContentByDefault else { return }
         readerContentStates[article.id] = .loading
         Task { await loadReaderContent(for: article, forceRefresh: false) }
+    }
+
+    /// Serves an offline-saved article like the extraction path serves a cache
+    /// hit: read the file off-main, pre-warm the block parse and above-the-fold
+    /// styled-text imports, and only then flip to `.ready` — so opening a saved
+    /// article carries no parse or importer burst on the push transition.
+    private func loadOfflineReaderContent(for article: Article) async {
+        #if os(iOS)
+        // Let the reader's push transition settle first (mirrors
+        // `loadReaderContent`); the loading placeholder is already up.
+        try? await Task.sleep(for: .milliseconds(350))
+        if Task.isCancelled { return }
+        #endif
+        let html = await OfflineArticleStore.shared.contentAsync(for: article.id)
+        if let html, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            await warmReaderContent(html: html, baseURL: article.url)
+            readerContentStates[article.id] = .ready(html)
+            return
+        }
+        // Empty/missing saved copy: fall back to normal extraction, matching
+        // what the old synchronous guard did by falling through.
+        if usesReaderContentByDefault {
+            await loadReaderContent(for: article, forceRefresh: false)
+        } else {
+            readerContentStates[article.id] = nil
+        }
     }
 
     // MARK: - Offline caching
@@ -2332,12 +2370,62 @@ public final class ReaderStore {
         guard let index = articles.firstIndex(where: { $0.id == articleID }),
               articles[index].isRead != isRead else { return }
 
+        // Incremental path: one element changes one bit — skip the didSet's
+        // O(n) reclassification/count pass (this runs mid push-animation on
+        // every article open).
+        suppressArticlesDidSet = true
         articles[index].isRead = isRead
+        suppressArticlesDidSet = false
+        // Counts by O(1) delta, mirroring recomputeCounts (filtered articles
+        // never count).
+        if !filteredArticleIDs.contains(articleID) {
+            bumpUnreadCounts(
+                feedID: articles[index].feedID,
+                categories: articles[index].categories,
+                by: isRead ? -1 : 1
+            )
+            updateUnreadBadge()
+        }
+        // Keep the visible row in sync without a full recompute; membership
+        // changes (an Unread list dropping a read article, a hidden article
+        // resurfacing as unread) still go through the debounced filter unless
+        // retention already pins it.
+        let isDisplayed = updateDisplayedArticleInPlace(articleID) { $0.isRead = isRead }
+        if isDisplayed {
+            if isRead && !retainedArticleIDs.contains(articleID) {
+                scheduleArticleFilter(debounced: true)
+            }
+        } else if !isRead {
+            scheduleArticleFilter(debounced: true)
+        }
         recordRead(articleID, isRead)
         // Read state is user state: it lives in this device's shard and is
         // overlaid on the baseline at materialize, so there's no need to rewrite
         // content shards for a read toggle.
         scheduleShardSave()
+    }
+
+    /// O(1) unread-count delta for a single article's read flip, replacing the
+    /// full `recomputeCounts` pass. Zero entries are removed so the dictionaries
+    /// stay canonical with what a full recompute would build.
+    private func bumpUnreadCounts(feedID: Feed.ID, categories: [String], by delta: Int) {
+        let feedCount = (unreadByFeed[feedID] ?? 0) + delta
+        unreadByFeed[feedID] = feedCount <= 0 ? nil : feedCount
+        totalUnread = max(0, totalUnread + delta)
+        for categoryID in categories {
+            let count = (unreadByCategory[categoryID] ?? 0) + delta
+            unreadByCategory[categoryID] = count <= 0 ? nil : count
+        }
+    }
+
+    /// Mutates the displayed copy of an article in place (rows render from
+    /// `displayedArticles`, not `articles`). Returns whether the article is
+    /// currently displayed. One property republish; no O(n) refilter.
+    @discardableResult
+    private func updateDisplayedArticleInPlace(_ id: Article.ID, _ mutate: (inout Article) -> Void) -> Bool {
+        guard let index = displayedArticles.firstIndex(where: { $0.id == id }) else { return false }
+        mutate(&displayedArticles[index])
+        return true
     }
 
     public func markSelectedRead() {
@@ -2361,16 +2449,21 @@ public final class ReaderStore {
     }
 
     func markFeedRead(feedID: Feed.ID) {
+        // Build the mutated array locally and assign once: per-element writes on
+        // the stored property would fire the didSet's O(n) recompute chain once
+        // per article in the feed.
+        var updated = articles
         var didChange = false
-        for index in articles.indices where articles[index].feedID == feedID {
-            if !articles[index].isRead {
-                articles[index].isRead = true
-                recordRead(articles[index].id, true)
+        for index in updated.indices where updated[index].feedID == feedID {
+            if !updated[index].isRead {
+                updated[index].isRead = true
+                recordRead(updated[index].id, true)
                 didChange = true
             }
         }
 
         if didChange {
+            articles = updated
             // Per-article read state is shard-backed; no baseline rewrite needed.
             scheduleShardSave()
         }
@@ -2390,7 +2483,18 @@ public final class ReaderStore {
         guard let index = articles.firstIndex(where: { $0.id == articleID }),
               articles[index].isStarred != isStarred else { return }
 
+        // Same incremental path as `setRead`: one bit, O(1) count delta, no
+        // whole-library reclassification.
+        suppressArticlesDidSet = true
         articles[index].isStarred = isStarred
+        suppressArticlesDidSet = false
+        if !filteredArticleIDs.contains(articleID) {
+            starredCount = max(0, starredCount + (isStarred ? 1 : -1))
+        }
+        updateDisplayedArticleInPlace(articleID) { $0.isStarred = isStarred }
+        // Star toggles can change Starred-source membership; they're rare (never
+        // on the article-open hot path), so always let the debounced filter run.
+        scheduleArticleFilter(debounced: true)
         recordStarred(articleID, isStarred)
         // Starred state is user state (shard-backed, overlaid at materialize);
         // no baseline rewrite needed.

@@ -8,6 +8,24 @@ import AppKit
 import UIKit
 #endif
 
+/// A Sendable wrapper over `NSCache` (which is thread-safe but not marked
+/// Sendable) so nonisolated statics can hold shared caches under Swift 6
+/// strict concurrency.
+final class SendableNSCache<Value: AnyObject>: @unchecked Sendable {
+    private let cache = NSCache<NSString, Value>()
+
+    subscript(key: String) -> Value? {
+        get { cache.object(forKey: key as NSString) }
+        set {
+            if let newValue {
+                cache.setObject(newValue, forKey: key as NSString)
+            } else {
+                cache.removeObject(forKey: key as NSString)
+            }
+        }
+    }
+}
+
 /// Renders feed HTML as native SwiftUI blocks. Inline text still uses the
 /// platform attributed-string importer, while block-level structure (headings,
 /// code, quotes, tables, rules) and media (images, video, audio, embeds) are
@@ -533,11 +551,47 @@ enum HTMLContentParser {
         return items.isEmpty ? nil : .list(ordered: ordered, items: items)
     }
 
+    // MARK: Compiled-regex caching
+    //
+    // Parsing is regex-heavy and runs once per article (and per nested
+    // fragment). The patterns are a small fixed set plus a few interpolated
+    // shapes (tag/attribute names), so compile each exactly once: fixed
+    // patterns as statics, interpolated ones through a thread-safe cache
+    // (matching on a compiled NSRegularExpression is thread-safe; the parser
+    // runs off-main on the warm paths).
+    private static let listItemOpenRegex = try! NSRegularExpression(pattern: #"(?is)<li\b[^>]*>"#)
+    private static let numericEntityRegex = try! NSRegularExpression(pattern: #"&#(x?[0-9a-fA-F]+);"#)
+    private static let tableRowRegex = try! NSRegularExpression(
+        pattern: #"<tr\b[^>]*>(.*?)</tr\s*>"#,
+        options: [.caseInsensitive, .dotMatchesLineSeparators]
+    )
+    private static let tableCellRegex = try! NSRegularExpression(
+        pattern: #"<(t[dh])\b([^>]*)>(.*?)</\1\s*>"#,
+        options: [.caseInsensitive, .dotMatchesLineSeparators]
+    )
+    private static let regexCache = SendableNSCache<NSRegularExpression>()
+
+    private static func cachedRegex(_ pattern: String) -> NSRegularExpression? {
+        if let cached = regexCache[pattern] { return cached }
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        regexCache[pattern] = regex
+        return regex
+    }
+
+    /// `replacingOccurrences(of:with:options:.regularExpression)` compiles its
+    /// pattern on every call; this compiles once via the cache. The template
+    /// supports `$n` captures exactly like the Foundation API.
+    private static func replacingMatches(of pattern: String, in value: String, with template: String) -> String {
+        guard let regex = cachedRegex(pattern) else { return value }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        return regex.stringByReplacingMatches(in: value, range: range, withTemplate: template)
+    }
+
     /// Extracts the top-level `<li>` items of a list's inner HTML, skipping the
     /// `<li>`s that belong to nested lists (they're captured inside their parent
     /// item and handled by the recursive `parse`).
     private static func listItems(in inner: String, baseURL: URL?) -> [[HTMLContentBlock]] {
-        guard let regex = try? NSRegularExpression(pattern: #"(?is)<li\b[^>]*>"#) else { return [] }
+        let regex = listItemOpenRegex
         let full = NSRange(inner.startIndex..<inner.endIndex, in: inner)
         var items: [[HTMLContentBlock]] = []
         var cursor = inner.startIndex
@@ -557,7 +611,7 @@ enum HTMLContentParser {
     /// at an opening tag at `from`. Counts nested opens/closes so nested lists (or
     /// list items) are matched correctly — the non-greedy block regex can't.
     private static func balancedEnd(of tag: String, in html: String, from start: String.Index) -> String.Index? {
-        guard let regex = try? NSRegularExpression(pattern: "(?is)<(/?)\(tag)\\b[^>]*>") else { return nil }
+        guard let regex = cachedRegex("(?is)<(/?)\(tag)\\b[^>]*>") else { return nil }
         let range = NSRange(start..<html.endIndex, in: html)
         var depth = 0
         for match in regex.matches(in: html, range: range) {
@@ -591,9 +645,9 @@ enum HTMLContentParser {
             inner = codeInner
         }
 
-        inner = inner.replacingOccurrences(of: #"(?i)<br\s*/?>"#, with: "\n", options: .regularExpression)
-        inner = inner.replacingOccurrences(of: #"(?is)</(p|div|li|tr)\s*>"#, with: "\n", options: .regularExpression)
-        inner = inner.replacingOccurrences(of: #"(?is)<[^>]+>"#, with: "", options: .regularExpression)
+        inner = replacingMatches(of: #"(?i)<br\s*/?>"#, in: inner, with: "\n")
+        inner = replacingMatches(of: #"(?is)</(p|div|li|tr)\s*>"#, in: inner, with: "\n")
+        inner = replacingMatches(of: #"(?is)<[^>]+>"#, in: inner, with: "")
         inner = decodeEntities(inner)
         // Trim only surrounding blank lines; keep internal indentation intact.
         inner = inner.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -611,13 +665,7 @@ enum HTMLContentParser {
     // MARK: Table
 
     private static func tableBlock(from fragment: String, baseURL: URL?) -> HTMLTable {
-        guard let rowRegex = try? NSRegularExpression(
-            pattern: #"<tr\b[^>]*>(.*?)</tr\s*>"#,
-            options: [.caseInsensitive, .dotMatchesLineSeparators]
-        ) else {
-            return HTMLTable(rows: [])
-        }
-
+        let rowRegex = tableRowRegex
         let range = NSRange(fragment.startIndex..<fragment.endIndex, in: fragment)
         var rows: [HTMLTable.Row] = []
 
@@ -635,13 +683,7 @@ enum HTMLContentParser {
     private static func tableCells(from rowHTML: String) -> [HTMLTable.Cell] {
         // Capture the opening tag's attributes (group 2) so colspan/rowspan and the
         // per-cell th/td distinction are preserved.
-        guard let cellRegex = try? NSRegularExpression(
-            pattern: #"<(t[dh])\b([^>]*)>(.*?)</\1\s*>"#,
-            options: [.caseInsensitive, .dotMatchesLineSeparators]
-        ) else {
-            return []
-        }
-
+        let cellRegex = tableCellRegex
         let range = NSRange(rowHTML.startIndex..<rowHTML.endIndex, in: rowHTML)
         var cells: [HTMLTable.Cell] = []
 
@@ -687,7 +729,7 @@ enum HTMLContentParser {
     }
 
     private static func firstMatch(pattern: String, in value: String, group: Int = 0) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: pattern),
+        guard let regex = cachedRegex(pattern),
               let match = regex.firstMatch(in: value, range: NSRange(value.startIndex..<value.endIndex, in: value)),
               match.numberOfRanges > group,
               let range = Range(match.range(at: group), in: value) else { return nil }
@@ -697,7 +739,7 @@ enum HTMLContentParser {
     private static func attribute(_ name: String, in tag: String) -> String? {
         let escaped = NSRegularExpression.escapedPattern(for: name)
         let pattern = #"(?is)(?:^|\s)"# + escaped + #"\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
+        guard let regex = cachedRegex(pattern),
               let match = regex.firstMatch(in: tag, range: NSRange(tag.startIndex..<tag.endIndex, in: tag)) else {
             return nil
         }
@@ -726,11 +768,11 @@ enum HTMLContentParser {
     }
 
     private static func plainText(_ html: String) -> String {
-        let withoutTags = html.replacingOccurrences(of: #"(?is)<[^>]+>"#, with: " ", options: .regularExpression)
-        return decodedText(withoutTags)?
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .replacingOccurrences(of: #"\s+([.,;:!?])"#, with: "$1", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let withoutTags = replacingMatches(of: #"(?is)<[^>]+>"#, in: html, with: " ")
+        guard let decoded = decodedText(withoutTags) else { return "" }
+        let collapsed = replacingMatches(of: #"\s+"#, in: decoded, with: " ")
+        return replacingMatches(of: #"\s+([.,;:!?])"#, in: collapsed, with: "$1")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Decodes entities in a short, tag-free value (an attribute or an already
@@ -748,7 +790,8 @@ enum HTMLContentParser {
     static func decodeEntities(_ value: String) -> String {
         var result = value
 
-        if let regex = try? NSRegularExpression(pattern: #"&#(x?[0-9a-fA-F]+);"#) {
+        do {
+            let regex = numericEntityRegex
             let matches = regex.matches(in: result, range: NSRange(result.startIndex..<result.endIndex, in: result))
             for match in matches.reversed() {
                 guard let full = Range(match.range, in: result),
@@ -2240,6 +2283,11 @@ public struct HTMLContentText: View {
     let selectable: Bool
     let baseSize: CGFloat?
     let bold: Bool
+    /// Computed once per view construction: the key concatenates the whole HTML
+    /// fragment, and recomputing it on every body evaluation (cache probes +
+    /// `.task(id:)`) was O(fragment bytes) per frame while blocks import.
+    private let renderKey: String
+    private let resolvedSize: CGFloat
     @State private var attributed: AttributedString?
 
     public init(html: String, selectable: Bool = true, baseSize: CGFloat? = nil, bold: Bool = false) {
@@ -2247,6 +2295,9 @@ public struct HTMLContentText: View {
         self.selectable = selectable
         self.baseSize = baseSize
         self.bold = bold
+        let size = baseSize ?? Self.platformBodySize
+        resolvedSize = size
+        renderKey = HTMLTextFlow.cacheKey(html: html, baseSize: size, bold: bold)
     }
 
     public var body: some View {
@@ -2299,15 +2350,19 @@ public struct HTMLContentText: View {
     }
 
     /// Tag-stripped, entity-decoded plain text — the importer-free fallback.
+    /// Cached: the placeholder re-renders on every body evaluation until the
+    /// import lands, and the regex strip is O(fragment) each time.
+    private static let plainTextCache = SendableNSCache<NSString>()
+
     private static func plainText(_ html: String) -> String {
+        if let cached = plainTextCache[html] { return cached as String }
         let stripped = html.replacingOccurrences(of: #"(?is)<[^>]+>"#, with: " ", options: .regularExpression)
-        return HTMLContentParser.decodeEntities(stripped)
+        let result = HTMLContentParser.decodeEntities(stripped)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        plainTextCache[html] = result as NSString
+        return result
     }
-
-    private var resolvedSize: CGFloat { baseSize ?? Self.platformBodySize }
-    private var renderKey: String { HTMLTextFlow.cacheKey(html: html, baseSize: resolvedSize, bold: bold) }
 
     static var platformBodySize: CGFloat {
         #if canImport(AppKit)

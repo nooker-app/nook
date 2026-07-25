@@ -609,7 +609,15 @@ struct ReaderDetailView: View {
         if let html = article.contentHTML {
             // Text selection is disabled so the double-tap / long-press gestures
             // own the body. The translator streams translated blocks when active.
-            HTMLContentView(html: html, baseURL: article.url, selectable: false, translator: nativeTranslator)
+            // Deferred: a cold open renders plain paragraphs during the push and
+            // swaps in styled blocks once parsed/warmed off the transition.
+            DeferredHTMLContentView(
+                html: html,
+                baseURL: article.url,
+                placeholderParagraphs: article.bodyParagraphs,
+                selectable: false,
+                translator: nativeTranslator
+            )
         } else if isTranslated, let translatedBody {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(Array(translatedBody.enumerated()), id: \.offset) { _, paragraph in

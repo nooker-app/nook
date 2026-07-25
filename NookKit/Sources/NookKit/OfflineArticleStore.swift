@@ -93,6 +93,19 @@ public final class OfflineArticleStore {
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
+    /// Like `content(for:)`, but with the file read off the main actor — the
+    /// reader requests saved copies mid push-animation, and the HTML can be
+    /// hundreds of KB. The in-memory pending copy is still served directly.
+    public func contentAsync(for id: Article.ID) async -> String? {
+        loadIfNeeded()
+        guard index[id] != nil else { return nil }
+        if let pending = pendingContent[id] { return pending }
+        guard let url = Self.contentURL(for: id) else { return nil }
+        return await Task.detached(priority: .userInitiated) {
+            try? String(contentsOf: url, encoding: .utf8)
+        }.value
+    }
+
     // MARK: - Mutations
 
     /// Saves (or replaces) an article's offline copy. Updates the in-memory index
