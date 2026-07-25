@@ -2449,7 +2449,23 @@ public struct HTMLContentText: View {
     }
 
     private static func render(_ html: String, baseSize: CGFloat, bold: Bool) -> AttributedString? {
-        guard let data = HTMLTextFlow.preparedHTML(html).data(using: .utf8) else { return nil }
+        let prepared = HTMLTextFlow.preparedHTML(html)
+        // Whitelisted inline fragments render natively (off-main-capable, no
+        // WebKit machinery). Anything the native path can't reproduce exactly
+        // returns nil and takes the WebKit importer below, byte-for-byte as
+        // before — exotic HTML can never regress.
+        if !NativeInlineHTMLRenderer.isDisabled,
+           let native = NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold) {
+            return native
+        }
+        return webKitImport(prepared, baseSize: baseSize, bold: bold)
+    }
+
+    /// The classic WebKit importer pipeline (main-thread-only). `prepared` is
+    /// the fragment after `HTMLTextFlow.preparedHTML`. Internal so the native
+    /// renderer's differential tests can compare against it directly.
+    static func webKitImport(_ prepared: String, baseSize: CGFloat, bold: Bool) -> AttributedString? {
+        guard let data = prepared.data(using: .utf8) else { return nil }
         let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
             .documentType: NSAttributedString.DocumentType.html,
             .characterEncoding: String.Encoding.utf8.rawValue
@@ -2458,25 +2474,21 @@ public struct HTMLContentText: View {
         HTMLTextFlow.normalize(mutable, baseSize: baseSize)
         guard mutable.length > 0 else { return nil }
         let fullRange = NSRange(location: 0, length: mutable.length)
-        let codeSize = baseSize * 0.92
 
         #if canImport(AppKit)
         var monoRanges: [NSRange] = []
         mutable.enumerateAttribute(.font, in: fullRange) { value, range, _ in
             let existing = (value as? NSFont)?.fontDescriptor.symbolicTraits ?? []
             let isMono = existing.contains(.monoSpace)
-            var traits: NSFontDescriptor.SymbolicTraits = []
-            if existing.contains(.bold) || bold { traits.insert(.bold) }
-            if existing.contains(.italic) { traits.insert(.italic) }
+            let isBold = existing.contains(.bold) || bold
+            let isItalic = existing.contains(.italic)
 
             let font: NSFont
             if isMono {
-                let weight: NSFont.Weight = traits.contains(.bold) ? .semibold : .regular
-                font = NSFont.monospacedSystemFont(ofSize: codeSize, weight: weight)
+                font = finalCodeFont(baseSize: baseSize, bold: isBold)
                 monoRanges.append(range)
             } else {
-                let descriptor = NSFont.systemFont(ofSize: baseSize).fontDescriptor.withSymbolicTraits(traits)
-                font = NSFont(descriptor: descriptor, size: baseSize) ?? NSFont.systemFont(ofSize: baseSize)
+                font = finalBodyFont(baseSize: baseSize, bold: isBold, italic: isItalic)
             }
             mutable.addAttribute(.font, value: font, range: range)
         }
@@ -2492,18 +2504,15 @@ public struct HTMLContentText: View {
         mutable.enumerateAttribute(.font, in: fullRange) { value, range, _ in
             let existing = (value as? UIFont)?.fontDescriptor.symbolicTraits ?? []
             let isMono = existing.contains(.traitMonoSpace)
-            var traits: UIFontDescriptor.SymbolicTraits = []
-            if existing.contains(.traitBold) || bold { traits.insert(.traitBold) }
-            if existing.contains(.traitItalic) { traits.insert(.traitItalic) }
+            let isBold = existing.contains(.traitBold) || bold
+            let isItalic = existing.contains(.traitItalic)
 
             let font: UIFont
             if isMono {
-                let weight: UIFont.Weight = traits.contains(.traitBold) ? .semibold : .regular
-                font = UIFont.monospacedSystemFont(ofSize: codeSize, weight: weight)
+                font = finalCodeFont(baseSize: baseSize, bold: isBold)
                 monoRanges.append(range)
             } else {
-                let base = UIFont.systemFont(ofSize: baseSize)
-                font = UIFont(descriptor: base.fontDescriptor.withSymbolicTraits(traits) ?? base.fontDescriptor, size: baseSize)
+                font = finalBodyFont(baseSize: baseSize, bold: isBold, italic: isItalic)
             }
             mutable.addAttribute(.font, value: font, range: range)
         }
@@ -2514,6 +2523,34 @@ public struct HTMLContentText: View {
         return try? AttributedString(mutable, including: \.uiKit)
         #endif
     }
+
+    /// The exact final fonts both import paths emit. Shared helpers so the
+    /// native renderer can never drift from what the WebKit remap produces.
+    #if canImport(AppKit)
+    nonisolated static func finalBodyFont(baseSize: CGFloat, bold: Bool, italic: Bool) -> NSFont {
+        var traits: NSFontDescriptor.SymbolicTraits = []
+        if bold { traits.insert(.bold) }
+        if italic { traits.insert(.italic) }
+        let descriptor = NSFont.systemFont(ofSize: baseSize).fontDescriptor.withSymbolicTraits(traits)
+        return NSFont(descriptor: descriptor, size: baseSize) ?? NSFont.systemFont(ofSize: baseSize)
+    }
+
+    nonisolated static func finalCodeFont(baseSize: CGFloat, bold: Bool) -> NSFont {
+        NSFont.monospacedSystemFont(ofSize: baseSize * 0.92, weight: bold ? .semibold : .regular)
+    }
+    #else
+    nonisolated static func finalBodyFont(baseSize: CGFloat, bold: Bool, italic: Bool) -> UIFont {
+        var traits: UIFontDescriptor.SymbolicTraits = []
+        if bold { traits.insert(.traitBold) }
+        if italic { traits.insert(.traitItalic) }
+        let base = UIFont.systemFont(ofSize: baseSize)
+        return UIFont(descriptor: base.fontDescriptor.withSymbolicTraits(traits) ?? base.fontDescriptor, size: baseSize)
+    }
+
+    nonisolated static func finalCodeFont(baseSize: CGFloat, bold: Bool) -> UIFont {
+        UIFont.monospacedSystemFont(ofSize: baseSize * 0.92, weight: bold ? .semibold : .regular)
+    }
+    #endif
 
     #if canImport(AppKit)
     private static func styleLinks(_ mutable: NSMutableAttributedString, fullRange: NSRange, linkColor: NSColor, plainColor: NSColor) {

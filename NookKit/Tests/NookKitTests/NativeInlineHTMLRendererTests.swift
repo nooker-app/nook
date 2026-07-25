@@ -1,0 +1,344 @@
+import Foundation
+import Testing
+@testable import NookKit
+
+#if canImport(AppKit)
+import AppKit
+private typealias PlatformFont = NSFont
+#elseif canImport(UIKit)
+import UIKit
+private typealias PlatformFont = UIFont
+#endif
+
+/// The native renderer's whole contract is "byte-identical text, same final
+/// attributes, or nil". These tests pin the attribute mapping, the whitelist
+/// gate (everything unsupported must return nil, never a wrong render), and —
+/// on macOS, where the WebKit importer is available in tests — differential
+/// string equality against the classic pipeline for the supported corpus.
+@Suite("Native inline HTML renderer")
+struct NativeInlineHTMLRendererTests {
+    private let bodySize: CGFloat = 16
+
+    private func render(_ html: String, baseSize: CGFloat = 16, bold: Bool = false) -> AttributedString? {
+        NativeInlineHTMLRenderer.importPrepared(
+            HTMLTextFlow.preparedHTML(html), baseSize: baseSize, bold: bold
+        )
+    }
+
+    private func plain(_ attributed: AttributedString) -> String {
+        String(attributed.characters)
+    }
+
+    private func fonts(of attributed: AttributedString) -> [(text: String, font: PlatformFont)] {
+        attributed.runs.compactMap { run in
+            #if canImport(AppKit)
+            guard let font = run.appKit.font else { return nil }
+            #else
+            guard let font = run.uiKit.font else { return nil }
+            #endif
+            return (String(attributed.characters[run.range]), font)
+        }
+    }
+
+    // MARK: - Structure
+
+    @Test("Plain text renders as one run at body size")
+    func plainText() throws {
+        let result = try #require(render("Hello world"))
+        #expect(plain(result) == "Hello world")
+        let runFonts = fonts(of: result)
+        #expect(runFonts.count == 1)
+        #expect(runFonts[0].font.pointSize == bodySize)
+    }
+
+    @Test("Paragraphs join with a single newline and no trailing spacing")
+    func paragraphs() throws {
+        let result = try #require(render("<p>First</p><p>Second</p>"))
+        #expect(plain(result) == "First\nSecond")
+    }
+
+    @Test("br becomes a soft line break; surrounding spaces stay (WebKit parity)")
+    func lineBreak() throws {
+        let result = try #require(render("one <br> two"))
+        #expect(plain(result) == "one \u{2028} two")
+    }
+
+    @Test("Whitespace collapses like CSS white-space normal")
+    func whitespaceCollapse() throws {
+        let result = try #require(render("  a \n\t b   c  "))
+        #expect(plain(result) == "a b c")
+    }
+
+    @Test("Whitespace collapses inside code too")
+    func whitespaceInCode() throws {
+        let result = try #require(render("<code>let  x</code>"))
+        #expect(plain(result) == "let x")
+    }
+
+    // MARK: - Inline styles
+
+    @Test("Bold and italic map to symbolic traits, nested correctly")
+    func boldItalic() throws {
+        let result = try #require(render("a <b>b <i>c</i></b>"))
+        #expect(plain(result) == "a b c")
+        let runFonts = fonts(of: result)
+        #expect(runFonts.count == 3)
+        #if canImport(AppKit)
+        #expect(!runFonts[0].font.fontDescriptor.symbolicTraits.contains(.bold))
+        #expect(runFonts[1].font.fontDescriptor.symbolicTraits.contains(.bold))
+        #expect(!runFonts[1].font.fontDescriptor.symbolicTraits.contains(.italic))
+        #expect(runFonts[2].font.fontDescriptor.symbolicTraits.contains(.bold))
+        #expect(runFonts[2].font.fontDescriptor.symbolicTraits.contains(.italic))
+        #else
+        #expect(!runFonts[0].font.fontDescriptor.symbolicTraits.contains(.traitBold))
+        #expect(runFonts[1].font.fontDescriptor.symbolicTraits.contains(.traitBold))
+        #expect(runFonts[2].font.fontDescriptor.symbolicTraits.contains(.traitItalic))
+        #endif
+    }
+
+    @Test("The bold parameter (headings, table headers) applies everywhere")
+    func boldParameter() throws {
+        let result = try #require(render("plain", bold: true))
+        let font = try #require(fonts(of: result).first?.font)
+        #if canImport(AppKit)
+        #expect(font.fontDescriptor.symbolicTraits.contains(.bold))
+        #else
+        #expect(font.fontDescriptor.symbolicTraits.contains(.traitBold))
+        #endif
+    }
+
+    @Test("Inline code uses the shared mono font at 0.92x and the pink tint")
+    func inlineCode() throws {
+        let result = try #require(render("run <code>swift test</code> now"))
+        #expect(plain(result) == "run swift test now")
+        let codeRun = try #require(result.runs.first { run in
+            #if canImport(AppKit)
+            (run.appKit.foregroundColor) == NSColor.systemPink
+            #else
+            (run.uiKit.foregroundColor) == UIColor.systemPink
+            #endif
+        })
+        #if canImport(AppKit)
+        let font = try #require(codeRun.appKit.font)
+        #expect(font.fontDescriptor.symbolicTraits.contains(.monoSpace))
+        #else
+        let font = try #require(codeRun.uiKit.font)
+        #expect(font.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
+        #endif
+        #expect(font.pointSize == bodySize * 0.92)
+    }
+
+    @Test("Bold code keeps semibold weight (no trait round-trip loss)")
+    func boldCode() throws {
+        let result = try #require(render("<b><code>x</code></b>"))
+        let font = try #require(fonts(of: result).first?.font)
+        let expected = HTMLContentText.finalCodeFont(baseSize: bodySize, bold: true)
+        #expect(font == expected)
+    }
+
+    @Test("Links carry the URL, accent color, and the soft underline")
+    func links() throws {
+        let result = try #require(render(#"<a href="https://example.com/a?b=1&amp;c=2">link</a>"#))
+        #expect(plain(result) == "link")
+        let run = try #require(result.runs.first)
+        #expect(run.link == URL(string: "https://example.com/a?b=1&c=2"))
+        #if canImport(AppKit)
+        #expect(run.appKit.underlineStyle != nil)
+        #expect(run.appKit.foregroundColor == NSColor.controlAccentColor)
+        #endif
+    }
+
+    @Test("Code inside a link stays pink (tail ordering) but keeps the link")
+    func codeInLink() throws {
+        let result = try #require(render(#"<a href="https://example.com"><code>x</code></a>"#))
+        let run = try #require(result.runs.first)
+        #expect(run.link != nil)
+        #if canImport(AppKit)
+        #expect(run.appKit.foregroundColor == NSColor.systemPink)
+        #else
+        #expect(run.uiKit.foregroundColor == UIColor.systemPink)
+        #endif
+    }
+
+    // MARK: - Entities
+
+    @Test("Entities decode: named, numeric, hex, and nbsp as U+00A0")
+    func entities() throws {
+        #expect(plain(try #require(render("a &amp; b"))) == "a & b")
+        #expect(plain(try #require(render("&lt;tag&gt;"))) == "<tag>")
+        #expect(plain(try #require(render("&#65;&#x42;"))) == "AB")
+        #expect(plain(try #require(render("a&nbsp;b"))) == "a\u{00A0}b")
+        #expect(plain(try #require(render("&ldquo;q&rdquo;"))) == "\u{201C}q\u{201D}")
+    }
+
+    @Test("Double-encoded entities decode exactly once")
+    func doubleEncoded() throws {
+        #expect(plain(try #require(render("&amp;lt;"))) == "&lt;")
+    }
+
+    @Test("A bare ampersand is literal; ambiguous entity-like text bails")
+    func bareAmpersand() throws {
+        #expect(plain(try #require(render("fish & chips"))) == "fish & chips")
+        // Unknown/legacy entities must fall back, never guess.
+        #expect(render("&bogus;") == nil)
+        #expect(render("&nbsp") == nil)
+    }
+
+    // MARK: - The gate: everything unsupported returns nil
+
+    @Test("Unsupported constructs bail to the WebKit path", arguments: [
+        "<div>block</div>",
+        "<u>underline</u>",
+        "<s>strike</s>",
+        "<sub>1</sub>",
+        "<sup>2</sup>",
+        "<mark>hi</mark>",
+        "<img src=\"x.png\">",
+        "<table><tr><td>c</td></tr></table>",
+        "<p style=\"color:red\">styled</p>",
+        "<span style=\"background:yellow\">styled</span>",
+        "<a href=\"https://e.com\" onclick=\"x()\">js</a>",
+        "<a>no href</a>",
+        "<a href=\"\">empty href</a>",
+        "<!-- comment -->text",
+        "<b>unclosed",
+        "unopened</b>",
+        "<b><i>misnested</b></i>",
+        "<p><p>nested</p></p>",
+        "loose <p>mixed</p>",
+        "<p>a</p> trailing loose",
+        "<span/>self-closing",
+        "&#xD800;",
+        "עברית",
+        "<b dir=\"rtl\">attr</b>",
+        // Windows-1252 numeric range: WebKit remaps these per HTML5; we bail.
+        "don&#146;t",
+        "&#147;quote&#148;",
+        "n&#0;l",
+        "tab&#9;entity",
+        // Entity-encoded RTL bypassing the raw-scalar gate.
+        "&#x5D0;&#x5D1;",
+        // Nested anchor: WebKit auto-closes the outer one.
+        #"<a href="https://a.com">x<a href="https://b.com">y</a>z</a>"#,
+        // Relative / scheme-less hrefs import with NO link under WebKit.
+        #"<a href="/relative/path">rel</a>"#,
+        ##"<a href="#footnote">frag</a>"##,
+    ])
+    func unsupportedBails(_ html: String) {
+        #expect(render(html) == nil)
+    }
+
+    @Test("Ignorable attributes (class/id, anchor cosmetics) are accepted")
+    func ignorableAttributes() throws {
+        #expect(render(#"<span class="x" id="y">ok</span>"#) != nil)
+        #expect(render(#"<a href="https://e.com" title="t" rel="nofollow" target="_blank">ok</a>"#) != nil)
+    }
+
+    @Test("Empty and whitespace-only fragments return nil (fallback decides)")
+    func emptyFragments() {
+        #expect(render("") == nil)
+        #expect(render("   \n  ") == nil)
+        #expect(render("<p></p>") == nil)
+    }
+
+    @Test("CJK, emoji, and combining marks pass through unchanged")
+    func unicodeContent() throws {
+        let text = "한국어 テスト 中文 🦉 éé"
+        #expect(plain(try #require(render(text))) == text)
+    }
+
+    // MARK: - Robustness (never crash, nil or valid output)
+
+    @Test("Random mutations never crash the tokenizer")
+    func fuzz() {
+        let corpus = [
+            "a <b>b <i>c</i></b> <a href=\"https://e.com?a=1&amp;b=2\">d</a> <code>e</code>",
+            "<p>First &amp; second</p><p>Third&nbsp;fourth</p>",
+            "one <br> two &#x1F600; three",
+        ]
+        var seed: UInt64 = 0x5eed
+        func nextRandom(_ bound: Int) -> Int {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Int(seed >> 33) % bound
+        }
+        for source in corpus {
+            for _ in 0..<400 {
+                var mutated = Array(source.unicodeScalars)
+                let mutations = 1 + nextRandom(4)
+                for _ in 0..<mutations where !mutated.isEmpty {
+                    switch nextRandom(3) {
+                    case 0: mutated.remove(at: nextRandom(mutated.count))
+                    case 1: mutated.insert(["<", ">", "&", ";", "\"", "/"][nextRandom(6)], at: nextRandom(mutated.count + 1))
+                    default: mutated = Array(mutated.prefix(nextRandom(mutated.count + 1)))
+                    }
+                }
+                var text = ""
+                text.unicodeScalars.append(contentsOf: mutated)
+                _ = render(text) // must not crash; nil or valid are both fine
+            }
+        }
+    }
+
+    // MARK: - Differential parity against the WebKit importer (macOS)
+
+    #if canImport(AppKit)
+    /// The corpus every whitelisted construct must pass before shipping: the
+    /// native output's text content must equal the classic pipeline's exactly
+    /// (selection/copy and the placeholder height math depend on it).
+    @Test("Differential: native text content equals the WebKit pipeline", .serialized, arguments: [
+        "Hello world",
+        "a <b>bold</b> and <i>italic</i> tail",
+        "<strong>s</strong> <em>e</em>",
+        "nested <b>bold <i>both</i></b> plain",
+        "<p>First paragraph</p><p>Second paragraph</p>",
+        "<p>Only one paragraph</p>",
+        "line one <br> line two",
+        "inline <code>let x = 1</code> code",
+        "<b><code>bold code</code></b>",
+        #"a <a href="https://example.com/path?a=1&amp;b=2">link</a> b"#,
+        #"<a href="https://example.com"><code>linked code</code></a>"#,
+        #"<a href="https://example.com">host-only link</a>"#,
+        "entities &amp; &lt; &gt; &quot; &#65; &#x42;",
+        "nbsp a&nbsp;b end",
+        "dashes &mdash; &ndash; &hellip; quotes &lsquo;&rsquo; &ldquo;&rdquo;",
+        "&copy; &reg; &trade; &deg; &times; &middot;",
+        "  leading and trailing   whitespace  ",
+        "multi   internal    spaces",
+        "한국어 텍스트와 <b>볼드</b> 혼합",
+        "emoji 🦉 and combining e\u{0301}",
+        #"<span class="x">span content</span>"#,
+        "tab\tand\nnewline collapse",
+    ])
+    @MainActor
+    func differentialParity(_ html: String) throws {
+        let prepared = HTMLTextFlow.preparedHTML(html)
+        // Canary: the WebKit importer needs a usable environment; skip (not
+        // fail) on headless runners where it can't import even trivial HTML.
+        guard let webKit = HTMLContentText.webKitImport("<b>x</b>", baseSize: 16, bold: false),
+              String(webKit.characters) == "x" else { return }
+
+        let native = try #require(NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: 16, bold: false),
+                                  "corpus entry must be native-eligible: \(html)")
+        let classic = try #require(HTMLContentText.webKitImport(prepared, baseSize: 16, bold: false))
+        let nativeText = String(native.characters)
+        let classicText = String(classic.characters)
+        #expect(nativeText == classicText, "text mismatch for: \(html)")
+        guard nativeText == classicText else { return }
+
+        // Attribute parity, character by character (skipping invisible paragraph
+        // separators, whose runs may carry differing but unrendered attributes).
+        let nativeNS = NSAttributedString(native)
+        let classicNS = NSAttributedString(classic)
+        let characters = Array(nativeNS.string.utf16)
+        for offset in 0..<min(nativeNS.length, classicNS.length) {
+            if characters[offset] == 0x0A { continue }
+            let n = nativeNS.attributes(at: offset, effectiveRange: nil)
+            let c = classicNS.attributes(at: offset, effectiveRange: nil)
+            #expect(n[.font] as? NSFont == c[.font] as? NSFont, "font mismatch at \(offset) for: \(html)")
+            #expect(n[.foregroundColor] as? NSColor == c[.foregroundColor] as? NSColor, "color mismatch at \(offset) for: \(html)")
+            #expect((n[.link] as? URL) == (c[.link] as? URL), "link mismatch at \(offset) for: \(html)")
+            #expect((n[.underlineStyle] as? Int) == (c[.underlineStyle] as? Int), "underline mismatch at \(offset) for: \(html)")
+        }
+    }
+    #endif
+}

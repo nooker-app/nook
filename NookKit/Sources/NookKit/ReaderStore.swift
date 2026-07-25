@@ -1025,6 +1025,9 @@ public final class ReaderStore {
     /// Removes a folder and every feed inside it.
     public func removeFolder(_ name: String) {
         let removedIDs = Set(feeds.filter { $0.folderName == name }.map(\.id))
+        // Same resurrection guard as removeFeed: buffered fetch results for
+        // these feeds must not be applied after the delete.
+        for id in removedIDs { discardPendingBatchMerges(forFeedID: id) }
         feeds.removeAll { removedIDs.contains($0.id) }
         articles.removeAll { removedIDs.contains($0.feedID) }
         for id in removedIDs {
@@ -2566,6 +2569,9 @@ public final class ReaderStore {
     }
 
     func removeFeed(feedID: Feed.ID) {
+        // A refresh may have this feed's fetch result buffered; applied after
+        // the delete it would resurrect the feed and out-clock the tombstone.
+        discardPendingBatchMerges(forFeedID: feedID)
         feeds.removeAll { $0.id == feedID }
         articles.removeAll { $0.feedID == feedID }
         feedIcons[feedID] = nil
@@ -2876,6 +2882,13 @@ public final class ReaderStore {
         // the flag clears and the final state is saved even on early exit.
         isBatchRefreshing = true
         defer {
+            // Safety net: no bucket may outlive the refresh, whatever the exit
+            // path (idempotent — the explicit end-of-refresh flush below already
+            // handled the normal path). Must run before scheduleSave so the last
+            // bucket is included in the persisted snapshot.
+            flushBatchMerges()
+            batchMergeFlushTask?.cancel()
+            batchMergeFlushTask = nil
             isBatchRefreshing = false
             // One immediate (non-debounced) filter now that the whole batch has
             // merged, so the list settles at once instead of after the debounce.
@@ -2926,14 +2939,19 @@ public final class ReaderStore {
                 // fetches and drain the in-flight ones without touching state, so
                 // a cancel yields promptly and doesn't mark feeds unhealthy on the
                 // way out. The interrupted refresh re-runs on the next turn.
+                // Results that arrived before the cancel still merge (they did
+                // before batching too) — flush them now, then drain untouched.
                 if Task.isCancelled {
+                    flushBatchMerges()
                     continue
                 }
                 if let parsed {
-                    merge(parsed, animated: mode.animatesInsertion)
+                    // Buffered, not merged immediately: the flush window bounds
+                    // the whole-library didSet chain and the row-invalidating
+                    // republish to once per ~400ms instead of once per feed.
+                    enqueueBatchMerge(parsed, animated: mode.animatesInsertion)
                     ensureFavicon(for: parsed.feed)
                     anyFeedMerged = true
-                    pruneSelectionIfHidden()
                 } else {
                     // A refresh failure (offline, HTTP host down, parse error) must
                     // never interrupt the user: don't surface a global alert. Just
@@ -2949,6 +2967,12 @@ public final class ReaderStore {
                 }
             }
         }
+
+        // Explicit end-of-refresh flush — deliberately here and not only in the
+        // defer: everything below (and callers resuming after this await, like
+        // the background notifier reading articles/unread counts) must see the
+        // fully merged state, and the defer runs after them.
+        flushBatchMerges()
 
         if anyFeedMerged { lastRefreshedAt = Date.now }
 
@@ -3070,44 +3094,44 @@ public final class ReaderStore {
         }
     }
 
+    /// Single-feed merge — a batch of one. Kept as the entry point for every
+    /// single-feed path (add feed, refresh one feed, OPML import) so those stay
+    /// immediate and never ride the refresh batching buffer.
     private func merge(_ parsedFeed: ParsedFeed, animated: Bool = true) {
-        let feedID = parsedFeed.feed.id
-        // Whether this feed already had articles before the merge. A brand-new
-        // feed's first batch shouldn't flash (nothing "arrived" for the user yet);
-        // only a feed that already existed and now gains items should.
-        let feedHadArticles = articles.contains { $0.feedID == feedID }
+        // An older snapshot of this same feed may be sitting in the refresh
+        // bucket (a full refresh fetched it moments ago). This immediate merge
+        // is newer — drop the stale entry so the later flush can't revert it.
+        pendingBatchMerges.removeAll { $0.parsed.feed.id == parsedFeed.feed.id }
+        merge(batch: [parsedFeed], animated: animated)
+    }
 
-        if let feedIndex = feeds.firstIndex(where: { $0.id == parsedFeed.feed.id }) {
-            var updated = parsedFeed.feed
-            // Preserve the user's per-feed settings across refreshes; a freshly
-            // parsed feed always has an empty category and no view preference.
-            updated.category = feeds[feedIndex].category
-            updated.preferredViewMode = feeds[feedIndex].preferredViewMode
-            updated.customTitle = feeds[feedIndex].customTitle
-            // Skip the write when nothing but the fetch stamp changed: reassigning
-            // `feeds` republishes the whole array and invalidates every visible
-            // row, and ambient refreshes hit this path for every feed on every
-            // tick. `lastFetchedAt` is rendered nowhere, so it's equalized for
-            // the comparison (and intentionally not persisted on a no-op).
-            var comparable = updated
-            comparable.lastFetchedAt = feeds[feedIndex].lastFetchedAt
-            if comparable != feeds[feedIndex] {
-                feeds[feedIndex] = updated
-            }
-            // Keep the shard's seed current so every known feed's membership is
-            // CRDT-protected (deduplicated, so an unchanged refresh is a no-op).
-            recordFeedSeed(updated)
-        } else {
-            feeds.append(parsedFeed.feed)
-            // A feed appearing for the first time in memory clears any stale
-            // deletion tombstone for the same URL (feed ids are the URL), so
-            // re-adding a previously removed feed isn't suppressed at materialize
-            // by the old delete. The fresh HLC also beats a peer's older delete.
-            recordFeedRestored(parsedFeed.feed.id)
-            recordFeedSeed(parsedFeed.feed)
-            scheduleShardSave()
-        }
+    /// Merges a batch of fetched feeds in ONE synchronous main-actor pass.
+    ///
+    /// This is the only merge code path (the single-feed overload wraps it), so
+    /// the batch semantics can never drift from the sequential ones. Batching
+    /// exists because a full refresh used to run this once per feed: the
+    /// all-articles dictionary rebuild, the `articles` didSet (full refilter +
+    /// recount), and the @Observable republish each fired per changed feed.
+    /// One pass bounds all of that to once per flush bucket.
+    ///
+    /// Deliberately synchronous with no suspension points: user mutations
+    /// (setRead/setStarred/delete) also run on the main actor, so reading
+    /// `articles` and assigning the merged result within one synchronous span
+    /// makes a stale-apply clobber structurally impossible — the batch buffer
+    /// only ever holds network snapshots, never store state.
+    private func merge(batch: [ParsedFeed], animated: Bool) {
+        guard !batch.isEmpty else { return }
 
+        // Which feeds already had articles BEFORE this batch. A brand-new feed's
+        // first batch shouldn't flash (nothing "arrived" for the user yet); the
+        // set is computed up front so an earlier feed in the same batch can't
+        // change a later feed's verdict.
+        let feedIDsWithArticles = Set(articles.map(\.feedID))
+
+        // Feed rows: mutate a local copy and assign once — each in-place element
+        // write would republish the whole `feeds` array.
+        var updatedFeeds = feeds
+        var feedsChanged = false
         // Last-writer-wins on a duplicate ID rather than trapping — a dupe slipping
         // through the baseline/shard merge must degrade, not crash the next refresh.
         var existingArticlesByID = Dictionary(articles.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
@@ -3115,44 +3139,93 @@ public final class ReaderStore {
         var hasNewArticles = false
         // Whether any existing article's merged value actually differs — when a
         // refresh changes nothing, `articles` must not be reassigned (its didSet
-        // re-filters and re-counts the whole library, once per feed per tick).
+        // re-filters and re-counts the whole library).
         var hasChangedArticles = false
         // Genuinely-new article ids to hand to the background AI categorizer.
         var newlyArrivedIDs: [Article.ID] = []
-        for newArticle in parsedFeed.articles {
-            var article = newArticle
-            if let existing = existingArticlesByID[article.id] {
-                article.isRead = existing.isRead
-                article.isStarred = existing.isStarred
-                // A freshly parsed article has no categories; keep the ones already
-                // assigned (keyword/AI/manual) so a refresh never wipes them.
-                article.categories = existing.categories
-                // Only pin the timestamp when the feed gave no real date (we
-                // stamped a synthetic first-seen time): re-stamping it each
-                // refresh would jump the article to "now" and reshuffle the list.
-                // When the feed DOES supply a date, keep the freshly parsed one —
-                // it's authoritative and stable, and self-corrects a value that a
-                // past parse got wrong.
-                if !article.hasExplicitPublishDate {
-                    article.publishedAt = existing.publishedAt
+        // Feeds that gained new articles and existed before the batch — flashed
+        // in the sidebar after the merge lands.
+        var flashTargets: [Feed.ID] = []
+
+        for parsedFeed in batch {
+            if let feedIndex = updatedFeeds.firstIndex(where: { $0.id == parsedFeed.feed.id }) {
+                var updated = parsedFeed.feed
+                // Preserve the user's per-feed settings across refreshes; a freshly
+                // parsed feed always has an empty category and no view preference.
+                updated.category = updatedFeeds[feedIndex].category
+                updated.preferredViewMode = updatedFeeds[feedIndex].preferredViewMode
+                updated.customTitle = updatedFeeds[feedIndex].customTitle
+                // Skip the write when nothing but the fetch stamp changed:
+                // `lastFetchedAt` is rendered nowhere, so it's equalized for the
+                // comparison (and intentionally not persisted on a no-op) — an
+                // unchanged ambient refresh must stay observation-silent.
+                var comparable = updated
+                comparable.lastFetchedAt = updatedFeeds[feedIndex].lastFetchedAt
+                if comparable != updatedFeeds[feedIndex] {
+                    updatedFeeds[feedIndex] = updated
+                    feedsChanged = true
                 }
+                // Keep the shard's seed current so every known feed's membership is
+                // CRDT-protected (deduplicated, so an unchanged refresh is a no-op).
+                recordFeedSeed(updated)
             } else {
-                hasNewArticles = true
-                // Auto-classify new articles: keyword rules apply immediately
-                // (cheap, priority); AI runs later in the background queue.
-                article.categories = keywordAutoCategories(for: article)
-                newlyArrivedIDs.append(article.id)
+                updatedFeeds.append(parsedFeed.feed)
+                feedsChanged = true
+                // A feed appearing for the first time in memory clears any stale
+                // deletion tombstone for the same URL (feed ids are the URL), so
+                // re-adding a previously removed feed isn't suppressed at materialize
+                // by the old delete. The fresh HLC also beats a peer's older delete.
+                recordFeedRestored(parsedFeed.feed.id)
+                recordFeedSeed(parsedFeed.feed)
+                scheduleShardSave()
             }
-            // Track feed items that shipped no date so a background pass can try
-            // to recover the real one from the article page.
-            if !article.hasExplicitPublishDate {
-                datelessArticleIDs.insert(article.id)
+
+            var feedGainedNewArticles = false
+            for newArticle in parsedFeed.articles {
+                var article = newArticle
+                if let existing = existingArticlesByID[article.id] {
+                    article.isRead = existing.isRead
+                    article.isStarred = existing.isStarred
+                    // A freshly parsed article has no categories; keep the ones already
+                    // assigned (keyword/AI/manual) so a refresh never wipes them.
+                    article.categories = existing.categories
+                    // Only pin the timestamp when the feed gave no real date (we
+                    // stamped a synthetic first-seen time): re-stamping it each
+                    // refresh would jump the article to "now" and reshuffle the list.
+                    // When the feed DOES supply a date, keep the freshly parsed one —
+                    // it's authoritative and stable, and self-corrects a value that a
+                    // past parse got wrong.
+                    if !article.hasExplicitPublishDate {
+                        article.publishedAt = existing.publishedAt
+                    }
+                } else {
+                    hasNewArticles = true
+                    feedGainedNewArticles = true
+                    // Auto-classify new articles: keyword rules apply immediately
+                    // (cheap, priority); AI runs later in the background queue.
+                    article.categories = keywordAutoCategories(for: article)
+                    newlyArrivedIDs.append(article.id)
+                }
+                // Track feed items that shipped no date so a background pass can try
+                // to recover the real one from the article page.
+                if !article.hasExplicitPublishDate {
+                    datelessArticleIDs.insert(article.id)
+                }
+                if !hasChangedArticles, existingArticlesByID[article.id] != article {
+                    hasChangedArticles = true
+                }
+                existingArticlesByID[article.id] = article
             }
-            if !hasChangedArticles, existingArticlesByID[article.id] != article {
-                hasChangedArticles = true
+
+            // Flashing is the only visual signal for automatic refreshes (they
+            // show no spinner), so an unchanged feed stays completely silent.
+            if feedGainedNewArticles, feedIDsWithArticles.contains(parsedFeed.feed.id) {
+                flashTargets.append(parsedFeed.feed.id)
             }
-            existingArticlesByID[article.id] = article
         }
+
+        // Feeds before articles, matching `apply`'s ordering convention.
+        if feedsChanged { feeds = updatedFeeds }
 
         // Only republish when the merge actually changed something; an unchanged
         // refresh (the common ambient case) must stay observation-silent.
@@ -3186,19 +3259,74 @@ public final class ReaderStore {
             if wroteCategories { scheduleShardSave() }
         }
 
-        // Flash the feed in the sidebar when a refresh actually brought in new
-        // articles. This is the only visual signal for automatic refreshes (they
-        // show no spinner), so an unchanged refresh stays completely silent.
-        if hasNewArticles && feedHadArticles {
+        // Flash the feeds that actually brought in new articles.
+        for feedID in flashTargets {
             flashFeedUpdate(feedID)
         }
 
         // Keep the body cache current with freshly fetched content, so a later
         // re-merge (which reloads the list-light baseline) restores these bodies
         // rather than blanking them until the next refresh.
-        for article in parsedFeed.articles where article.hasBody {
-            bodyCache[article.id] = article.body
+        for parsedFeed in batch {
+            for article in parsedFeed.articles where article.hasBody {
+                bodyCache[article.id] = article.body
+            }
         }
+    }
+
+    // MARK: - Refresh merge batching
+
+    /// Fetched feeds waiting to be merged — network snapshots only, never store
+    /// state, so a flush can never apply anything stale over a user mutation.
+    /// The animation mode rides along per entry: overlapping refresh runs with
+    /// different modes (pull-to-refresh over an in-flight ambient refresh) can
+    /// share the bucket without cross-contaminating each other's animation.
+    private var pendingBatchMerges: [(parsed: ParsedFeed, animated: Bool)] = []
+    /// The open flush window. A fixed trailing window (not a resetting debounce,
+    /// which a slow trickle of feeds could starve): the first arrival opens it,
+    /// later arrivals just join the bucket, and one merge lands when it closes.
+    private var batchMergeFlushTask: Task<Void, Never>?
+    private static let batchMergeFlushInterval: Duration = .milliseconds(400)
+
+    /// Buffers a fetched feed for the next merge flush. Bounds the didSet chain
+    /// and the observable republish to once per window instead of once per feed,
+    /// while keeping progressive display (a slow refresh still shows articles
+    /// every ~400ms, on par with the 300ms list-filter debounce).
+    private func enqueueBatchMerge(_ parsed: ParsedFeed, animated: Bool) {
+        pendingBatchMerges.append((parsed, animated))
+        guard batchMergeFlushTask == nil else { return }
+        batchMergeFlushTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.batchMergeFlushInterval)
+            guard let self, !Task.isCancelled else { return }
+            self.batchMergeFlushTask = nil
+            self.flushBatchMerges()
+        }
+    }
+
+    /// Drops a feed's buffered fetch results. Called when the user deletes a
+    /// feed: a buffered result applied after the delete would re-append the
+    /// feed and stamp a fresher restore over the deletion tombstone — undoing
+    /// the delete on every synced device.
+    func discardPendingBatchMerges(forFeedID feedID: Feed.ID) {
+        pendingBatchMerges.removeAll { $0.parsed.feed.id == feedID }
+    }
+
+    /// Applies the pending bucket in one synchronous pass (split by animation
+    /// mode, arrival order preserved within each). Idempotent and safe to call
+    /// from anywhere (timer, cancellation, end-of-refresh, defer): an empty
+    /// bucket is a no-op, and the merge reads `articles` at flush time so it
+    /// always composes over the latest state.
+    private func flushBatchMerges() {
+        guard !pendingBatchMerges.isEmpty else { return }
+        let bucket = pendingBatchMerges
+        pendingBatchMerges = []
+        batchMergeFlushTask?.cancel()
+        batchMergeFlushTask = nil
+        let quiet = bucket.filter { !$0.animated }.map(\.parsed)
+        let animated = bucket.filter(\.animated).map(\.parsed)
+        if !quiet.isEmpty { merge(batch: quiet, animated: false) }
+        if !animated.isEmpty { merge(batch: animated, animated: true) }
+        pruneSelectionIfHidden()
     }
 
     private func markFeedUnhealthy(feedID: Feed.ID) {
