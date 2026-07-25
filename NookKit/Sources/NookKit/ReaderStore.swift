@@ -5,7 +5,16 @@ import SwiftUI
 @MainActor
 @Observable
 public final class ReaderStore {
-    public var feeds: [Feed] = [] { didSet { scheduleArticleFilter(debounced: true) } }
+    public var feeds: [Feed] = [] {
+        didSet {
+            // O(1) row lookups: every visible row resolves its feed title, and a
+            // linear scan per row per body evaluation added up on both platforms.
+            feedsByID = Dictionary(feeds.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            scheduleArticleFilter(debounced: true)
+        }
+    }
+    /// `feeds` indexed by id, maintained in its didSet.
+    private var feedsByID: [Feed.ID: Feed] = [:]
     var articles: [Article] = [] {
         didSet {
             // Classify hidden (filtered) articles first so counts and the list
@@ -131,7 +140,15 @@ public final class ReaderStore {
     /// User-defined categories (definitions), synced across devices via the state
     /// shard. Read-only to the UI; mutate through `addCategory`/`updateCategory`/
     /// etc. Per-article assignments live on `Article.categories`.
-    public private(set) var categories: [ArticleCategory] = []
+    public private(set) var categories: [ArticleCategory] = [] {
+        didSet {
+            // O(1) badge lookups: `categories(forArticle:)` runs per visible row
+            // and was rebuilding this dictionary on every call.
+            categoriesByID = Dictionary(categories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+    /// `categories` indexed by id, maintained in its didSet.
+    private var categoriesByID: [String: ArticleCategory] = [:]
     /// Progress of an in-flight "classify existing articles" migration (completed,
     /// total), or nil when idle. Observed for the settings progress indicator.
     public private(set) var categorizeAllProgress: (completed: Int, total: Int)?
@@ -305,6 +322,8 @@ public final class ReaderStore {
     private var ownShard = DeviceStateDocument(deviceID: "")
     private var pendingShard: DeviceStateDocument?
     private var isDrainingShardSaves = false
+    /// The open trailing-save window for the shard (see `scheduleShardSave`).
+    private var shardSaveDebounceTask: Task<Void, Never>?
     private var replicaStore: ReplicaStore?
     private var appliedReplicaRevision: UInt64 = 0
 
@@ -968,7 +987,7 @@ public final class ReaderStore {
     }
 
     public func feed(for feedID: Feed.ID) -> Feed? {
-        feeds.first { $0.id == feedID }
+        feedsByID[feedID]
     }
 
     public func faviconImage(for feed: Feed) -> Image? {
@@ -1478,9 +1497,8 @@ public final class ReaderStore {
     /// The category definitions assigned to an article, in the stored order — for
     /// the list badges. Reads `categories`, so a row calling this observes it.
     public func categories(forArticle article: Article) -> [ArticleCategory] {
-        guard !article.categories.isEmpty, !categories.isEmpty else { return [] }
-        let byID = Dictionary(categories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return article.categories.compactMap { byID[$0] }
+        guard !article.categories.isEmpty, !categoriesByID.isEmpty else { return [] }
+        return article.categories.compactMap { categoriesByID[$0] }
     }
 
     /// Toggles one category on/off for an article (from a menu). No-op if the id
@@ -2438,7 +2456,9 @@ public final class ReaderStore {
         readerContentStates[articleID] = nil
         retainedArticleIDs.remove(articleID)
         recordArticleDeleted(articleID)
-        scheduleShardSave()
+        // Tombstones write through immediately — losing a delete on a kill is
+        // worse than losing a read bit.
+        scheduleShardSave(urgent: true)
     }
 
     public func markArticleOpened(articleID: Article.ID) {
@@ -2555,7 +2575,8 @@ public final class ReaderStore {
         feedSelection.remove(feedID)
 
         recordFeedDeleted(feedID)
-        scheduleShardSave()
+        // Tombstone: write through immediately (see deleteArticle).
+        scheduleShardSave(urgent: true)
         pruneSelectionIfHidden()
         saveAfterMutation()
     }
@@ -3181,9 +3202,13 @@ public final class ReaderStore {
     }
 
     private func markFeedUnhealthy(feedID: Feed.ID) {
-        guard let index = feeds.firstIndex(where: { $0.id == feedID }) else { return }
+        guard let index = feeds.firstIndex(where: { $0.id == feedID }),
+              feeds[index].healthScore != 0 else { return }
         feeds[index].healthScore = 0
-        saveAfterMutation()
+        // No immediate full-library save: the flag is a transient indicator
+        // (cleared by the next successful refresh) and every failed fetch was
+        // re-encoding and coordinated-writing the whole library. Any later
+        // scheduled save persists it incidentally.
     }
 
     private func moveSelection(offset: Int) {
@@ -3538,11 +3563,48 @@ public final class ReaderStore {
     /// the main actor and, like the baseline save, only ever writes the latest
     /// snapshot. The shard is a separate file from `NookLibrary.json`, so the two
     /// writers never contend.
-    private func scheduleShardSave() {
+    ///
+    /// Writes trail the mutation by a short window so a reading session (one
+    /// mark-read per article open) coalesces into one grow-only-file write +
+    /// iCloud upload per burst instead of one per article. `urgent` skips the
+    /// window — used for tombstones (losing a delete is worse than losing a
+    /// read bit) — and `flushPendingShardSave` drains on backgrounding /
+    /// termination so no state is lost.
+    private func scheduleShardSave(urgent: Bool = false) {
         guard let storage else { return }
         ownShard.updatedAt = Date()
         ownShard.generation &+= 1
         pendingShard = ownShard
+        if urgent {
+            shardSaveDebounceTask?.cancel()
+            shardSaveDebounceTask = nil
+            startShardSaveDrain(storage: storage)
+            return
+        }
+        // Fixed trailing window (not a resetting debounce, which continuous
+        // reading could starve): the first mutation opens it, later ones just
+        // refresh `pendingShard`, and one write lands when it closes.
+        guard shardSaveDebounceTask == nil else { return }
+        shardSaveDebounceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard let self, !Task.isCancelled else { return }
+            self.shardSaveDebounceTask = nil
+            guard let storage = self.storage else { return }
+            self.startShardSaveDrain(storage: storage)
+        }
+    }
+
+    /// Drains any pending shard write immediately. Platform apps call this when
+    /// leaving the foreground (and the macOS app on termination) so the trailing
+    /// save window can't drop state.
+    public func flushPendingShardSave() {
+        shardSaveDebounceTask?.cancel()
+        shardSaveDebounceTask = nil
+        guard let storage, pendingShard != nil else { return }
+        startShardSaveDrain(storage: storage)
+    }
+
+    private func startShardSaveDrain(storage: ReaderStorage) {
         guard !isDrainingShardSaves else { return }
         isDrainingShardSaves = true
         Task { await drainShardSaves(storage: storage) }

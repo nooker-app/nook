@@ -125,6 +125,12 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
 
     func applicationDidResignActive(_ notification: Notification) {
         reevaluateEngagement()
+        // Land any shard write still inside its trailing-save window.
+        ReaderStore.shared.flushPendingShardSave()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        ReaderStore.shared.flushPendingShardSave()
     }
 
     // Keep running in the background when the window is closed so scheduled

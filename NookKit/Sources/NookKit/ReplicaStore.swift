@@ -126,6 +126,7 @@ public final class ReplicaStore: @unchecked Sendable {
                     var bodyDocument = try loadBodyDocument(db) ?? BodyShardDocument(deviceID: deviceID)
                     var clock = document.clock
                     var changed = false
+                    var bodyChanged = false
                     for feed in library.feeds {
                         let content = FeedContent(feed)
                         guard document.feeds[feed.id]?.value != content else { continue }
@@ -140,9 +141,17 @@ public final class ReplicaStore: @unchecked Sendable {
                             document.articles[article.id] = LWWRegister(value: content, hlc: clock)
                             changed = true
                         }
-                        if article.hasBody, retainBodies.contains(article.id) { bodyDocument.bodies[article.id] = article.body }
+                        if article.hasBody, retainBodies.contains(article.id),
+                           bodyDocument.bodies[article.id] != article.body {
+                            bodyDocument.bodies[article.id] = article.body
+                            bodyChanged = true
+                        }
                     }
-                    bodyDocument.bodies = bodyDocument.bodies.filter { retainBodies.contains($0.key) }
+                    let retained = bodyDocument.bodies.filter { retainBodies.contains($0.key) }
+                    if retained.count != bodyDocument.bodies.count {
+                        bodyDocument.bodies = retained
+                        bodyChanged = true
+                    }
                     document.clock = clock
                     if changed {
                         document.generation &+= 1
@@ -150,9 +159,14 @@ public final class ReplicaStore: @unchecked Sendable {
                         try setMetadata(db, "outbox_dirty", "1")
                         try bumpRevision(db)
                     }
-                    bodyDocument.generation &+= 1
-                    try saveBodyDocument(db, bodyDocument)
-                    try setMetadata(db, "body_outbox_dirty", "1")
+                    // Only re-encode + republish the (large, every-article-body)
+                    // shard when a body actually changed — every save event was
+                    // rewriting and re-uploading it byte-for-byte otherwise.
+                    if bodyChanged {
+                        bodyDocument.generation &+= 1
+                        try saveBodyDocument(db, bodyDocument)
+                        try setMetadata(db, "body_outbox_dirty", "1")
+                    }
                     return try snapshot(db, document: document, bodies: bodyDocument.bodies)
                 }
             }

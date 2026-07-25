@@ -295,7 +295,7 @@ public struct ReaderStorage: Sendable {
                     .flatMap { try? JSONDecoder.nook.decode([Article.ID: ArticleBody].self, from: $0) } ?? [:]
                 merged.merge(bodies) { _, new in new }
                 merged = merged.filter { retain.contains($0.key) }
-                let data = try JSONEncoder.nook.encode(merged)
+                let data = try JSONEncoder.nookCompact.encode(merged)
                 try data.write(to: url, options: [.atomic])
             } catch { writeError = error }
         }
@@ -358,7 +358,7 @@ public struct ReaderStorage: Sendable {
     /// caused lost updates simply cannot occur here.
     public func saveShard(_ shard: DeviceStateDocument) throws {
         try FileManager.default.createDirectory(at: stateDirectoryURL, withIntermediateDirectories: true)
-        let data = try JSONEncoder.nook.encode(shard)
+        let data = try JSONEncoder.nookCompact.encode(shard)
         let url = shardURL(deviceID: shard.deviceID)
 
         var writeError: Error?
@@ -420,7 +420,7 @@ public struct ReaderStorage: Sendable {
 
     private func saveDocument<T: Encodable>(_ document: T, at url: URL, directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let data = try JSONEncoder.nook.encode(document)
+        let data = try JSONEncoder.nookCompact.encode(document)
         var writeError: Error?
         var coordinatorError: NSError?
         NSFileCoordinator().coordinate(writingItemAt: url, options: [.forReplacing], error: &coordinatorError) { url in
@@ -499,6 +499,17 @@ private extension JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return encoder
+    }
+
+    /// Compact encoder for the machine-only shard files (state/content/bodies):
+    /// prettyPrinted + sortedKeys measurably inflate encode time and file size
+    /// for documents rewritten on every user-state mutation. Decoding is
+    /// format-agnostic, so old pretty files and new compact ones interoperate.
+    static var nookCompact: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.withoutEscapingSlashes]
         return encoder
     }
 

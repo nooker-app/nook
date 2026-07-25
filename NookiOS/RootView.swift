@@ -129,12 +129,15 @@ struct RootView: View {
                         NewArticleNotifier.clearDelivered()
                         if autoRefreshEnabled { store.refreshOnActivation(honorThrottle: true) }
                     case .background:
-                        // Queue the next background refresh as we leave.
+                        // Queue the next background refresh as we leave, and land
+                        // any shard write still in its trailing-save window.
                         store.setForegroundActive(false)
                         store.setSyncObservationActive(false)
+                        store.flushPendingShardSave()
                         BackgroundRefresh.schedule()
                     case .inactive:
                         store.setForegroundActive(false)
+                        store.flushPendingShardSave()
                     default:
                         break
                     }
@@ -1800,6 +1803,25 @@ private struct ArticleList: View {
     }
 
     private func row(_ article: Article) -> some View {
+        ArticleRowView(
+            article: article,
+            store: store,
+            translationBox: titleTranslator.box(for: article.id)
+        )
+    }
+}
+
+/// One article-list row, extracted into its own view so its observable reads
+/// (feed title, category badges, offline index) register at row scope: a feed
+/// or category change re-evaluates rows individually instead of forcing the
+/// whole `ArticleList` body — and a translation update still touches only this
+/// row via its `StateBox`.
+private struct ArticleRowView: View {
+    let article: Article
+    let store: ReaderStore
+    let translationBox: ListTitleTranslator.StateBox
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Title + its translation share a zero-spacing group so the collapsed
             // (height-zero) translation block leaves no gap above the summary.
@@ -1825,7 +1847,7 @@ private struct ArticleList: View {
                 // Shared leaf view observes ONLY this row's state box.
                 ListTitleTranslationBlock(
                     title: article.title,
-                    box: titleTranslator.box(for: article.id)
+                    box: translationBox
                 )
             }
             if !article.summary.isEmpty {
