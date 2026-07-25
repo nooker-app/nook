@@ -160,6 +160,25 @@ public struct ReaderStorage: Sendable {
     /// Reads the current v1 baseline and every unresolved conflict version. v2
     /// treats these as add-only input and never resolves, removes, or rewrites
     /// them because an older Nook may still be using the files.
+    /// A cheap fingerprint of the legacy inputs — the main file's mtime+size and
+    /// every unresolved conflict version's identity+mtime — so callers can skip
+    /// `loadLegacyCandidates`' coordinated read + decode + hash of a multi-MB
+    /// file when nothing changed since the last ingest.
+    public func legacyCandidateFingerprint() -> String {
+        var parts: [String] = []
+        let path = libraryURL.path(percentEncoded: false)
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: path) {
+            let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSinceReferenceDate ?? 0
+            let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+            parts.append("current:\(mtime):\(size)")
+        }
+        for version in NSFileVersion.unresolvedConflictVersionsOfItem(at: libraryURL) ?? [] {
+            let mtime = version.modificationDate?.timeIntervalSinceReferenceDate ?? 0
+            parts.append("conflict:\(String(describing: version.persistentIdentifier)):\(mtime)")
+        }
+        return parts.joined(separator: "|")
+    }
+
     public func loadLegacyCandidates() -> [LegacyCandidate] {
         var urls: [(String, URL, Date)] = []
         if FileManager.default.fileExists(atPath: libraryURL.path(percentEncoded: false)) {

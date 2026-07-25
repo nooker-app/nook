@@ -65,6 +65,26 @@ public final class OfflineArticleStore {
         index = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
+    /// Off-main variant for the launch path: reads and decodes the index on a
+    /// background executor and installs it here. The synchronous `loadIfNeeded`
+    /// stays as the fallback for any caller that races ahead of this, so
+    /// behavior is unchanged — the common case just stops paying the disk read
+    /// on the main actor during launch.
+    public func preloadIndex() async {
+        guard !loaded else { return }
+        let stored = await Task.detached(priority: .userInitiated) { () -> [OfflineArticleInfo]? in
+            guard let url = Self.indexURL(),
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode([OfflineArticleInfo].self, from: data)
+        }.value
+        // A synchronous load may have won the race while we were off-main.
+        guard !loaded else { return }
+        loaded = true
+        if let stored {
+            index = Dictionary(stored.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+
     // MARK: - Queries
 
     public var savedIDs: Set<Article.ID> { loadIfNeeded(); return Set(index.keys) }

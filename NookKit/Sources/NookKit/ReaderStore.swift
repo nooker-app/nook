@@ -154,6 +154,9 @@ public final class ReaderStore {
     /// when `filters` change (not per article mutation), so a refresh that streams
     /// articles in doesn't recompile regexes on every merge.
     private var activeCompiledFilters: [CompiledFilter] = []
+    /// The filter set the engine was last compiled from, so `rebuildFilterEngine`
+    /// can no-op (keeping the classify cache) when a sync didn't change filters.
+    private var compiledFilterSource: [ArticleFilter] = []
     /// Per-article content hash from its last classification under the current
     /// engine. Lets `recomputeFilteredIDs` skip re-testing an article whose title/
     /// summary hasn't changed — so a multi-feed refresh only runs the (possibly
@@ -327,7 +330,11 @@ public final class ReaderStore {
         didBootstrap = true
         deviceID = DeviceIdentity.current()
         ownShard = DeviceStateDocument(deviceID: deviceID)
+        // Read the offline index off-main while storage restores, so the first
+        // row render / purge below doesn't do the disk read on the main actor.
+        async let offlineIndexPreload: Void = OfflineArticleStore.shared.preloadIndex()
         await restoreStorageIfPossible()
+        await offlineIndexPreload
         // Drop offline copies past their expiry (device-local; independent of the
         // sync folder), so stale downloads don't linger or inflate the count.
         purgeExpiredOffline()
@@ -641,6 +648,12 @@ public final class ReaderStore {
         }
     }
 
+    /// Points the store at a user-selected sync folder. The entry point stays
+    /// synchronous so the platform folder pickers (NSOpenPanel sheet completion
+    /// on macOS) call it unchanged; the heavy bring-online work — reconcile,
+    /// shard loads, CRDT materialize — runs off the main actor. Previously this
+    /// ran the whole sequence synchronously on main, a guaranteed multi-second
+    /// hang on big libraries the moment the user picked a folder.
     public func configureSyncFolder(_ directoryURL: URL) {
         do {
             try ReaderStorage.saveBookmark(for: directoryURL)
@@ -650,25 +663,14 @@ public final class ReaderStore {
             self.storage = storage
             syncFolderDisplayPath = directoryURL.path(percentEncoded: false)
 
-            restoreOwnShard(storage: storage)
-            let replica = try ReplicaStore(syncDirectory: directoryURL, deviceID: deviceID)
-            replicaStore = replica
-            let snapshot = try replica.reconcile(storage: storage)
-            try migrateLegacyUserStateIfNeeded(replica: replica, storage: storage)
-            applyReplicaSnapshot(snapshot, storage: storage)
-            try replica.publishIfNeeded(to: storage)
-
-            errorMessage = nil
-            pruneSelectionIfHidden()
-            lastKnownLibraryModDate = storage.libraryModificationDate
-            lastKnownStateModDate = storage.stateDirectoryModificationDate
-            lastKnownContentModDate = storage.contentDirectoryModificationDate
-            lastKnownBodiesModDate = storage.bodiesDirectoryModificationDate
-            startObservingLibrary()
-            Task { await loadBodyCacheIfNeeded() }
-            let readerStore = ReaderContentStore(storage: storage, deviceID: deviceID)
-            readerContentStore = readerStore
-            Task { await readerStore.reload() }
+            Task {
+                do {
+                    try await bringSyncFolderOnline(storage: storage, directoryURL: directoryURL)
+                    pruneSelectionIfHidden()
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -826,31 +828,59 @@ public final class ReaderStore {
         await readerContentStore?.reload()
 
         guard let replicaStore else { return }
-        let loaded = await Task.detached(priority: .userInitiated) { () -> (ReplicaSnapshot, [DeviceStateDocument])? in
+        // Snapshot the in-memory shard for the off-main merge; the generation is
+        // re-checked after the hop so a local edit landing mid-merge can't be
+        // clobbered by a materialize that didn't see it.
+        let ownShardSnapshot = ownShard
+        let generationBefore = ownShardSnapshot.generation
+        let deviceID = deviceID
+        let loaded = await Task.detached(priority: .userInitiated) {
+            () -> (ReplicaSnapshot, HLC, ReaderLibrary, PrecomputedFilterState)? in
             guard let snapshot = try? replicaStore.reconcile(storage: storage) else { return nil }
             try? replicaStore.publishIfNeeded(to: storage)
-            return (snapshot, (try? storage.loadShards()) ?? [])
+            // Fold in this device's authoritative in-memory shard (a
+            // not-yet-flushed local edit must never be dropped). The HLC fold
+            // and the materialize are both O(all registers) — off-main here.
+            let peers = ((try? storage.loadShards()) ?? []).filter { $0.deviceID != deviceID }
+            var folded = HLC.zero
+            for shard in peers { folded = folded.witnessed(shard.maxObservedHLC) }
+            let merged = DeviceStateDocument.materialize(
+                base: snapshot.library, shards: peers + [ownShardSnapshot]
+            )
+            let precomputed = ReaderStore.precomputeFilterState(
+                articles: merged.articles, filters: merged.filters, categories: merged.categories
+            )
+            return (snapshot, folded, merged, precomputed)
         }.value
-        guard let (snapshot, peerShards) = loaded, snapshot.revision >= appliedReplicaRevision else { return }
+        guard let (snapshot, foldedPeerHLC, mergedRaw, precomputed) = loaded,
+              snapshot.revision >= appliedReplicaRevision else { return }
         // A refresh may have started during the off-main decode; its in-memory
         // articles would be newer than this disk snapshot, so don't clobber them.
         guard !isRefreshing else { return }
+        // A local edit landed while the merge ran: the materialized result is
+        // stale against it. Bail — the edit's own save republishes, and the next
+        // sync event re-runs this merge against the current shard.
+        guard ownShard.generation == generationBefore else { return }
 
-        // Fold in this device's authoritative in-memory shard (a not-yet-flushed
-        // local edit must never be dropped) and advance the clock.
-        var shards = peerShards.filter { $0.deviceID != deviceID }
-        shards.append(ownShard)
-        witness(shards)
+        lastHLC = lastHLC.witnessed(foldedPeerHLC)
+        ownShard.clock = lastHLC
         // Fill bodies from the cache so the (list-light) baseline's stripped
         // bodies don't read as a change and the applied result keeps content.
+        // Hydration stays on the main actor: `bodyCache` can advance while the
+        // merge runs off-main (body hydration doesn't bump the shard
+        // generation), and hydrating against a stale snapshot would compare —
+        // and apply — unhydrated bodies over hydrated ones.
         if !snapshot.bodies.isEmpty { bodyCache.merge(snapshot.bodies) { _, new in new } }
-        let merged = hydratedFromCache(DeviceStateDocument.materialize(base: snapshot.library, shards: shards))
+        let merged = hydratedFromCache(mergedRaw)
 
         // Compare against the same folder normalization `apply` produces.
         let impliedFolders = merged.feeds.map(\.folderName).filter { !$0.isEmpty }
         let mergedFolders = Set(merged.folders).union(impliedFolders)
         if merged.feeds != feeds || merged.articles != articles || mergedFolders != Set(folders) || merged.filters != filters || merged.categories != categories {
-            apply(merged)
+            // The precomputed state was built from the unhydrated articles;
+            // classification hashes only title/summary and counts only flags,
+            // so body hydration doesn't invalidate it.
+            apply(merged, precomputed: precomputed)
             pruneSelectionIfHidden()
         }
         lastKnownLibraryModDate = storage.libraryModificationDate
@@ -1137,20 +1167,102 @@ public final class ReaderStore {
     /// `activeCompiledFilters`, compiling each regex once. Called only when the
     /// filter set changes — NOT on every article mutation — so a refresh doesn't
     /// recompile. Clears the classify cache, since a changed engine invalidates
-    /// every prior verdict.
+    /// every prior verdict. No-op when the active set is unchanged (apply() runs
+    /// on every peer sync; wiping the cache each time re-classified the whole
+    /// library for syncs that didn't touch filters).
     private func rebuildFilterEngine() {
-        activeCompiledFilters = filters
-            .filter { $0.enabled && !$0.pattern.isEmpty }
-            .map { filter in
-                switch filter.kind {
-                case .plainText:
-                    return CompiledFilter(filter: filter, regex: nil)
-                case .regex:
-                    let options: NSRegularExpression.Options = filter.caseSensitive ? [] : [.caseInsensitive]
-                    return CompiledFilter(filter: filter, regex: try? NSRegularExpression(pattern: filter.pattern, options: options))
-                }
-            }
+        let source = filters.filter { $0.enabled && !$0.pattern.isEmpty }
+        guard source != compiledFilterSource else { return }
+        compiledFilterSource = source
+        activeCompiledFilters = source.map(Self.compileFilter)
         filterClassifyCache.removeAll(keepingCapacity: true)
+    }
+
+    nonisolated private static func compileFilter(_ filter: ArticleFilter) -> CompiledFilter {
+        switch filter.kind {
+        case .plainText:
+            return CompiledFilter(filter: filter, regex: nil)
+        case .regex:
+            let options: NSRegularExpression.Options = filter.caseSensitive ? [] : [.caseInsensitive]
+            return CompiledFilter(filter: filter, regex: try? NSRegularExpression(pattern: filter.pattern, options: options))
+        }
+    }
+
+    /// The filter-classification and count state that `articles`' didSet derives,
+    /// computed as pure values so the launch/sync pipelines can build it off the
+    /// main actor and `apply` can install it without the O(n) didSet storm.
+    struct PrecomputedFilterState: Sendable {
+        var textFilteredIDs: Set<Article.ID>
+        var classifyCache: [Article.ID: Int]
+        var filteredIDs: Set<Article.ID>
+        var unreadByFeed: [Feed.ID: Int]
+        var unreadByCategory: [String: Int]
+        var totalUnread: Int
+        var todayCount: Int
+        var starredCount: Int
+    }
+
+    /// Pure mirror of `rebuildFilterEngine` + `recomputeFilteredIDs` (cold, no
+    /// prior cache) + `recomputeCounts`, over value snapshots. Compiled regexes
+    /// stay local to the call (NSRegularExpression isn't Sendable).
+    nonisolated private static func precomputeFilterState(
+        articles: [Article], filters: [ArticleFilter], categories: [ArticleCategory]
+    ) -> PrecomputedFilterState {
+        let compiled = filters.filter { $0.enabled && !$0.pattern.isEmpty }.map(compileFilter)
+        let hiddenCategoryIDs = Set(categories.filter { $0.hidden }.map(\.id))
+
+        var textIDs = Set<Article.ID>()
+        var cache = [Article.ID: Int](minimumCapacity: articles.count)
+        if !compiled.isEmpty {
+            for article in articles {
+                cache[article.id] = filterContentHash(article)
+                let isFiltered = compiled.contains { entry in
+                    filterMatches(
+                        entry.filter,
+                        regex: entry.regex,
+                        in: entry.filter.candidateText(title: article.title, summary: article.summary)
+                    )
+                }
+                if isFiltered { textIDs.insert(article.id) }
+            }
+        }
+
+        var filteredIDs = textIDs
+        if !hiddenCategoryIDs.isEmpty {
+            for article in articles where article.categories.contains(where: { hiddenCategoryIDs.contains($0) }) {
+                filteredIDs.insert(article.id)
+            }
+        }
+
+        // Counts, mirroring recomputeCounts exactly.
+        var byFeed: [Feed.ID: Int] = [:]
+        var byCategory: [String: Int] = [:]
+        var total = 0
+        var today = 0
+        var starred = 0
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)
+        for article in articles {
+            if filteredIDs.contains(article.id) { continue }
+            if !article.isRead {
+                byFeed[article.feedID, default: 0] += 1
+                total += 1
+                for categoryID in article.categories { byCategory[categoryID, default: 0] += 1 }
+            }
+            if article.isStarred { starred += 1 }
+            if let startOfTomorrow {
+                if article.publishedAt >= startOfToday && article.publishedAt < startOfTomorrow { today += 1 }
+            } else if calendar.isDateInToday(article.publishedAt) {
+                today += 1
+            }
+        }
+
+        return PrecomputedFilterState(
+            textFilteredIDs: textIDs, classifyCache: cache, filteredIDs: filteredIDs,
+            unreadByFeed: byFeed, unreadByCategory: byCategory,
+            totalUnread: total, todayCount: today, starredCount: starred
+        )
     }
 
     /// Rebuilds `filteredArticleIDs` using the precompiled engine. Incremental: an
@@ -2587,31 +2699,111 @@ public final class ReaderStore {
             self.storage = storage
             syncFolderDisplayPath = directoryURL.path(percentEncoded: false)
 
-            restoreOwnShard(storage: storage)
-            let replica = try ReplicaStore(syncDirectory: directoryURL, deviceID: deviceID)
-            replicaStore = replica
-            let snapshot = try await Task.detached(priority: .userInitiated) {
-                let snapshot = try replica.reconcile(storage: storage)
-                try replica.publishIfNeeded(to: storage)
-                return snapshot
-            }.value
-            try migrateLegacyUserStateIfNeeded(replica: replica, storage: storage)
-            applyReplicaSnapshot(snapshot, storage: storage)
-            lastKnownLibraryModDate = storage.libraryModificationDate
-            lastKnownStateModDate = storage.stateDirectoryModificationDate
-            lastKnownContentModDate = storage.contentDirectoryModificationDate
-            lastKnownBodiesModDate = storage.bodiesDirectoryModificationDate
-            startObservingLibrary()
-            // The list is up from the light baseline; pull the (heavier) article
-            // bodies in from the sidecar in the background so it never blocks.
-            Task { await loadBodyCacheIfNeeded() }
-            let readerStore = ReaderContentStore(storage: storage, deviceID: deviceID)
-            readerContentStore = readerStore
-            Task { await readerStore.reload() }
+            try await bringSyncFolderOnline(storage: storage, directoryURL: directoryURL)
         } catch {
             errorMessage = error.localizedDescription
             syncFolderDisplayPath = UserDefaults.standard.string(forKey: ReaderStorage.displayPathDefaultsKey)
         }
+    }
+
+    /// Everything heavy required to bring a sync folder online, computed off the
+    /// main actor in one hop: own-shard coordinated read, ReplicaStore
+    /// construction (SQLite open + pragmas + DDL), reconcile + publish, peer
+    /// shard loads, the O(all registers) HLC fold, the CRDT materialize, and the
+    /// initial filter classification/counts. The main actor only installs it.
+    private struct SyncFolderLoad: Sendable {
+        var ownShard: DeviceStateDocument
+        var replica: ReplicaStore
+        var snapshot: ReplicaSnapshot
+        var foldedPeerHLC: HLC
+        var merged: ReaderLibrary
+        var precomputed: PrecomputedFilterState
+        var hasLegacySeed: Bool
+        var libraryModDate: Date?
+        var stateModDate: Date?
+        var contentModDate: Date?
+        var bodiesModDate: Date?
+    }
+
+    nonisolated private static func loadSyncFolder(
+        storage: ReaderStorage, directoryURL: URL, deviceID: String
+    ) throws -> SyncFolderLoad {
+        let own: DeviceStateDocument
+        if let fromDisk = storage.loadOwnShard(deviceID: deviceID) {
+            own = fromDisk
+        } else {
+            // First run in this folder: seed and persist the empty shard so
+            // peers can see this device (mirrors the old restoreOwnShard).
+            own = DeviceStateDocument(deviceID: deviceID)
+            try? storage.saveShard(own)
+        }
+        let replica = try ReplicaStore(syncDirectory: directoryURL, deviceID: deviceID)
+        let snapshot = try replica.reconcile(storage: storage)
+        try replica.publishIfNeeded(to: storage)
+        // The one-time v1→v2 user-state seed is rare; the main actor runs the
+        // full legacy path when this flags true.
+        let hasLegacySeed = (try? replica.pendingLegacyStateSeed(from: storage)) != nil
+        let peers = ((try? storage.loadShards()) ?? []).filter { $0.deviceID != deviceID }
+        var folded = HLC.zero
+        for shard in peers { folded = folded.witnessed(shard.maxObservedHLC) }
+        let merged = DeviceStateDocument.materialize(base: snapshot.library, shards: peers + [own])
+        let precomputed = precomputeFilterState(
+            articles: merged.articles, filters: merged.filters, categories: merged.categories
+        )
+        return SyncFolderLoad(
+            ownShard: own, replica: replica, snapshot: snapshot, foldedPeerHLC: folded,
+            merged: merged, precomputed: precomputed, hasLegacySeed: hasLegacySeed,
+            libraryModDate: storage.libraryModificationDate,
+            stateModDate: storage.stateDirectoryModificationDate,
+            contentModDate: storage.contentDirectoryModificationDate,
+            bodiesModDate: storage.bodiesDirectoryModificationDate
+        )
+    }
+
+    /// Shared by launch (`restoreStorageIfPossible`) and folder configuration:
+    /// runs `loadSyncFolder` off-main, then installs the results. Falls back to
+    /// the fully synchronous legacy sequence when a local mutation raced the
+    /// off-main load (pathological — the UI is barely interactive at these
+    /// moments) or when the one-time legacy state seed is pending.
+    private func bringSyncFolderOnline(storage: ReaderStorage, directoryURL: URL) async throws {
+        let deviceID = deviceID
+        let generationBefore = ownShard.generation
+        let load = try await Task.detached(priority: .userInitiated) {
+            try Self.loadSyncFolder(storage: storage, directoryURL: directoryURL, deviceID: deviceID)
+        }.value
+
+        if load.hasLegacySeed || ownShard.generation != generationBefore {
+            // Rare paths keep the old, unconditionally-correct synchronous
+            // sequence: the legacy seed mutates the shard mid-merge, and a raced
+            // local edit must not be clobbered by the pre-race disk shard.
+            restoreOwnShard(storage: storage)
+            replicaStore = load.replica
+            try migrateLegacyUserStateIfNeeded(replica: load.replica, storage: storage)
+            applyReplicaSnapshot(load.snapshot, storage: storage)
+        } else {
+            ownShard = load.ownShard
+            lastHLC = load.ownShard.clock.witnessed(load.foldedPeerHLC)
+            ownShard.clock = lastHLC
+            replicaStore = load.replica
+            if load.snapshot.revision >= appliedReplicaRevision {
+                if !load.snapshot.bodies.isEmpty { bodyCache.merge(load.snapshot.bodies) { _, new in new } }
+                apply(load.merged, precomputed: load.precomputed)
+                appliedReplicaRevision = load.snapshot.revision
+            }
+        }
+
+        errorMessage = nil
+        lastKnownLibraryModDate = load.libraryModDate
+        lastKnownStateModDate = load.stateModDate
+        lastKnownContentModDate = load.contentModDate
+        lastKnownBodiesModDate = load.bodiesModDate
+        startObservingLibrary()
+        // The list is up from the light baseline; pull the (heavier) article
+        // bodies in from the sidecar in the background so it never blocks.
+        Task { await loadBodyCacheIfNeeded() }
+        let readerStore = ReaderContentStore(storage: storage, deviceID: deviceID)
+        readerContentStore = readerStore
+        Task { await readerStore.reload() }
     }
 
     private func startAccessing(_ directoryURL: URL) {
@@ -3030,7 +3222,12 @@ public final class ReaderStore {
         }
     }
 
-    private func apply(_ library: ReaderLibrary) {
+    /// Installs a merged library. When the caller ran the merge off the main
+    /// actor it passes the matching `precomputed` filter/count state (built from
+    /// the same articles), and the whole-library didSet recompute is skipped in
+    /// favor of installing those values directly — the launch-path fix for the
+    /// cold-start classification storm.
+    private func apply(_ library: ReaderLibrary, precomputed: PrecomputedFilterState? = nil) {
         // Repair any feeds whose stored URLs have a doubled scheme (from an
         // earlier bug) so they fetch correctly instead of flooding failed
         // requests. `id` is left untouched so existing articles stay linked.
@@ -3053,7 +3250,28 @@ public final class ReaderStore {
         // set, so set them before `articles` for the didSet recompute.
         categories = library.categories
         rebuildFilterEngine()
-        articles = library.articles
+        if let precomputed {
+            // The classification/counts were computed off-main from these same
+            // articles; install both sides without re-deriving anything. The
+            // assignment still publishes (observation is untouched by the
+            // suppress flag), and the debounced filter recompute still runs so
+            // `displayedArticles` follows.
+            suppressArticlesDidSet = true
+            articles = library.articles
+            suppressArticlesDidSet = false
+            textFilteredArticleIDs = precomputed.textFilteredIDs
+            filterClassifyCache = precomputed.classifyCache
+            filteredArticleIDs = precomputed.filteredIDs
+            if unreadByFeed != precomputed.unreadByFeed { unreadByFeed = precomputed.unreadByFeed }
+            if unreadByCategory != precomputed.unreadByCategory { unreadByCategory = precomputed.unreadByCategory }
+            if totalUnread != precomputed.totalUnread { totalUnread = precomputed.totalUnread }
+            if todayCount != precomputed.todayCount { todayCount = precomputed.todayCount }
+            if starredCount != precomputed.starredCount { starredCount = precomputed.starredCount }
+            updateUnreadBadge()
+            scheduleArticleFilter(debounced: true)
+        } else {
+            articles = library.articles
+        }
         lastRefreshedAt = library.lastRefreshedAt
         // Merge explicit folders with any folders implied by feed categories.
         let feedFolderNames = feeds.map(\.folderName).filter { !$0.isEmpty }

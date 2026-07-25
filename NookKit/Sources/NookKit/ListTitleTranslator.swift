@@ -118,6 +118,9 @@ public final class ListTitleTranslator {
     private var visibleTitles: [Article.ID: String] = [:]
 
     private var loadedFromDisk = false
+    /// In-flight off-main cache load; `fillSlots` holds translation starts until
+    /// it completes so a cached title never re-requests at launch.
+    private var cacheLoadTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     /// True while the list is actively scrolling. New translations don't start
     /// mid-scroll — the 0.32s row-height reveal and ~tens-of-Hz partial-text
@@ -262,10 +265,20 @@ public final class ListTitleTranslator {
 
     private func fillSlots() {
         // Mid-scroll: leave everything queued. `rowDisappeared` keeps pruning
-        // `pending`, and `setScrolling(false)` re-runs this on settle.
-        guard !isScrolling else { return }
+        // `pending`, and `setScrolling(false)` re-runs this on settle. While the
+        // disk cache loads, hold too — its completion re-runs this, and the
+        // re-check below then serves cached titles without a model request.
+        guard !isScrolling, cacheLoadTask == nil else { return }
         while activeTasks.count < maxConcurrent, !pending.isEmpty {
             let next = pending.removeFirst()
+            // The disk cache (or another row's completion) may have landed after
+            // this row was enqueued.
+            let key = cacheKey(for: next.title)
+            if let cached = cache[key] {
+                setState(.translated(cached, provider: provider), for: next.id)
+                continue
+            }
+            if sameLanguage.contains(key) || abandoned.contains(key) { continue }
             startTranslate(id: next.id, title: next.title)
         }
     }
@@ -381,9 +394,13 @@ public final class ListTitleTranslator {
         sameLanguage.removeAll()
         sameLanguageOrder.removeAll()
         abandoned.removeAll()
-        // Drop any pending save, then delete the persisted file.
+        // Drop any pending save or in-flight load, then delete the persisted file
+        // (a load landing after the clear would resurrect what was just deleted).
         saveTask?.cancel()
         saveTask = nil
+        cacheLoadTask?.cancel()
+        cacheLoadTask = nil
+        loadedFromDisk = true
         if let url = Self.cacheURL() {
             try? FileManager.default.removeItem(at: url)
         }
@@ -505,7 +522,7 @@ public final class ListTitleTranslator {
     }
 
     /// On-disk shape of the cache. Order arrays preserve LRU across launches.
-    private struct Persisted: Codable {
+    private struct Persisted: Codable, Sendable {
         var cache: [String: String]
         var cacheOrder: [String]
         var sameLanguage: [String]
@@ -523,21 +540,42 @@ public final class ListTitleTranslator {
     }
 
     /// Loads the persisted caches once, merging under any entries already learned
-    /// this session (which are newer). Cheap: a small JSON read at first enable.
+    /// this session (which are newer). The read + decode run off the main actor
+    /// (first enable happens during the first list render); translation starts
+    /// are held via `fillSlots` until it lands so cached titles never re-request,
+    /// and visible rows with cache hits are filled in immediately on completion.
     private func loadCacheIfNeeded() {
-        guard !loadedFromDisk else { return }
-        loadedFromDisk = true
-        guard let url = Self.cacheURL(),
-              let data = try? Data(contentsOf: url),
-              let stored = try? JSONDecoder().decode(Persisted.self, from: data) else { return }
-        for key in stored.cacheOrder where cache[key] == nil {
-            if let value = stored.cache[key] {
-                cache[key] = value
-                cacheOrder.append(key)
+        guard !loadedFromDisk, cacheLoadTask == nil else { return }
+        cacheLoadTask = Task { [weak self] in
+            let stored = await Task.detached(priority: .userInitiated) { () -> Persisted? in
+                guard let url = Self.cacheURL(),
+                      let data = try? Data(contentsOf: url) else { return nil }
+                return try? JSONDecoder().decode(Persisted.self, from: data)
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            self.loadedFromDisk = true
+            self.cacheLoadTask = nil
+            if let stored {
+                for key in stored.cacheOrder where self.cache[key] == nil {
+                    if let value = stored.cache[key] {
+                        self.cache[key] = value
+                        self.cacheOrder.append(key)
+                    }
+                }
+                for key in stored.sameLanguage where self.sameLanguage.insert(key).inserted {
+                    self.sameLanguageOrder.append(key)
+                }
             }
-        }
-        for key in stored.sameLanguage where sameLanguage.insert(key).inserted {
-            sameLanguageOrder.append(key)
+            // Rows already on screen whose titles were cached on a previous
+            // launch show their translations now, not after a dwell.
+            if self.enabled {
+                for (id, title) in self.visibleTitles where self.liveState(for: id) == nil {
+                    if let cached = self.cache[self.cacheKey(for: title)] {
+                        self.setState(.translated(cached, provider: self.provider), for: id)
+                    }
+                }
+            }
+            self.fillSlots()
         }
     }
 

@@ -63,7 +63,13 @@ public final class ReplicaStore: @unchecked Sendable {
                     }
 
                     let migrationComplete = try metadata(db, "legacy_migration_complete") == "1"
-                    let candidates = storage.loadLegacyCandidates()
+                    // Skip the legacy read + decode + SHA256 (a multi-MB file,
+                    // touched on every reconcile forever) when neither the main
+                    // file nor its unresolved conflict versions changed since
+                    // the last ingest.
+                    let fingerprint = storage.legacyCandidateFingerprint()
+                    let ingestGateOpen = try metadata(db, "legacy_ingest_fingerprint") != fingerprint
+                    let candidates = ingestGateOpen ? storage.loadLegacyCandidates() : []
                     var unseen: [(ReaderStorage.LegacyCandidate, String)] = []
                     for candidate in candidates {
                         let digest = Self.digest(candidate.data)
@@ -90,6 +96,7 @@ public final class ReplicaStore: @unchecked Sendable {
                             try recordLegacy(db, digest: digest, identity: candidate.identity)
                         }
                     }
+                    if ingestGateOpen { try setMetadata(db, "legacy_ingest_fingerprint", fingerprint) }
                     if !migrationComplete { try setMetadata(db, "legacy_migration_complete", "1") }
 
                     let hadStoredDocument = try loadDocument(db) != nil

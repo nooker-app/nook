@@ -128,7 +128,17 @@ enum TabGlyph {
     /// The nest mark, trimmed to its content then redrawn into a fixed point-size
     /// context so the tab icon is a sane size (never the raw render canvas, which
     /// blew up to hundreds of points and covered the whole bar).
+    ///
+    /// Deriving it means rendering AND pixel-scanning a 1536×1536 raster — too
+    /// heavy for the launch frame it used to run on — so the tiny final PNG is
+    /// cached on disk after the first render and every later launch loads that.
     static let nest: UIImage = {
+        if let url = nestCacheURL(),
+           let data = try? Data(contentsOf: url),
+           let cached = UIImage(data: data, scale: 3) {
+            return cached.withRenderingMode(.alwaysTemplate)
+        }
+
         let glyph = NestGlyphView().scaleEffect(0.5).frame(width: 512, height: 512)
         let renderer = ImageRenderer(content: glyph)
         renderer.scale = 3
@@ -143,11 +153,28 @@ enum TabGlyph {
         var size = CGSize(width: targetHeight * aspect, height: targetHeight)
         if size.width > maxWidth { size = CGSize(width: maxWidth, height: maxWidth / max(aspect, 0.01)) }
 
-        let resized = UIGraphicsImageRenderer(size: size).image { _ in
+        // Fixed 3x so the cached PNG round-trips at the same scale everywhere.
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
             source.draw(in: CGRect(origin: .zero, size: size))
+        }
+        if let url = nestCacheURL(), let data = resized.pngData() {
+            Task.detached(priority: .utility) { try? data.write(to: url, options: .atomic) }
         }
         return resized.withRenderingMode(.alwaysTemplate)
     }()
+
+    /// Caches directory path for the derived nest glyph. Bump the version when
+    /// `NestGlyphView`'s geometry changes so a stale icon can't outlive it.
+    private static func nestCacheURL() -> URL? {
+        guard let base = try? FileManager.default.url(
+            for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        ) else { return nil }
+        let dir = base.appendingPathComponent("Nook", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("TabGlyphNest-v1@3x.png")
+    }
 }
 
 private extension UIImage {
