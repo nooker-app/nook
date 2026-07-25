@@ -744,6 +744,12 @@ private struct LiquidGlassTabBar: View {
 
     /// Drives the segmented-control slide of the selection pill.
     @Namespace private var selectionNamespace
+    /// Bumped on taps that aren't a selection change (restoring the minimized
+    /// bar, re-tap scroll-to-top) so they get their own impact haptic.
+    @State private var tapFeedback = 0
+
+    /// The pill slide: a low-damping spring for a chewy, overshooting settle.
+    private static let selectionSpring = Animation.spring(response: 0.4, dampingFraction: 0.62)
 
     var body: some View {
         GlassEffectContainer {
@@ -765,6 +771,10 @@ private struct LiquidGlassTabBar: View {
         // Hug the home indicator: sit right on the bottom safe-area edge.
         .padding(.bottom, 0)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: collapsed)
+        // Haptics: crisp selection tick on tab changes; a light impact for the
+        // non-selection taps (restore, re-tap scroll-to-top).
+        .sensoryFeedback(.selection, trigger: selection)
+        .sensoryFeedback(.impact(weight: .light), trigger: tapFeedback)
     }
 
     private func tabButton(_ tab: AppTab, label: Text) -> some View {
@@ -773,8 +783,10 @@ private struct LiquidGlassTabBar: View {
                 // A minimized bar's first tap just restores it, like the native
                 // minimize; re-tap semantics apply only to the full-size bar.
                 onExpand()
+                if selection == tab { tapFeedback &+= 1 }
                 selection = tab
             } else if selection == tab {
+                tapFeedback &+= 1
                 onReselect(tab)
             } else {
                 selection = tab
@@ -797,7 +809,7 @@ private struct LiquidGlassTabBar: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: selection)
+        .animation(Self.selectionSpring, value: selection)
         .accessibilityLabel(label)
         .accessibilityAddTraits(selection == tab ? [.isSelected] : [])
     }
