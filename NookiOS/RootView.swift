@@ -742,8 +742,6 @@ private struct LiquidGlassTabBar: View {
     var onExpand: () -> Void
     var onReselect: (AppTab) -> Void
 
-    /// Drives the segmented-control slide of the selection pill.
-    @Namespace private var selectionNamespace
     /// Bumped on taps that aren't a selection change (restoring the minimized
     /// bar, re-tap scroll-to-top) so they get their own impact haptic.
     @State private var tapFeedback = 0
@@ -751,16 +749,33 @@ private struct LiquidGlassTabBar: View {
     /// The pill slide: a low-damping spring for a chewy, overshooting settle.
     private static let selectionSpring = Animation.spring(response: 0.4, dampingFraction: 0.62)
 
+    private static let tabOrder: [AppTab] = [.home, .feeds, .starred, .settings]
+    private static let itemWidth: CGFloat = 74
+    private static let itemHeight: CGFloat = 44
+    private static let itemSpacing: CGFloat = 2
+
     var body: some View {
         GlassEffectContainer {
-            HStack(spacing: 2) {
+            HStack(spacing: Self.itemSpacing) {
                 tabButton(.home, label: Text("Home"))
                 tabButton(.feeds, label: Text("Feeds"))
                 tabButton(.starred, label: Text("Starred"))
                 tabButton(.settings, label: Text("Settings"))
             }
+            // One pill translated between seats. A transform-only animation:
+            // unlike matchedGeometryEffect (which re-laid-out all four buttons
+            // — and thus recomposed the glass — on every spring frame, jamming
+            // the same frames as the tab-content swap), an offset change
+            // animates on the render server for near-free.
+            .background(alignment: .leading) {
+                Capsule()
+                    .fill(Color(uiColor: .secondarySystemFill))
+                    .frame(width: Self.itemWidth, height: Self.itemHeight)
+                    .offset(x: selectionPillOffset)
+            }
+            .animation(Self.selectionSpring, value: selection)
             .padding(4)
-            .glassEffect(.regular.interactive(), in: Capsule())
+            .glassEffect(.regular, in: Capsule())
         }
         // Scroll-down minimizes the bar in place (the whole capsule scales,
         // nothing rearranges); any touch or scroll-up restores it.
@@ -794,24 +809,19 @@ private struct LiquidGlassTabBar: View {
         } label: {
             icon(for: tab)
                 .foregroundStyle(selection == tab ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                .frame(width: 74, height: 44)
-                .background {
-                    // The selected item's seat is deliberately NOT glass — a
-                    // solid adaptive fill inside the glass capsule — and it
-                    // slides between items segmented-control style via the
-                    // shared geometry id.
-                    if selection == tab {
-                        Capsule()
-                            .fill(Color(uiColor: .secondarySystemFill))
-                            .matchedGeometryEffect(id: "selection", in: selectionNamespace)
-                    }
-                }
+                .frame(width: Self.itemWidth, height: Self.itemHeight)
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .animation(Self.selectionSpring, value: selection)
         .accessibilityLabel(label)
         .accessibilityAddTraits(selection == tab ? [.isSelected] : [])
+    }
+
+    /// The selection pill's leading offset within the item row — the solid
+    /// (no-glass) seat under the active tab, slid segmented-control style.
+    private var selectionPillOffset: CGFloat {
+        let index = CGFloat(Self.tabOrder.firstIndex(of: selection) ?? 0)
+        return index * (Self.itemWidth + Self.itemSpacing)
     }
 
     @ViewBuilder
@@ -1910,9 +1920,6 @@ private struct ArticleList: View {
                         }
                     }
                 }
-                // Explicit identity for ScrollViewReader's scroll-to-top; same
-                // value as the collection's implicit identity.
-                .id(article.id)
                 .tag(article.id)
                 .swipeActions(edge: .leading) {
                     Button {
