@@ -32,6 +32,11 @@ final class TourCoordinator {
     /// request (not an edge) so it survives the tab switch and is consumed by Home
     /// itself when it appears — no cross-view onChange race.
     var pendingFirstStoryHint = false
+    /// True from the moment the list spotlight is requested until it's dismissed.
+    /// The article list mounts its first-row frame publisher (a per-scroll-frame
+    /// GeometryReader preference) only while this is set, so steady-state
+    /// scrolling never pays for the tutorial.
+    var listHintActive = false
 }
 
 /// The first-run welcome tour: a paged, swipeable cover that gets a new user set

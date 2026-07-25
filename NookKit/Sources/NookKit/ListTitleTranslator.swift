@@ -119,8 +119,21 @@ public final class ListTitleTranslator {
 
     private var loadedFromDisk = false
     private var saveTask: Task<Void, Never>?
+    /// True while the list is actively scrolling. New translations don't start
+    /// mid-scroll — the 0.32s row-height reveal and ~tens-of-Hz partial-text
+    /// updates are the main source of scroll jank — they queue in `pending` and
+    /// drain when the scroll settles. Cache hits are unaffected (still instant).
+    private var isScrolling = false
 
     public init() {}
+
+    /// Called by the list on scroll phase changes. Ending a scroll drains any
+    /// translations that queued up while it was in motion.
+    public func setScrolling(_ scrolling: Bool) {
+        guard isScrolling != scrolling else { return }
+        isScrolling = scrolling
+        if !scrolling { fillSlots() }
+    }
 
     /// Sets the feature on/off and the target language. Turning it off (or the
     /// app being unavailable) cancels everything in flight and clears live state,
@@ -131,9 +144,27 @@ public final class ListTitleTranslator {
         let providerChanged = newProvider != self.provider
         let wasEnabled = self.enabled
         self.provider = newProvider
-        self.enabled = enabled && NaturalTranslator.isAvailable(for: newProvider)
+        // Availability without the Keychain round-trip: `configure` runs on every
+        // list appearance, and `GeminiCredential.hasKey` is a synchronous
+        // SecItemCopyMatching IPC. The UserDefaults mirror exists exactly so hot
+        // paths can check "a key is stored" cheaply (it tracks the actual
+        // Keychain state on every save/clear).
+        let available: Bool
+        switch newProvider {
+        case .appleIntelligence:
+            available = NaturalTranslator.isAvailable
+        case .gemini:
+            available = UserDefaults.standard.bool(forKey: TranslationSettings.geminiKeyConfiguredKey)
+        }
+        self.enabled = enabled && available
         self.targetLanguageName = targetLanguageName
         self.targetLanguageCode = targetLanguageCode
+        // Failsafe: if a scroll ended without its `.idle` phase reaching us (list
+        // unmounted mid-scroll, backgrounding), don't starve the queue forever.
+        if isScrolling {
+            isScrolling = false
+            fillSlots()
+        }
         if self.enabled { loadCacheIfNeeded() }
         if !self.enabled || languageChanged || providerChanged {
             cancelAll()
@@ -230,6 +261,9 @@ public final class ListTitleTranslator {
     }
 
     private func fillSlots() {
+        // Mid-scroll: leave everything queued. `rowDisappeared` keeps pruning
+        // `pending`, and `setScrolling(false)` re-runs this on settle.
+        guard !isScrolling else { return }
         while activeTasks.count < maxConcurrent, !pending.isEmpty {
             let next = pending.removeFirst()
             startTranslate(id: next.id, title: next.title)
@@ -271,7 +305,16 @@ public final class ListTitleTranslator {
             // Mount the empty block before the worker is allowed to emit text.
             // This state assignment is the only reveal work performed on MainActor.
             self.setState(.translating("", provider: provider), for: id)
+            // iOS paces the typewriter slower: each frame is a main-actor
+            // setState + Core Text remeasure of the row, and ~30Hz × concurrent
+            // rows was a measurable source of scroll jank on the phone.
+            #if os(iOS)
+            let events = await ListTitleTranslationWorker.shared.events(
+                for: request, frameInterval: .milliseconds(90)
+            )
+            #else
             let events = await ListTitleTranslationWorker.shared.events(for: request)
+            #endif
             for await event in events {
                 guard !Task.isCancelled else { return }
                 switch event {

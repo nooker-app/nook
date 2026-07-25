@@ -68,7 +68,10 @@ public final class ReaderStore {
     }
     // Articles kept visible in the current source even after being read, until
     // the user navigates to another source (Chrome-tab-close heuristic).
-    private var retainedArticleIDs: Set<Article.ID> = [] { didSet { scheduleArticleFilter(debounced: true) } }
+    // Mutation sites schedule the filter recompute explicitly (no didSet):
+    // retaining an already-visible article must stay recompute-free, since it
+    // happens on every article open, mid push-animation.
+    private var retainedArticleIDs: Set<Article.ID> = []
     public var selectedArticleID: Article.ID?
     /// The raw text bound to the search field; updates instantly as the user types.
     public var searchText = ""
@@ -410,6 +413,34 @@ public final class ReaderStore {
         }
     }
 
+    /// The projection of an article that list rows actually render (both
+    /// platforms): identity, texts, flags, date, feed, categories. Deliberately
+    /// excludes body content and `hasExplicitPublishDate` — rows don't render
+    /// them, and body hydration would otherwise defeat the equality guard in
+    /// `applyDisplayed`. Readers are unaffected: they re-resolve articles by ID
+    /// from `articles`, never from the displayed array.
+    private struct RowProjection: Equatable {
+        let title: String
+        let summary: String
+        let isRead: Bool
+        let isStarred: Bool
+        let publishedAt: Date
+        let feedID: Feed.ID
+        let estimatedReadMinutes: Int
+        let categories: [String]
+
+        init(_ article: Article) {
+            title = article.title
+            summary = article.summary
+            isRead = article.isRead
+            isStarred = article.isStarred
+            publishedAt = article.publishedAt
+            feedID = article.feedID
+            estimatedReadMinutes = article.estimatedReadMinutes
+            categories = article.categories
+        }
+    }
+
     private func applyDisplayed(_ result: [Article], animated: Bool = true) {
         // Animate only when the visible rows actually change and still overlap
         // the current list — i.e. articles arriving (or filtering out) — so new
@@ -419,6 +450,15 @@ public final class ReaderStore {
         // and background filter paths, so large libraries animate too.
         let oldIDs = displayedArticles.map(\.id)
         let newIDs = result.map(\.id)
+        // @Observable republishes on every assignment, invalidating every row —
+        // skip it entirely when nothing a row renders has changed (identical
+        // recomputes are common: selection retention, no-op merges, re-sorts).
+        if oldIDs == newIDs,
+           zip(displayedArticles, result).allSatisfy({ RowProjection($0) == RowProjection($1) }) {
+            pruneSelectionIfHidden()
+            markVisibleArticlesSeen()
+            return
+        }
         let oldSet = Set(oldIDs)
         if animated, oldIDs != newIDs, !oldSet.isEmpty, !oldSet.isDisjoint(with: newIDs) {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
@@ -1072,11 +1112,14 @@ public final class ReaderStore {
                 today += 1
             }
         }
-        unreadByFeed = byFeed
-        unreadByCategory = byCategory
-        totalUnread = total
-        todayCount = today
-        starredCount = starred
+        // Compare before assigning: these are @Observable properties the sidebar
+        // and badges read, and the didSet chain recomputes them on every article
+        // mutation — an unchanged republish would invalidate those views for free.
+        if unreadByFeed != byFeed { unreadByFeed = byFeed }
+        if unreadByCategory != byCategory { unreadByCategory = byCategory }
+        if totalUnread != total { totalUnread = total }
+        if todayCount != today { todayCount = today }
+        if starredCount != starred { starredCount = starred }
     }
 
     /// Recompiles the active filters (enabled, non-empty pattern) into
@@ -2255,7 +2298,14 @@ public final class ReaderStore {
     /// Keeps an article visible in the current source even once it is read, so
     /// it does not vanish out from under the reader while it is being viewed.
     public func retainArticle(id: Article.ID) {
+        guard !retainedArticleIDs.contains(id) else { return }
         retainedArticleIDs.insert(id)
+        // Retention only widens visibility: when the article is already in the
+        // displayed list the recompute is a guaranteed no-op, so skip the
+        // debounced full filter that would otherwise land mid push-animation.
+        if !displayedArticles.contains(where: { $0.id == id }) {
+            scheduleArticleFilter(debounced: true)
+        }
     }
 
     /// Drops the retained set so the list recomputes fresh; called when the
@@ -2263,6 +2313,7 @@ public final class ReaderStore {
     public func clearRetainedArticles() {
         guard !retainedArticleIDs.isEmpty else { return }
         retainedArticleIDs.removeAll()
+        scheduleArticleFilter(debounced: true)
     }
 
     /// Opens an article by ID (used by the widget deep link): makes it visible
@@ -2524,6 +2575,9 @@ public final class ReaderStore {
         let targets = feeds.map { (id: $0.id, url: $0.feedURL) }
         guard !targets.isEmpty else { return }
         let service = feedService
+        // Stamp `lastRefreshedAt` (an observable property) once per batch, not
+        // once per completed feed.
+        var anyFeedMerged = false
         // `Error` isn't `Sendable`, so a child task returns the parsed feed or an
         // error message string across the actor boundary, never the error itself.
         await withTaskGroup(of: (Feed.ID, ParsedFeed?, String?).self) { group in
@@ -2561,7 +2615,7 @@ public final class ReaderStore {
                 if let parsed {
                     merge(parsed, animated: mode.animatesInsertion)
                     ensureFavicon(for: parsed.feed)
-                    lastRefreshedAt = Date.now
+                    anyFeedMerged = true
                     pruneSelectionIfHidden()
                 } else {
                     // A refresh failure (offline, HTTP host down, parse error) must
@@ -2578,6 +2632,8 @@ public final class ReaderStore {
                 }
             }
         }
+
+        if anyFeedMerged { lastRefreshedAt = Date.now }
 
         // Recover real dates for any dateless items just merged — but not on the
         // iOS background task, whose tight time budget is for fetching + notifying.
@@ -2711,7 +2767,16 @@ public final class ReaderStore {
             updated.category = feeds[feedIndex].category
             updated.preferredViewMode = feeds[feedIndex].preferredViewMode
             updated.customTitle = feeds[feedIndex].customTitle
-            feeds[feedIndex] = updated
+            // Skip the write when nothing but the fetch stamp changed: reassigning
+            // `feeds` republishes the whole array and invalidates every visible
+            // row, and ambient refreshes hit this path for every feed on every
+            // tick. `lastFetchedAt` is rendered nowhere, so it's equalized for
+            // the comparison (and intentionally not persisted on a no-op).
+            var comparable = updated
+            comparable.lastFetchedAt = feeds[feedIndex].lastFetchedAt
+            if comparable != feeds[feedIndex] {
+                feeds[feedIndex] = updated
+            }
             // Keep the shard's seed current so every known feed's membership is
             // CRDT-protected (deduplicated, so an unchanged refresh is a no-op).
             recordFeedSeed(updated)
@@ -2731,6 +2796,10 @@ public final class ReaderStore {
         var existingArticlesByID = Dictionary(articles.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
         let knownIDs = Set(existingArticlesByID.keys)
         var hasNewArticles = false
+        // Whether any existing article's merged value actually differs — when a
+        // refresh changes nothing, `articles` must not be reassigned (its didSet
+        // re-filters and re-counts the whole library, once per feed per tick).
+        var hasChangedArticles = false
         // Genuinely-new article ids to hand to the background AI categorizer.
         var newlyArrivedIDs: [Article.ID] = []
         for newArticle in parsedFeed.articles {
@@ -2762,20 +2831,27 @@ public final class ReaderStore {
             if !article.hasExplicitPublishDate {
                 datelessArticleIDs.insert(article.id)
             }
+            if !hasChangedArticles, existingArticlesByID[article.id] != article {
+                hasChangedArticles = true
+            }
             existingArticlesByID[article.id] = article
         }
 
-        let merged = Array(existingArticlesByID.values)
-        // Animate the list only for interactive refreshes that bring in new
-        // stories, so rows slide/fade in like Apple Mail. Automatic (ambient/
-        // background) refreshes pass `animated: false` so new rows appear quietly
-        // instead of sliding under the user mid-scroll.
-        if animated && hasNewArticles && !knownIDs.isEmpty {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+        // Only republish when the merge actually changed something; an unchanged
+        // refresh (the common ambient case) must stay observation-silent.
+        if hasNewArticles || hasChangedArticles {
+            let merged = Array(existingArticlesByID.values)
+            // Animate the list only for interactive refreshes that bring in new
+            // stories, so rows slide/fade in like Apple Mail. Automatic (ambient/
+            // background) refreshes pass `animated: false` so new rows appear quietly
+            // instead of sliding under the user mid-scroll.
+            if animated && hasNewArticles && !knownIDs.isEmpty {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    articles = merged
+                }
+            } else {
                 articles = merged
             }
-        } else {
-            articles = merged
         }
 
         // Persist the keyword categories just assigned to new articles (so they
@@ -3031,7 +3107,9 @@ public final class ReaderStore {
             }.value
             if let revision = outcome.0?.revision { appliedReplicaRevision = max(appliedReplicaRevision, revision) }
             lastKnownContentModDate = outcome.1
-            errorMessage = nil
+            // Observable property the root alert binding reads — don't republish
+            // nil-to-nil on every drained save.
+            if errorMessage != nil { errorMessage = nil }
         }
         isDrainingSaves = false
     }

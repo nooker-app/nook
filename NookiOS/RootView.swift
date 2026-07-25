@@ -78,10 +78,14 @@ struct RootView: View {
                         try? await Task.sleep(for: .seconds(6))
                         WebViewWarmer.warmUp()
                     }
+                    // Overlap the splash's brand beat with bootstrap instead of
+                    // serializing them: launch takes max(bootstrap, 1.85s), not the sum.
+                    let splashStart = ContinuousClock.now
                     await store.bootstrap()
                     // Keep the splash up while the nest assembles and the wordmark
                     // appears, then reveal the loaded UI.
-                    try? await Task.sleep(for: .milliseconds(1850))
+                    let remaining = .milliseconds(1850) - splashStart.duration(to: .now)
+                    if remaining > .zero { try? await Task.sleep(for: remaining) }
                     withAnimation(.easeOut(duration: 0.35)) { isReady = true }
                     // First launch: after the splash reveal (so it doesn't fight the
                     // splash transition), present the welcome tour. The app is fully
@@ -435,7 +439,11 @@ private struct CompactShell: View {
                     .transition(.opacity)
             }
         }
-        .onPreferenceChange(FirstRowFrameKey.self) { firstRowFrame = $0 }
+        .onPreferenceChange(FirstRowFrameKey.self) { frame in
+            // Guard: the publisher only exists pre-tutorial, but never let a
+            // same-value preference emission invalidate the whole shell.
+            if firstRowFrame != frame { firstRowFrame = frame }
+        }
         .onAppear { applySelection(selection) }
         .onChange(of: selection) { _, tab in
             applySelection(tab)
@@ -453,6 +461,7 @@ private struct CompactShell: View {
             tour.pendingFirstStoryHint = false
             guard !seenListHint else { return }
             listHintPending = true
+            tour.listHintActive = true
             // Show "All" so the spotlight always has a row to point at — even on a
             // replay where every article in the starter feed is already read.
             homeFilter = .all
@@ -463,7 +472,14 @@ private struct CompactShell: View {
             tryStartListHint()
         }
         // Articles may arrive after the switch (async filtering / network) — retry.
-        .onChange(of: store.visibleArticles.count) { _, _ in tryStartListHint() }
+        // Mounted only while the spotlight is requested: reading
+        // `store.visibleArticles.count` in this body would otherwise make the
+        // whole shell re-evaluate on every article-list change forever.
+        .background {
+            if tour.listHintActive {
+                ListHintRetrigger(store: store, retry: tryStartListHint)
+            }
+        }
         // The user tapped a story (a selection appears) — dismiss; the reader and
         // its coach marks take over.
         .onChange(of: store.selectedArticleID) { _, id in
@@ -474,6 +490,19 @@ private struct CompactShell: View {
                 clearSearch()
                 store.selectSmartSource(homeFilter)
             }
+        }
+    }
+
+    /// Observes the article count on behalf of the tutorial spotlight. Lives in
+    /// its own tiny view so only this leaf — not the shell — depends on the
+    /// article array; it unmounts entirely once the hint has been seen.
+    private struct ListHintRetrigger: View {
+        var store: ReaderStore
+        var retry: () -> Void
+
+        var body: some View {
+            Color.clear
+                .onChange(of: store.visibleArticles.count) { _, _ in retry() }
         }
     }
 
@@ -492,6 +521,7 @@ private struct CompactShell: View {
     private func dismissListHint() {
         seenListHint = true
         listHintPending = false
+        tour.listHintActive = false
         withAnimation { showListHint = false }
     }
 
@@ -1574,6 +1604,9 @@ private struct ArticleList: View {
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
     @AppStorage(TranslationSettings.titleProviderKey) private var titleProvider = TranslationProvider.appleIntelligence.rawValue
     @AppStorage(TranslationSettings.geminiKeyConfiguredKey) private var geminiKeyConfigured = false
+    /// Gates the tutorial-spotlight frame publisher below: mounted only while
+    /// the list spotlight is requested or showing, never in steady state.
+    @Environment(TourCoordinator.self) private var tour
     /// Shared, on-device title translator for the opt-in "translate list titles"
     /// experiment. Reading its `state(for:)` in `row` observes streaming updates.
     private let titleTranslator = ListTitleTranslator.shared
@@ -1586,9 +1619,11 @@ private struct ArticleList: View {
                 .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
                 .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
                 // Publish the first row's global frame so the tutorial can
-                // spotlight it exactly (harmless where no coach mark reads it).
+                // spotlight it exactly. Mounted only while the spotlight is
+                // live: an always-on GeometryReader would emit this preference
+                // on every scroll frame and re-evaluate the consumer forever.
                 .background {
-                    if article.id == store.visibleArticles.first?.id {
+                    if tour.listHintActive, article.id == store.visibleArticles.first?.id {
                         GeometryReader { g in
                             Color.clear.preference(key: FirstRowFrameKey.self, value: g.frame(in: .global))
                         }
@@ -1685,6 +1720,12 @@ private struct ArticleList: View {
             }
         }
         .onChange(of: store.searchText) { _, _ in store.debounceSearch() }
+        // Hold new title translations while the list is in motion: their row-
+        // height reveal animations and streaming text updates are the main
+        // source of mid-scroll jank. Queued rows start once the scroll settles.
+        .onScrollPhaseChange { _, newPhase in
+            titleTranslator.setScrolling(newPhase != .idle)
+        }
         .refreshable { await refreshCurrent() }
         .overlay {
             if store.visibleArticles.isEmpty { emptyState }

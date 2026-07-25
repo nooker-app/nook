@@ -113,10 +113,17 @@ enum TabGlyph {
     /// the point size here is the size shown — keep it near the ~18pt native glyph
     /// so these icons stay their original size).
     static func symbol(_ name: String) -> UIImage {
+        if let cached = symbolCache[name] { return cached }
         let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
-        return (UIImage(systemName: name, withConfiguration: config) ?? UIImage())
+        let image = (UIImage(systemName: name, withConfiguration: config) ?? UIImage())
             .withRenderingMode(.alwaysTemplate)
+        symbolCache[name] = image
+        return image
     }
+
+    /// Rendered symbols by name — the tab bar re-requests these on every shell
+    /// body evaluation, so don't re-rasterize each time.
+    private static var symbolCache: [String: UIImage] = [:]
 
     /// The nest mark, trimmed to its content then redrawn into a fixed point-size
     /// context so the tab icon is a sane size (never the raw render canvas, which

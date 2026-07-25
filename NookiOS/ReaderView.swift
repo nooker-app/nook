@@ -77,8 +77,18 @@ struct ReaderDetailView: View {
     /// Scroll bookkeeping for a stable auto-hide: accumulate distance since the
     /// last direction change and only flip once it passes a threshold, so momentum
     /// and tiny jitters can't flicker the bars.
-    @State private var lastScrollY: CGFloat = 0
-    @State private var scrollAccum: CGFloat = 0
+    ///
+    /// Deliberately a plain (non-Observable) class box: these values are written
+    /// on EVERY scroll tick, and as `@State` scalars each write re-executed the
+    /// whole reader body per frame. Mutating a non-observed box is invalidation-
+    /// free; only the derived flips (`titleHidden`/`chromeHidden`) touch state.
+    @State private var scrollBook = ScrollBookkeeping()
+
+    @MainActor
+    private final class ScrollBookkeeping {
+        var lastY: CGFloat = 0
+        var accum: CGFloat = 0
+    }
     /// A bottom-edge pull clears only the floating action bar so the next-article
     /// indicator can own that space. It deliberately does not change `chromeHidden`:
     /// toggling the navigation chrome during elastic overscroll can move the scroll
@@ -283,7 +293,7 @@ struct ReaderDetailView: View {
                     if chromeHidden {
                         withAnimation(.easeInOut(duration: 0.25)) { chromeHidden = false }
                     } else if titleHidden {
-                        scrollAccum = 0
+                        scrollBook.accum = 0
                         withAnimation(.easeInOut(duration: 0.25)) { chromeHidden = true }
                     }
                 }
@@ -352,8 +362,8 @@ struct ReaderDetailView: View {
                     withAnimation(.easeInOut(duration: 0.2)) { titleHidden = pastTitle }
                 }
 
-                let delta = newY - lastScrollY
-                lastScrollY = newY
+                let delta = newY - scrollBook.lastY
+                scrollBook.lastY = newY
 
                 // Near the bottom, freeze the bars: the bottom bar's collapse/expand
                 // there changes the content height and rubber-bands the offset, which
@@ -363,21 +373,21 @@ struct ReaderDetailView: View {
                 // Chrome auto-hide with hysteresis. Accumulate scroll distance since
                 // the last direction change; only flip after a sustained move, and
                 // always show near the top.
-                if (delta > 0) != (scrollAccum > 0) { scrollAccum = 0 }
-                scrollAccum += delta
+                if (delta > 0) != (scrollBook.accum > 0) { scrollBook.accum = 0 }
+                scrollBook.accum += delta
 
                 let target: Bool
                 if !pastTitle {
                     target = false
-                } else if scrollAccum > 44 {
+                } else if scrollBook.accum > 44 {
                     target = true
-                } else if scrollAccum < -44 {
+                } else if scrollBook.accum < -44 {
                     target = false
                 } else {
                     target = chromeHidden
                 }
                 if target != chromeHidden {
-                    scrollAccum = 0
+                    scrollBook.accum = 0
                     withAnimation(.easeInOut(duration: 0.25)) { chromeHidden = target }
                 }
             }
@@ -551,8 +561,8 @@ struct ReaderDetailView: View {
         bottomPullEngaged = false
         chromeHidden = false
         titleHidden = false
-        lastScrollY = 0
-        scrollAccum = 0
+        scrollBook.lastY = 0
+        scrollBook.accum = 0
         withAnimation(.easeInOut(duration: 0.3)) {
             store.selectedArticleID = next.id
             articleOverride?.wrappedValue = next
