@@ -377,11 +377,19 @@ final class TabBarChrome {
     @ObservationIgnored private var lastY: CGFloat = 0
     @ObservationIgnored private var accum: CGFloat = 0
 
+    /// Monotonic signal fired when the selected tab is re-tapped: the visible
+    /// list scrolls back to the top, like the native tab bar's re-tap.
+    private(set) var scrollToTopSignal = 0
+
     func setReaderOpen(_ open: Bool) {
         guard readerOpen != open else { return }
         readerOpen = open
         // Coming back from the reader always shows the full bar.
         if !open { expand() }
+    }
+
+    func requestScrollToTop() {
+        scrollToTopSignal &+= 1
     }
 
     func noteScroll(offsetY: CGFloat) {
@@ -501,7 +509,7 @@ private struct CompactShell: View {
         // solid (no-glass) sliding pill under the selected item, shrinking in
         // place while the list scrolls down and popping away when the reader
         // opens. Below iOS 26 the native bar stays.
-        .modifier(LiquidGlassTabBarHost(selection: $selection))
+        .modifier(LiquidGlassTabBarHost(selection: $selection, onReselect: handleTabReselect))
         // The list spotlight is owned and drawn here at the shell — always mounted,
         // so unlike a TabView child it reliably reacts to the tutorial hand-off and
         // renders on top. Keep it showing as long as we're on Home (don't tie the
@@ -580,6 +588,16 @@ private struct CompactShell: View {
         var body: some View {
             Color.clear
                 .onChange(of: store.visibleArticles.count) { _, _ in retry() }
+        }
+    }
+
+    /// Native tab-bar re-tap semantics: a drilled-in Feeds tab pops to its
+    /// root; everything else scrolls the visible list back to the top.
+    private func handleTabReselect(_ tab: AppTab) {
+        if tab == .feeds, !feedsPath.isEmpty {
+            withAnimation { feedsPath.removeAll() }
+        } else {
+            tabChrome.requestScrollToTop()
         }
     }
 
@@ -672,6 +690,7 @@ private struct NativeTabBarHider: ViewModifier {
 /// back the same way.
 private struct LiquidGlassTabBarHost: ViewModifier {
     @Binding var selection: AppTab
+    var onReselect: (AppTab) -> Void
     @Environment(TabBarChrome.self) private var chrome
 
     func body(content: Content) -> some View {
@@ -682,7 +701,8 @@ private struct LiquidGlassTabBarHost: ViewModifier {
                         LiquidGlassTabBar(
                             selection: $selection,
                             collapsed: chrome.collapsed,
-                            onExpand: { chrome.expand() }
+                            onExpand: { chrome.expand() },
+                            onReselect: onReselect
                         )
                         .transition(
                             .move(edge: .bottom)
@@ -709,6 +729,7 @@ private struct LiquidGlassTabBar: View {
     @Binding var selection: AppTab
     let collapsed: Bool
     var onExpand: () -> Void
+    var onReselect: (AppTab) -> Void
 
     /// Drives the segmented-control slide of the selection pill.
     @Namespace private var selectionNamespace
@@ -737,8 +758,16 @@ private struct LiquidGlassTabBar: View {
 
     private func tabButton(_ tab: AppTab, label: Text) -> some View {
         Button {
-            if collapsed { onExpand() }
-            selection = tab
+            if collapsed {
+                // A minimized bar's first tap just restores it, like the native
+                // minimize; re-tap semantics apply only to the full-size bar.
+                onExpand()
+                selection = tab
+            } else if selection == tab {
+                onReselect(tab)
+            } else {
+                selection = tab
+            }
         } label: {
             icon(for: tab)
                 .foregroundStyle(selection == tab ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
@@ -1028,6 +1057,7 @@ private struct FeedsTab: View {
     @Binding var path: [FeedTarget]
 
     @Environment(TourCoordinator.self) private var tour
+    @Environment(TabBarChrome.self) private var tabChrome
     @State private var isAddingFeed = false
     /// True when Add Feed was opened by the tutorial, so it shows a paste hint and
     /// its success advances the tour to the "open a story" step.
@@ -1044,6 +1074,7 @@ private struct FeedsTab: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            ScrollViewReader { proxy in
             List {
                 Section {
                     NavigationLink(value: FeedTarget.all) {
@@ -1051,6 +1082,7 @@ private struct FeedsTab: View {
                     }
                 }
                 .listRowBackground(Rectangle().fill(.ultraThinMaterial))
+                .id("feedsTop")
 
                 if store.hasCategories {
                     Section("Categories") {
@@ -1167,6 +1199,14 @@ private struct FeedsTab: View {
                 }
             }
             .refreshable { await store.refreshAllAndWait() }
+            // Native re-tap semantics: at the Feeds root, re-tapping the tab
+            // scrolls the library list back to the top.
+            .onChange(of: tabChrome.scrollToTopSignal) { _, _ in
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+                    proxy.scrollTo("feedsTop", anchor: .top)
+                }
+            }
+            }
         }
         // The tutorial asks to add the starter feed: open Add Feed with a paste hint.
         .onChange(of: tour.wantsAddSampleFeed) { _, want in
@@ -1816,6 +1856,20 @@ private struct ArticleList: View {
     private let titleTranslator = ListTitleTranslator.shared
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                // Native re-tap semantics: re-tapping the selected tab scrolls
+                // the visible list back to the top.
+                .onChange(of: tabChrome.scrollToTopSignal) { _, _ in
+                    guard let first = store.visibleArticles.first?.id else { return }
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
+                        proxy.scrollTo(first, anchor: .top)
+                    }
+                }
+        }
+    }
+
+    private var list: some View {
         List(store.visibleArticles, selection: $selection) { article in
             row(article)
                 // Drive the dwell-based, off-screen-cancelling title translation
@@ -1833,6 +1887,9 @@ private struct ArticleList: View {
                         }
                     }
                 }
+                // Explicit identity for ScrollViewReader's scroll-to-top; same
+                // value as the collection's implicit identity.
+                .id(article.id)
                 .tag(article.id)
                 .swipeActions(edge: .leading) {
                     Button {
