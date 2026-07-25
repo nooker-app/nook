@@ -380,6 +380,10 @@ final class TabBarChrome {
     /// Monotonic signal fired when the selected tab is re-tapped: the visible
     /// list scrolls back to the top, like the native tab bar's re-tap.
     private(set) var scrollToTopSignal = 0
+    /// Set by an explicit user expand (tapping the bar, switching tabs) so an
+    /// in-flight scroll's remaining travel can't immediately re-minimize what
+    /// the user just restored. Cleared when the scroll comes to rest.
+    @ObservationIgnored private var holdExpandedUntilIdle = false
 
     func setReaderOpen(_ open: Bool) {
         guard readerOpen != open else { return }
@@ -409,14 +413,21 @@ final class TabBarChrome {
         if (delta > 0) != (accum > 0) { accum = 0 }
         accum += delta
         if accum > 44 {
-            setCollapsed(true)
+            // A user-restored bar stays restored for the rest of this scroll.
+            if !holdExpandedUntilIdle { setCollapsed(true) }
         } else if accum < -44 {
             setCollapsed(false)
         }
     }
 
+    /// The scroll settled: the next gesture may minimize the bar again.
+    func noteScrollIdle() {
+        holdExpandedUntilIdle = false
+    }
+
     func expand() {
         accum = 0
+        holdExpandedUntilIdle = true
         setCollapsed(false)
     }
 
@@ -742,7 +753,7 @@ private struct LiquidGlassTabBar: View {
                 tabButton(.starred, label: Text("Starred"))
                 tabButton(.settings, label: Text("Settings"))
             }
-            .padding(5)
+            .padding(4)
             .glassEffect(.regular.interactive(), in: Capsule())
         }
         // Scroll-down minimizes the bar in place (the whole capsule scales,
@@ -771,7 +782,7 @@ private struct LiquidGlassTabBar: View {
         } label: {
             icon(for: tab)
                 .foregroundStyle(selection == tab ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                .frame(width: 74, height: 56)
+                .frame(width: 74, height: 44)
                 .background {
                     // The selected item's seat is deliberately NOT glass — a
                     // solid adaptive fill inside the glass capsule — and it
@@ -1986,6 +1997,9 @@ private struct ArticleList: View {
         // source of mid-scroll jank. Queued rows start once the scroll settles.
         .onScrollPhaseChange { _, newPhase in
             titleTranslator.setScrolling(newPhase != .idle)
+            // A settled scroll re-arms the tab bar's minimize (a user tap holds
+            // it expanded only for the remainder of the in-flight scroll).
+            if newPhase == .idle { tabChrome.noteScrollIdle() }
         }
         // Feed the custom tab bar's collapse hysteresis (iPhone shell; the
         // chrome is inert on iPad where no custom bar reads it). Bounded to the
