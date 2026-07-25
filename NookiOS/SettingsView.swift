@@ -17,10 +17,17 @@ struct SettingsView: View {
     /// into a "Data" section here). Defaults to sheet presentation (iPad),
     /// leaving that path unchanged.
     var isTab: Bool = false
-    /// Reports whether the settings ROOT list is on screen (false while a
-    /// detail screen is pushed). The iPhone shell uses it to hide the custom
-    /// tab bar on detail screens, like the reader push does.
-    var onRootVisibilityChange: ((Bool) -> Void)? = nil
+    /// Navigation lifecycle signals for the iPhone shell's custom tab bar
+    /// (hide on detail screens, like the reader push does).
+    var onNavigationEvent: ((NavigationEvent) -> Void)? = nil
+
+    /// Detail appear/disappear are balanced per screen instance so the shell
+    /// can keep an exact count; rootRevealed is a drift-healing reset.
+    enum NavigationEvent {
+        case detailAppeared
+        case detailDisappeared
+        case rootRevealed
+    }
     @Environment(\.dismiss) private var dismiss
     @AppStorage(TourFlags.hasCompletedWelcomeKey) private var hasCompletedWelcome = false
     @AppStorage(TourFlags.seenReaderGestureHintKey) private var seenReaderGestureHint = false
@@ -133,10 +140,10 @@ struct SettingsView: View {
             // Keep the last section above the floating tab bar (iPhone tab only).
             .modifier(TabBarInset(enabled: isTab))
             // The bar returns the moment a pop STARTS (this appear fires at
-            // transition start); hiding is signalled by each detail's onAppear
-            // below — the root's onDisappear would land only after the push
-            // transition finished, hiding the bar visibly late.
-            .onAppear { onRootVisibilityChange?(true) }
+            // transition start); hiding is signalled by each detail's own
+            // lifecycle below — the root's onDisappear would land only after
+            // the push transition finished, hiding the bar visibly late.
+            .onAppear { onNavigationEvent?(.rootRevealed) }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -159,9 +166,35 @@ struct SettingsView: View {
 
     /// Wraps a pushed detail screen: its `onAppear` fires as the push
     /// transition STARTS, so the tab bar hides immediately with the
-    /// transition instead of after it settles.
+    /// transition instead of after it settles; its `onDisappear` balances the
+    /// count when the screen unmounts, which is what survives an instant
+    /// back-gesture (the root never re-appears in that case, so it can't be
+    /// the one to restore the bar).
     private func detail<Content: View>(_ content: Content) -> some View {
-        content.onAppear { onRootVisibilityChange?(false) }
+        SettingsDetailScreen(content: content, onEvent: onNavigationEvent)
+    }
+}
+
+/// Balanced appear/disappear reporting for one pushed settings screen. The
+/// `counted` state guarantees each instance contributes at most +1 to the
+/// shell's depth count even if SwiftUI fires duplicate lifecycle callbacks.
+private struct SettingsDetailScreen<Content: View>: View {
+    let content: Content
+    var onEvent: ((SettingsView.NavigationEvent) -> Void)?
+    @State private var counted = false
+
+    var body: some View {
+        content
+            .onAppear {
+                guard !counted else { return }
+                counted = true
+                onEvent?(.detailAppeared)
+            }
+            .onDisappear {
+                guard counted else { return }
+                counted = false
+                onEvent?(.detailDisappeared)
+            }
     }
 }
 
