@@ -136,6 +136,17 @@ public final class ReaderStore {
             case .mergingDevices: String(localized: "Merging changes from your devices…", bundle: .module)
             }
         }
+
+        /// Coarse completion fraction for the splash progress bar. The real
+        /// durations are unknowable up front (iCloud reads dominate), so the
+        /// bar communicates "which stage, of how many" rather than time.
+        public var fractionComplete: Double {
+            switch self {
+            case .connectingFolder: 0.15
+            case .readingLibrary: 0.45
+            case .mergingDevices: 0.8
+            }
+        }
     }
     /// Mirrors the "show unread badge" preference. Held in the store (not only
     /// the view) so the Dock badge is a deterministic function of store state

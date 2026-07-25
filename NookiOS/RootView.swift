@@ -1577,15 +1577,21 @@ struct SplashView: View {
 
             // Progress readout for launches that outlast the brand beat: shown
             // only once the animation has finished AND bootstrap is still busy,
-            // so fast launches never flash it.
+            // so fast launches never flash it. The bar fills by pipeline stage
+            // (true durations are unknowable — iCloud reads dominate).
             if showProgress, let phase = store?.bootstrapPhase {
-                VStack(spacing: 10) {
-                    ProgressView()
-                        .tint(Color(.displayP3, red: 0.26, green: 0.19, blue: 0.10))
+                let brown = Color(.displayP3, red: 0.26, green: 0.19, blue: 0.10)
+                VStack(spacing: 12) {
+                    ProgressView(value: phase.fractionComplete)
+                        .progressViewStyle(.linear)
+                        .tint(brown)
+                        .frame(width: 180)
+                        .animation(.easeInOut(duration: 0.4), value: phase.fractionComplete)
                     Text(phase.label)
                         .font(.footnote)
-                        .foregroundStyle(Color(.displayP3, red: 0.26, green: 0.19, blue: 0.10).opacity(0.7))
+                        .foregroundStyle(brown.opacity(0.7))
                         .contentTransition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: phase.label)
                 }
                 .frame(maxHeight: .infinity, alignment: .bottom)
                 .padding(.bottom, 64)
