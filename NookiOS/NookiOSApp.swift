@@ -60,3 +60,38 @@ struct NookiOSApp: App {
         }
     }
 }
+
+extension Notification.Name {
+    static let nookDidResetLocalAppData = Notification.Name("nookDidResetLocalAppData")
+}
+
+@MainActor
+enum IOSAppResetCoordinator {
+    static func reset(options: LocalAppResetOptions) async throws {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        let deviceID = DeviceIdentity.current()
+        BackgroundRefresh.cancel()
+        ReaderStore.shared.beginPreparingForLocalReset()
+        await ReaderStore.shared.prepareForLocalReset()
+
+        try await LocalAppResetService.reset(
+            options: options,
+            preservingDeviceID: deviceID,
+            bundleIdentifier: bundleIdentifier
+        )
+
+        let notifications = UNUserNotificationCenter.current()
+        notifications.removeAllPendingNotificationRequests()
+        notifications.removeAllDeliveredNotifications()
+        try? await notifications.setBadgeCount(0)
+
+        // iOS does not permit apps to relaunch themselves. Rebuild the singleton
+        // and run the same local-first setup as a clean first launch instead.
+        await ReaderStore.shared.restartAfterLocalReset()
+        await ReaderStore.shared.configureLocalStorageIfNeeded()
+        NotificationCenter.default.post(name: .nookDidResetLocalAppData, object: nil)
+    }
+}

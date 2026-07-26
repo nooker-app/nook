@@ -625,7 +625,9 @@
         }
       }
     },
-    "Article Rules" : {},
+    "Article Rules" : {
+
+    },
     "Articles" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1131,7 +1133,9 @@
         }
       }
     },
-    "Choose how each feed's articles open in the web view. “Default” follows the reader typography settings." : {},
+    "Choose how each feed's articles open in the web view. “Default” follows the reader typography settings." : {
+
+    },
     "Choose iCloud Folder" : {
       "localizations" : {
         "en" : {
@@ -5198,6 +5202,7 @@
       }
     },
     "Settings" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

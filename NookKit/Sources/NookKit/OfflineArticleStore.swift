@@ -175,6 +175,15 @@ public final class OfflineArticleStore {
         persistIndex()
     }
 
+    /// Drops the singleton's in-memory view after the reset service has removed
+    /// its files. Unlike `removeAll`, this performs no disk write, so it cannot
+    /// recreate an empty cache directory across the reset boundary.
+    public func resetAfterLocalAppReset() {
+        index.removeAll()
+        pendingContent.removeAll()
+        loaded = true
+    }
+
     /// Removes entries saved longer ago than `maxAge`. Returns the purged ids.
     @discardableResult
     public func purge(olderThan maxAge: TimeInterval, now: Date) -> [Article.ID] {

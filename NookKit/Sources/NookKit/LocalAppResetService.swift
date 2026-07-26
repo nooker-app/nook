@@ -17,8 +17,12 @@ public struct LocalAppResetOptions: Sendable, Equatable {
 struct LocalAppResetPaths: Sendable {
     var applicationSupportDirectory: URL
     var cachesDirectory: URL
+    var localLibraryDirectory: URL? = nil
 
-    static func current(fileManager: FileManager = .default) throws -> Self {
+    static func current(
+        includingLocalLibrary: Bool,
+        fileManager: FileManager = .default
+    ) throws -> Self {
         let applicationSupport = try fileManager.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -31,9 +35,22 @@ struct LocalAppResetPaths: Sendable {
             appropriateFor: nil,
             create: true
         )
+        let localLibrary: URL?
+        if includingLocalLibrary {
+            let documents = try fileManager.url(
+                for: .documentDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            localLibrary = documents.appending(path: "Nook", directoryHint: .isDirectory)
+        } else {
+            localLibrary = nil
+        }
         return Self(
             applicationSupportDirectory: applicationSupport.appending(path: "Nook", directoryHint: .isDirectory),
-            cachesDirectory: caches
+            cachesDirectory: caches,
+            localLibraryDirectory: localLibrary
         )
     }
 }
@@ -49,7 +66,10 @@ public enum LocalAppResetService {
         bundleIdentifier: String
     ) async throws {
         let fileManager = FileManager.default
-        let paths = try LocalAppResetPaths.current(fileManager: fileManager)
+        let paths = try LocalAppResetPaths.current(
+            includingLocalLibrary: UserDefaults.standard.bool(forKey: ReaderStore.usesLocalLibraryKey),
+            fileManager: fileManager
+        )
 
         try clearLocalFiles(at: paths, fileManager: fileManager)
         URLCache.shared.removeAllCachedResponses()
@@ -100,6 +120,10 @@ public enum LocalAppResetService {
     ) throws {
         if fileManager.fileExists(atPath: paths.applicationSupportDirectory.path(percentEncoded: false)) {
             try fileManager.removeItem(at: paths.applicationSupportDirectory)
+        }
+        if let localLibraryDirectory = paths.localLibraryDirectory,
+           fileManager.fileExists(atPath: localLibraryDirectory.path(percentEncoded: false)) {
+            try fileManager.removeItem(at: localLibraryDirectory)
         }
 
         guard fileManager.fileExists(atPath: paths.cachesDirectory.path(percentEncoded: false)) else {

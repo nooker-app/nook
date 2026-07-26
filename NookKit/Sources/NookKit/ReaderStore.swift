@@ -489,6 +489,76 @@ public final class ReaderStore {
         isAccessingSecurityScopedResource = false
     }
 
+    /// Reinitializes this long-lived singleton after an in-process reset. macOS
+    /// relaunches instead; iOS cannot relaunch itself, so it uses this path and
+    /// then runs the normal first-launch bootstrap again.
+    public func restartAfterLocalReset() async {
+        guard didQuiesceForLocalReset else { return }
+
+        feeds = []
+        articles = []
+        displayedArticles = []
+        folders = []
+        filters = []
+        categories = []
+        feedsByID = [:]
+        categoriesByID = [:]
+        unreadByFeed = [:]
+        unreadByCategory = [:]
+        totalUnread = 0
+        todayCount = 0
+        starredCount = 0
+        retainedArticleIDs = []
+        filteredArticleIDs = []
+        textFilteredArticleIDs = []
+        activeCompiledFilters = []
+        compiledFilterSource = []
+        filterClassifyCache = [:]
+        smartSelection = .all
+        feedSelection = []
+        categorySelection = nil
+        selectedArticleID = nil
+        searchText = ""
+        activeSearchQuery = ""
+        sortOrders = Self.loadSortOrders()
+        syncFolderDisplayPath = nil
+        feedIcons = [:]
+        faviconAttemptedKeys = []
+        faviconQueue = []
+        activeFaviconFetches = 0
+        feedUpdateTokens = [:]
+        readerContentStates = [:]
+        bodyCache = [:]
+        didLoadBodyCache = false
+        isLoadingBodyCache = false
+        datelessArticleIDs = []
+        offlineDownloadProgress = nil
+        categorizeAllProgress = nil
+        aiCategorizeRunning = false
+        lastRefreshedAt = nil
+        errorMessage = nil
+        bootstrapPhase = nil
+        isBrowserPresented = false
+        browserMode = .reader
+        activationRefreshInFlight = false
+        isRetryingFailedFeeds = false
+        lastKnownLibraryModDate = nil
+        lastKnownStateModDate = nil
+        lastKnownContentModDate = nil
+        lastKnownBodiesModDate = nil
+        appliedReplicaRevision = 0
+        lastHLC = .zero
+
+        deviceID = DeviceIdentity.current()
+        ownShard = DeviceStateDocument(deviceID: deviceID)
+        OfflineArticleStore.shared.resetAfterLocalAppReset()
+
+        didBootstrap = false
+        didQuiesceForLocalReset = false
+        isPreparingLocalReset = false
+        await bootstrap()
+    }
+
     public var isStorageConfigured: Bool {
         storage != nil
     }
@@ -514,6 +584,7 @@ public final class ReaderStore {
     /// so the recompute is deferred until the burst settles, capturing the
     /// latest snapshot once instead of re-sorting on every mutation.
     private func scheduleArticleFilter(debounced: Bool = false, animated: Bool = true) {
+        guard !isPreparingLocalReset else { return }
         guard debounced else {
             filterDebounceTask?.cancel()
             filterDebounceTask = nil

@@ -636,6 +636,11 @@ private struct ExperimentalSettingsScreen: View {
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
     @AppStorage(ReaderStore.coherentArticleTranslationKey) private var coherentArticleTranslation = false
     @State private var confirmingClearTranslationCache = false
+    @State private var confirmingAppReset = false
+    @State private var preservesGeminiCredential = false
+    @State private var preservesWebSessions = false
+    @State private var isResetting = false
+    @State private var resetErrorMessage: String?
 
     var body: some View {
         List {
@@ -670,6 +675,35 @@ private struct ExperimentalSettingsScreen: View {
                 }
             }
             .warmRows()
+
+            Section("Reset Nook") {
+                Toggle("Keep Gemini API key", isOn: $preservesGeminiCredential)
+                Toggle("Keep website login sessions", isOn: $preservesWebSessions)
+
+                Button(role: .destructive) {
+                    confirmingAppReset = true
+                } label: {
+                    HStack {
+                        Text("Reset Nook…")
+                        Spacer()
+                        if isResetting {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isResetting)
+
+                Text("Removes this device's settings, sync folder connection, offline articles, and caches. Files in your sync folder are never changed. Sign-in data is deleted unless you choose to keep it above.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let resetErrorMessage {
+                    Label(resetErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .warmRows()
         }
         .warmListBackground()
         .navigationTitle("Experimental")
@@ -685,6 +719,35 @@ private struct ExperimentalSettingsScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Deletes all saved title translations on this device. Titles are translated again as you view them.")
+        }
+        .confirmationDialog(
+            "Reset Nook?",
+            isPresented: $confirmingAppReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset Nook", role: .destructive) {
+                performAppReset()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Local settings and downloaded data can't be recovered. Your sync folder will not be changed. Nook will return to the welcome screen.")
+        }
+    }
+
+    private func performAppReset() {
+        resetErrorMessage = nil
+        isResetting = true
+        let options = LocalAppResetOptions(
+            preservesGeminiCredential: preservesGeminiCredential,
+            preservesWebSessions: preservesWebSessions
+        )
+        Task {
+            do {
+                try await IOSAppResetCoordinator.reset(options: options)
+            } catch {
+                resetErrorMessage = error.localizedDescription
+                isResetting = false
+            }
         }
     }
 }

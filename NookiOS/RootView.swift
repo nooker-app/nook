@@ -57,6 +57,13 @@ struct RootView: View {
                 .onChange(of: hasCompletedWelcome) { _, completed in
                     if !completed, isReady { showWelcome = true }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .nookDidResetLocalAppData)) { _ in
+                    showTranslatePromo = false
+                    hasCompletedWelcome = false
+                    hasSeenTranslatePromo = false
+                    tour = TourCoordinator()
+                    showWelcome = true
+                }
                 .task {
                     // The store computes the unread count; iOS reflects it on the
                     // app icon badge (requires notification authorization).

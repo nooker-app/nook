@@ -93,4 +93,29 @@ struct LocalAppResetServiceTests {
         let after = try [library, shard].map { try Data(contentsOf: $0) }
         #expect(after == before)
     }
+
+    @Test("Deletes the app-owned local library when it is explicitly included")
+    func deletesLocalLibrary() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "nook-reset-\(UUID())", directoryHint: .isDirectory)
+        let applicationSupport = root.appending(path: "Application Support/Nook", directoryHint: .isDirectory)
+        let caches = root.appending(path: "Caches", directoryHint: .isDirectory)
+        let localLibrary = root.appending(path: "Documents/Nook", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: applicationSupport, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: localLibrary, withIntermediateDirectories: true)
+        try Data("local".utf8).write(to: localLibrary.appending(path: "NookLibrary.json"))
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try LocalAppResetService.clearLocalFiles(
+            at: LocalAppResetPaths(
+                applicationSupportDirectory: applicationSupport,
+                cachesDirectory: caches,
+                localLibraryDirectory: localLibrary
+            ),
+            fileManager: .default
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: localLibrary.path))
+    }
 }
