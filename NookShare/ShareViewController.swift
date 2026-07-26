@@ -45,12 +45,11 @@ final class ShareViewController: UIViewController {
     }
 
     private func forward(_ shared: URL, host: String) {
-        Task {
-            if let deepLink = Self.deepLink(for: shared, host: host) {
-                await open(deepLink)
-            }
+        guard let deepLink = Self.deepLink(for: shared, host: host) else {
             extensionContext?.completeRequest(returningItems: nil)
+            return
         }
+        openAndFinish(deepLink)
     }
 
     // MARK: - Localization (inline: the extension has no string catalog, and
@@ -130,17 +129,31 @@ final class ShareViewController: UIViewController {
         return URL(string: "nook://\(host)?url=\(encoded)")
     }
 
-    /// Opens the containing app. Uses the extension context first; if that is
-    /// refused, walks the responder chain to reach UIApplication as a fallback.
-    private func open(_ url: URL) async {
-        let opened = await withCheckedContinuation { continuation in
-            guard let context = extensionContext else {
-                continuation.resume(returning: false)
-                return
-            }
-            context.open(url) { continuation.resume(returning: $0) }
+    /// Hands the deep link to the system and finishes the request WITHOUT
+    /// waiting on the open's completion handler: the moment the host app comes
+    /// to the foreground this process is suspended, and a completeRequest that
+    /// was still pending never runs — PlugInKit then treats the extension as
+    /// hung and drops it from the share sheet until the container app
+    /// relaunches and re-registers it.
+    private func openAndFinish(_ url: URL) {
+        var finished = false
+        let finish = { [weak self] in
+            guard !finished else { return }
+            finished = true
+            self?.extensionContext?.completeRequest(returningItems: nil)
         }
-        if !opened { openViaResponderChain(url) }
+
+        if let context = extensionContext {
+            context.open(url) { [weak self] success in
+                if !success { self?.openViaResponderChain(url) }
+                finish()
+            }
+        } else {
+            openViaResponderChain(url)
+        }
+        // Safety net: finish even if the open callback is swallowed by the
+        // app-switch suspension (the exact race this ordering exists to beat).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { finish() }
     }
 
     private func openViaResponderChain(_ url: URL) {
