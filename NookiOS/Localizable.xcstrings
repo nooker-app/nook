@@ -1069,6 +1069,28 @@
         }
       }
     },
+    "Copied": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーしました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복사됨"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制"
+          }
+        }
+      }
+    },
     "Copy & Add": {
       "extractionState": "stale",
       "localizations": {
@@ -1088,6 +1110,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "复制并添加"
+          }
+        }
+      }
+    },
+    "Copy Feed Address": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィードのアドレスをコピー"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "피드 주소 복사"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制源地址"
           }
         }
       }
@@ -1931,6 +1975,28 @@
         }
       }
     },
+    "Find the Feed": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィードを探す"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "피드 찾기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查找源"
+          }
+        }
+      }
+    },
     "Folder": {
       "localizations": {
         "ja": {
@@ -2000,6 +2066,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "文件夹已就绪"
+          }
+        }
+      }
+    },
+    "Follow This Site": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサイトをフォロー"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 사이트 구독"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关注此网站"
           }
         }
       }
@@ -2114,6 +2202,28 @@
         }
       }
     },
+    "Following ✓": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォロー中 ✓"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "구독 중 ✓"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关注 ✓"
+          }
+        }
+      }
+    },
     "Font": {
       "localizations": {
         "en": {
@@ -2166,6 +2276,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "字体大小：%lld"
+          }
+        }
+      }
+    },
+    "Found it!": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "見つかりました！"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "찾았어요!"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "找到了！"
           }
         }
       }
@@ -2875,6 +3007,28 @@
         }
       }
     },
+    "Looking for this site's feed…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサイトのフィードを探しています…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 사이트의 피드를 찾는 중…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在查找该网站的源…"
+          }
+        }
+      }
+    },
     "Mark All as Read": {
       "localizations": {
         "en": {
@@ -3245,6 +3399,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "暂无文章"
+          }
+        }
+      }
+    },
+    "No feed found": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィードが見つかりませんでした"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "피드를 찾지 못했어요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到源"
           }
         }
       }
@@ -4876,6 +5052,28 @@
         }
       }
     },
+    "Report This Site": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサイトを報告"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 사이트 제보하기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "反馈此网站"
+          }
+        }
+      }
+    },
     "Reset Nook": {
       "localizations": {
         "en": {
@@ -5095,6 +5293,28 @@
         }
       }
     },
+    "Save Page as Article Instead": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代わりにページを記事として保存"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대신 페이지를 글로 저장"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改为将页面保存为文章"
+          }
+        }
+      }
+    },
     "Save for Offline": {
       "extractionState": "stale",
       "localizations": {
@@ -5148,6 +5368,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "已离线保存"
+          }
+        }
+      }
+    },
+    "Saved to Nook": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nookに保存しました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook에 저장했어요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存到 Nook"
           }
         }
       }
@@ -6131,6 +6373,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "这些选项在阅读模式下生效。"
+          }
+        }
+      }
+    },
+    "This site doesn't seem to share its posts anywhere Nook can find. You can report it — feed rules for popular sites are added by hand.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサイトはNookが見つけられる場所に記事を公開していないようです。ご報告いただければ、よく使われるサイトのフィードルールを手動で追加します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 사이트는 Nook이 찾을 수 있는 곳에 글을 공개하지 않는 것 같아요. 제보해 주시면 자주 쓰이는 사이트의 피드 규칙을 직접 추가할게요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该网站似乎没有在 Nook 能找到的位置公开文章。你可以反馈给我们——常用网站的源规则会手动添加。"
           }
         }
       }

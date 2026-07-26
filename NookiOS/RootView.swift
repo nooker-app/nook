@@ -28,6 +28,10 @@ struct RootView: View {
     /// (add the sample feed, then hint the list). In-memory, shared via environment.
     @State private var tour = TourCoordinator()
     @State private var tabChrome = TabBarChrome()
+    /// A share-extension "find the feed" request being shown as a sheet.
+    @State private var discoveryRequest: FeedDiscoveryRequest?
+    /// The just-saved link's title, driving the "Saved to Nook" confirmation.
+    @State private var savedLinkTitle: String?
 
     var body: some View {
         ZStack {
@@ -156,6 +160,21 @@ struct RootView: View {
                     }
                 }
                 .onOpenURL { url in handleIncomingURL(url) }
+                .sheet(item: $discoveryRequest) { request in
+                    FeedDiscoverySheet(store: store, pageURLString: request.pageURLString)
+                }
+                .alert(
+                    "Saved to Nook",
+                    isPresented: Binding(
+                        get: { savedLinkTitle != nil },
+                        set: { if !$0 { savedLinkTitle = nil } }
+                    ),
+                    presenting: savedLinkTitle
+                ) { _ in
+                    Button("OK") { savedLinkTitle = nil }
+                } message: { title in
+                    Text(verbatim: title)
+                }
                 // Mark-read dwell lives here on the always-present root, keyed on the
                 // selected article, so it isn't cancelled by the detail column being
                 // pushed/popped in the collapsed split view (iPad) or a tab's
@@ -243,22 +262,39 @@ struct RootView: View {
         _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
     }
 
-    /// Handles `nook://` deep links. `nook://add-feed?url=<page or feed URL>`
-    /// (sent by the share extension) adds the feed, auto-discovering RSS/Atom.
+    /// Handles `nook://` deep links (sent by the share extension):
+    /// - `add-feed?url=…` follows the site immediately (auto-discovery),
+    /// - `discover-feed?url=…` opens the find-the-feed sheet (result + copy /
+    ///   add / report),
+    /// - `save-article?url=…` saves the page as a standalone article in the
+    ///   managed Saved Links feed.
     private func handleIncomingURL(_ url: URL) {
         guard url.scheme == "nook" else { return }
-        guard url.host == "add-feed" else { return }
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let feed = components.queryItems?.first(where: { $0.name == "url" })?.value,
-              !feed.isEmpty else { return }
-        Task {
-            do {
-                try await store.addFeed(urlString: feed)
-            } catch {
-                await MainActor.run {
+              let shared = components.queryItems?.first(where: { $0.name == "url" })?.value,
+              !shared.isEmpty else { return }
+        switch url.host {
+        case "add-feed":
+            Task {
+                do {
+                    try await store.addFeed(urlString: shared)
+                } catch {
                     store.errorMessage = error.localizedDescription
                 }
             }
+        case "discover-feed":
+            discoveryRequest = FeedDiscoveryRequest(pageURLString: shared)
+        case "save-article":
+            Task {
+                do {
+                    let id = try await store.saveLink(urlString: shared)
+                    savedLinkTitle = store.article(withID: id)?.title ?? shared
+                } catch {
+                    store.errorMessage = error.localizedDescription
+                }
+            }
+        default:
+            break
         }
     }
 }
@@ -321,7 +357,7 @@ private struct RegularShell: View {
         }
         .fileExporter(
             isPresented: $isExportingOPML,
-            document: OPMLDocument(feeds: store.feeds),
+            document: OPMLDocument(feeds: store.exportableFeeds),
             contentType: .opml,
             defaultFilename: "NookSubscriptions.opml"
         ) { result in
@@ -1470,10 +1506,13 @@ private struct FeedsTab: View {
             }
         }
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                store.removeFeeds(ids: [feed.id])
-            } label: {
-                Label("Delete", systemImage: "trash")
+            // The managed Saved Links feed can't be deleted (its articles can).
+            if !ReaderStore.isManagedFeed(feed.id) {
+                Button(role: .destructive) {
+                    store.removeFeeds(ids: [feed.id])
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
         .swipeActions(edge: .leading) {
@@ -1490,27 +1529,29 @@ private struct FeedsTab: View {
             } label: {
                 Label("Mark All as Read", systemImage: "checkmark.circle")
             }
-            Button {
-                renameFeedName = feed.displayTitle
-                feedPendingRename = feed.id
-            } label: {
-                Label("Rename Feed", systemImage: "pencil")
-            }
-            if !store.feedFolders.isEmpty {
-                Menu {
-                    Button("None") { store.moveFeed(feed.id, toFolder: "") }
-                    ForEach(store.feedFolders, id: \.self) { folder in
-                        Button(folder) { store.moveFeed(feed.id, toFolder: folder) }
-                    }
+            if !ReaderStore.isManagedFeed(feed.id) {
+                Button {
+                    renameFeedName = feed.displayTitle
+                    feedPendingRename = feed.id
                 } label: {
-                    Label("Move to Folder", systemImage: "folder")
+                    Label("Rename Feed", systemImage: "pencil")
                 }
-            }
-            Divider()
-            Button(role: .destructive) {
-                store.removeFeeds(ids: [feed.id])
-            } label: {
-                Label("Delete Feed", systemImage: "trash")
+                if !store.feedFolders.isEmpty {
+                    Menu {
+                        Button("None") { store.moveFeed(feed.id, toFolder: "") }
+                        ForEach(store.feedFolders, id: \.self) { folder in
+                            Button(folder) { store.moveFeed(feed.id, toFolder: folder) }
+                        }
+                    } label: {
+                        Label("Move to Folder", systemImage: "folder")
+                    }
+                }
+                Divider()
+                Button(role: .destructive) {
+                    store.removeFeeds(ids: [feed.id])
+                } label: {
+                    Label("Delete Feed", systemImage: "trash")
+                }
             }
         }
     }
@@ -1932,10 +1973,13 @@ private struct Sidebar: View {
         }
         .tag(SidebarItem.feed(feed.id))
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                store.removeFeeds(ids: [feed.id])
-            } label: {
-                Label("Delete", systemImage: "trash")
+            // The managed Saved Links feed can't be deleted (its articles can).
+            if !ReaderStore.isManagedFeed(feed.id) {
+                Button(role: .destructive) {
+                    store.removeFeeds(ids: [feed.id])
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
         }
         .swipeActions(edge: .leading) {
@@ -1952,27 +1996,29 @@ private struct Sidebar: View {
             } label: {
                 Label("Mark All as Read", systemImage: "checkmark.circle")
             }
-            Button {
-                renameFeedName = feed.displayTitle
-                feedPendingRename = feed.id
-            } label: {
-                Label("Rename Feed", systemImage: "pencil")
-            }
-            if !store.feedFolders.isEmpty {
-                Menu {
-                    Button("None") { store.moveFeed(feed.id, toFolder: "") }
-                    ForEach(store.feedFolders, id: \.self) { folder in
-                        Button(folder) { store.moveFeed(feed.id, toFolder: folder) }
-                    }
+            if !ReaderStore.isManagedFeed(feed.id) {
+                Button {
+                    renameFeedName = feed.displayTitle
+                    feedPendingRename = feed.id
                 } label: {
-                    Label("Move to Folder", systemImage: "folder")
+                    Label("Rename Feed", systemImage: "pencil")
                 }
-            }
-            Divider()
-            Button(role: .destructive) {
-                store.removeFeeds(ids: [feed.id])
-            } label: {
-                Label("Delete Feed", systemImage: "trash")
+                if !store.feedFolders.isEmpty {
+                    Menu {
+                        Button("None") { store.moveFeed(feed.id, toFolder: "") }
+                        ForEach(store.feedFolders, id: \.self) { folder in
+                            Button(folder) { store.moveFeed(feed.id, toFolder: folder) }
+                        }
+                    } label: {
+                        Label("Move to Folder", systemImage: "folder")
+                    }
+                }
+                Divider()
+                Button(role: .destructive) {
+                    store.removeFeeds(ids: [feed.id])
+                } label: {
+                    Label("Delete Feed", systemImage: "trash")
+                }
             }
         }
     }

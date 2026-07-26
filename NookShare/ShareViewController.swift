@@ -2,19 +2,103 @@ import UIKit
 import UniformTypeIdentifiers
 
 /// Share-sheet extension: takes the URL of the page the user is viewing and
-/// hands it to Nook via `nook://add-feed?url=…`, which adds the feed
-/// (auto-discovering RSS/Atom). No App Group is needed, so it works with a
-/// free developer account.
+/// offers three ways into Nook, each handed off via a `nook://` deep link so
+/// all storage-touching work happens in the app (no App Group needed — works
+/// with a free developer account):
+/// - Follow the site immediately (auto-discovering its RSS/Atom feed),
+/// - Find the feed address first (result sheet with copy/add/report),
+/// - Save the page itself as an article (for sites with no feed at all).
 final class ShareViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .clear
         Task {
-            if let shared = await extractSharedURL(), let deepLink = Self.addFeedURL(for: shared) {
+            guard let shared = await extractSharedURL() else {
+                extensionContext?.completeRequest(returningItems: nil)
+                return
+            }
+            presentActions(for: shared)
+        }
+    }
+
+    // MARK: - Action picker
+
+    private func presentActions(for shared: URL) {
+        let alert = UIAlertController(
+            title: "Nook",
+            message: shared.absoluteString,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: L.followSite, style: .default) { [weak self] _ in
+            self?.forward(shared, host: "add-feed")
+        })
+        alert.addAction(UIAlertAction(title: L.findFeed, style: .default) { [weak self] _ in
+            self?.forward(shared, host: "discover-feed")
+        })
+        alert.addAction(UIAlertAction(title: L.saveArticle, style: .default) { [weak self] _ in
+            self?.forward(shared, host: "save-article")
+        })
+        alert.addAction(UIAlertAction(title: L.cancel, style: .cancel) { [weak self] _ in
+            self?.extensionContext?.completeRequest(returningItems: nil)
+        })
+        present(alert, animated: true)
+    }
+
+    private func forward(_ shared: URL, host: String) {
+        Task {
+            if let deepLink = Self.deepLink(for: shared, host: host) {
                 await open(deepLink)
             }
             extensionContext?.completeRequest(returningItems: nil)
         }
     }
+
+    // MARK: - Localization (inline: the extension has no string catalog, and
+    // registering one would mean project-file surgery for four strings)
+
+    private enum L {
+        private static var lang: String {
+            Locale.preferredLanguages.first.map { String($0.prefix(2)) } ?? "en"
+        }
+
+        static var followSite: String {
+            switch lang {
+            case "ko": "사이트 구독"
+            case "ja": "サイトをフォロー"
+            case "zh": "关注网站"
+            default: "Follow This Site"
+            }
+        }
+
+        static var findFeed: String {
+            switch lang {
+            case "ko": "피드 주소 찾기"
+            case "ja": "フィードのアドレスを探す"
+            case "zh": "查找源地址"
+            default: "Find the Feed Address"
+            }
+        }
+
+        static var saveArticle: String {
+            switch lang {
+            case "ko": "페이지를 글로 저장"
+            case "ja": "ページを記事として保存"
+            case "zh": "将页面保存为文章"
+            default: "Save Page as Article"
+            }
+        }
+
+        static var cancel: String {
+            switch lang {
+            case "ko": "취소"
+            case "ja": "キャンセル"
+            case "zh": "取消"
+            default: "Cancel"
+            }
+        }
+    }
+
+    // MARK: - Plumbing
 
     /// Finds the shared web URL among the extension's input attachments.
     private func extractSharedURL() async -> URL? {
@@ -39,11 +123,11 @@ final class ShareViewController: UIViewController {
         return nil
     }
 
-    private static func addFeedURL(for shared: URL) -> URL? {
+    private static func deepLink(for shared: URL, host: String) -> URL? {
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "&?=+/:")
         let encoded = shared.absoluteString.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        return URL(string: "nook://add-feed?url=\(encoded)")
+        return URL(string: "nook://\(host)?url=\(encoded)")
     }
 
     /// Opens the containing app. Uses the extension context first; if that is

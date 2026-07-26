@@ -271,7 +271,7 @@ private struct DataActionsModifier: ViewModifier {
                 }
                 .fileExporter(
                     isPresented: $isExportingOPML,
-                    document: OPMLDocument(feeds: store.feeds),
+                    document: OPMLDocument(feeds: store.exportableFeeds),
                     contentType: .opml,
                     defaultFilename: "NookSubscriptions.opml"
                 ) { result in

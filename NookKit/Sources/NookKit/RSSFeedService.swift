@@ -124,6 +124,24 @@ public struct RSSFeedService: Sendable {
         return data
     }
 
+    /// Fetches a web page and extracts its `<title>` — for saving a page as a
+    /// standalone article, where no feed is involved. Best-effort: nil when the
+    /// page is unreachable or has no usable title.
+    public func fetchPageTitle(url: URL) async -> String? {
+        guard let data = try? await fetchData(url: url) else { return nil }
+        let html = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+            ?? ""
+        guard let regex = try? NSRegularExpression(pattern: "(?is)<title[^>]*>(.*?)</title>"),
+              let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..<html.endIndex, in: html)),
+              match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: html) else { return nil }
+        let title = HTMLContentParser.decodeEntities(String(html[range]))
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
     private func discoverFeed(from pageURL: URL) async throws -> ParsedFeed {
         let data = try await fetchData(url: pageURL)
         let html = String(data: data, encoding: .utf8)

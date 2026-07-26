@@ -3242,6 +3242,28 @@
         }
       }
     },
+    "Saved Links": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存したリンク"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장한 글"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存链接"
+          }
+        }
+      }
+    },
     "Search": {
       "localizations": {
         "en": {

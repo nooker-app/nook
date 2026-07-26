@@ -71,3 +71,56 @@ struct DeletedArticleGuardTests {
         #expect(ReaderStore.tombstonedArticleIDs(in: [newer, older]).isEmpty)
     }
 }
+
+/// The share-sheet "save page as article" feature stores links in a fully
+/// managed pseudo-feed — these pin its structural protections.
+@Suite("Managed Saved Links feed")
+@MainActor
+struct ManagedFeedTests {
+    private var managedFeed: Feed {
+        Feed(
+            id: ReaderStore.savedLinksFeedID,
+            title: "Saved Links", siteDescription: "", category: "",
+            systemImage: "bookmark",
+            feedURL: URL(string: ReaderStore.savedLinksFeedID)!,
+            siteURL: URL(string: ReaderStore.savedLinksFeedID)!,
+            healthScore: 1
+        )
+    }
+
+    @Test("The managed feed cannot be removed, renamed, or moved")
+    func structuralGuards() {
+        let store = ReaderStore._makeForTesting()
+        store.feeds = [managedFeed]
+
+        store.removeFeed(feedID: ReaderStore.savedLinksFeedID)
+        #expect(store.feeds.count == 1, "managed feed was deleted")
+
+        store.renameFeed(ReaderStore.savedLinksFeedID, to: "Renamed")
+        #expect(store.feeds[0].customTitle == nil, "managed feed was renamed")
+
+        store.moveFeed(ReaderStore.savedLinksFeedID, toFolder: "Somewhere")
+        #expect(store.feeds[0].folderName.isEmpty, "managed feed was moved")
+    }
+
+    @Test("Saved-link articles delete like any other")
+    func articlesRemainDeletable() {
+        let store = ReaderStore._makeForTesting()
+        let article = Fixture.article(
+            "\(ReaderStore.savedLinksFeedID)#https://example.com/post",
+            feedID: ReaderStore.savedLinksFeedID
+        )
+        store.feeds = [managedFeed]
+        store.articles = [article]
+
+        store.deleteArticle(articleID: article.id)
+        #expect(store.articles.isEmpty)
+    }
+
+    @Test("The managed feed never leaks into OPML export")
+    func excludedFromExport() {
+        let store = ReaderStore._makeForTesting()
+        store.feeds = [managedFeed, Fixture.feed("real")]
+        #expect(store.exportableFeeds.map(\.id) == ["real"])
+    }
+}

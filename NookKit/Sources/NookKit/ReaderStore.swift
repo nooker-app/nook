@@ -1296,6 +1296,7 @@ public final class ReaderStore {
 
     /// Moves a feed into a folder (empty string moves it back to top level).
     public func moveFeed(_ feedID: Feed.ID, toFolder folder: String) {
+        guard !Self.isManagedFeed(feedID) else { return }
         guard let index = feeds.firstIndex(where: { $0.id == feedID }),
               feeds[index].category != folder else {
             return
@@ -1314,6 +1315,7 @@ public final class ReaderStore {
     /// an empty name clears the override so the feed-provided title is used again
     /// (and keeps updating on refresh). No-op if nothing changed.
     public func renameFeed(_ feedID: Feed.ID, to newName: String) {
+        guard !Self.isManagedFeed(feedID) else { return }
         guard let index = feeds.firstIndex(where: { $0.id == feedID }) else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed.isEmpty ? nil : trimmed
@@ -1984,6 +1986,98 @@ public final class ReaderStore {
     /// added blank filter or an only-disabled filter doesn't show an empty row.
     public var hasFilters: Bool {
         filters.contains { $0.enabled && !$0.pattern.isEmpty } || categories.contains { $0.hidden }
+    }
+
+    // MARK: - Saved links (share-sheet "save page as article")
+
+    /// The fully managed pseudo-feed holding pages the user saved as articles
+    /// (e.g. via the share sheet when a site offers no feed). The feed itself
+    /// cannot be deleted, renamed, or moved; its articles behave exactly like
+    /// any other — read/star/delete, and they sync through the same baseline +
+    /// shard pipeline.
+    public nonisolated static let savedLinksFeedID = "nook://saved-links"
+
+    /// Whether a feed is app-managed (excluded from delete/rename/move and
+    /// from network refreshes).
+    public nonisolated static func isManagedFeed(_ id: Feed.ID) -> Bool {
+        id == savedLinksFeedID
+    }
+
+    /// Feeds suitable for OPML export — the managed pseudo-feed has no real
+    /// feed URL and must not leak into subscription lists.
+    public var exportableFeeds: [Feed] {
+        feeds.filter { !Self.isManagedFeed($0.id) }
+    }
+
+    /// Saves a web page as a standalone article in the managed Saved Links
+    /// feed: fetches the page title (best-effort), creates the article with a
+    /// deterministic id (so the same link saved on two devices converges), and
+    /// persists through the normal library pipeline. Re-saving a previously
+    /// deleted link clears its tombstone.
+    @discardableResult
+    public func saveLink(urlString: String) async throws -> Article.ID {
+        guard isStorageConfigured else { throw ReaderStorageError.noDirectorySelected }
+        let pageURL = try feedService.normalizedFeedURL(from: urlString)
+        let articleID = "\(Self.savedLinksFeedID)#\(pageURL.absoluteString)"
+
+        // Already saved: just resurface it (clearing a deletion if needed).
+        if let existing = articles.first(where: { $0.id == articleID }) {
+            clearArticleTombstoneIfNeeded(articleID)
+            return existing.id
+        }
+
+        let title = await feedService.fetchPageTitle(url: pageURL)
+            ?? pageURL.host(percentEncoded: false)
+            ?? pageURL.absoluteString
+
+        ensureSavedLinksFeed()
+        clearArticleTombstoneIfNeeded(articleID)
+        let article = Article(
+            id: articleID,
+            feedID: Self.savedLinksFeedID,
+            title: title,
+            summary: "",
+            bodyParagraphs: [],
+            publishedAt: Date.now,
+            url: pageURL,
+            estimatedReadMinutes: 1,
+            isRead: false,
+            isStarred: false
+        )
+        articles.append(article)
+        scheduleSave()
+        return articleID
+    }
+
+    /// Creates the managed Saved Links feed on first use, CRDT-seeded so peers
+    /// materialize it too.
+    private func ensureSavedLinksFeed() {
+        guard !feeds.contains(where: { $0.id == Self.savedLinksFeedID }) else { return }
+        let feed = Feed(
+            id: Self.savedLinksFeedID,
+            title: String(localized: "Saved Links", bundle: .module),
+            siteDescription: "",
+            category: "",
+            systemImage: "bookmark",
+            feedURL: URL(string: Self.savedLinksFeedID)!,
+            siteURL: URL(string: Self.savedLinksFeedID)!,
+            healthScore: 1
+        )
+        feeds.append(feed)
+        // Clears any stale deletion from before the feed became managed, and
+        // seeds membership so peers reconstruct it.
+        recordFeedRestored(feed.id)
+        recordFeedSeed(feed)
+        scheduleShardSave()
+    }
+
+    /// Un-deletes an article id (LWW: the fresh `false` register outranks the
+    /// old tombstone) so a re-saved link can live again on every device.
+    private func clearArticleTombstoneIfNeeded(_ id: Article.ID) {
+        guard deletedArticleIDs.contains(id) else { return }
+        ownShard.setArticleTombstone(id, false, hlc: nextHLC())
+        deletedArticleIDs.remove(id)
+        scheduleShardSave()
     }
 
     public func addFeed(urlString: String, toFolder folder: String = "") async throws {
@@ -2838,6 +2932,8 @@ public final class ReaderStore {
     }
 
     func removeFeed(feedID: Feed.ID) {
+        // The managed Saved Links feed cannot be deleted; its articles can.
+        guard !Self.isManagedFeed(feedID) else { return }
         // A refresh may have this feed's fetch result buffered; applied after
         // the delete it would resurrect the feed and out-clock the tombstone.
         discardPendingBatchMerges(forFeedID: feedID)
@@ -3238,7 +3334,9 @@ public final class ReaderStore {
         // actor in parallel while each result is merged back here serially. This
         // keeps a many-feed refresh inside iOS's background budget; a sequential
         // fetch serialized every feed's up-to-15s timeout and timed out first.
-        let targets = feeds.map { (id: $0.id, url: $0.feedURL) }
+        // Managed pseudo-feeds have no fetchable URL — refreshing one would
+        // just flag it unhealthy.
+        let targets = feeds.filter { !Self.isManagedFeed($0.id) }.map { (id: $0.id, url: $0.feedURL) }
         guard !targets.isEmpty else { return }
         let service = feedService
         // Stamp `lastRefreshedAt` (an observable property) once per batch, not
@@ -3356,6 +3454,7 @@ public final class ReaderStore {
     }
 
     private func refreshFeed(_ feed: Feed) async {
+        guard !Self.isManagedFeed(feed.id) else { return }
         guard !isPreparingLocalReset else { return }
         do {
             _ = try await fetch(url: feed.feedURL, existingFeedID: feed.id)
