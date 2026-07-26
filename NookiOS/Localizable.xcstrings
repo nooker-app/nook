@@ -2,7 +2,9 @@
   "sourceLanguage": "en",
   "strings": {
     "": {},
-    "%lld": {},
+    "%lld": {
+      "shouldTranslate": false
+    },
     "%lld min": {
       "localizations": {
         "en": {
@@ -61,16 +63,11 @@
       }
     },
     "%lld/%lld": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$lld/%2$lld"
-          }
-        }
-      }
+      "shouldTranslate": false
     },
-    "99+": {},
+    "99+": {
+      "shouldTranslate": false
+    },
     "About": {
       "localizations": {
         "en": {
@@ -341,7 +338,28 @@
         }
       }
     },
-    "Article Rules": {},
+    "Article Rules": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "記事ルール"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 규칙"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文章规则"
+          }
+        }
+      }
+    },
     "At the end of a story, keep pulling up past the bottom to jump to the next one.": {
       "localizations": {
         "ja": {
@@ -968,7 +986,28 @@
         }
       }
     },
-    "Couldn't refresh this feed": {},
+    "Couldn't refresh this feed": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このフィードを更新できませんでした"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 피드를 새로고침하지 못했어요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法刷新此订阅源"
+          }
+        }
+      }
+    },
     "Create": {
       "localizations": {
         "en": {
@@ -1181,7 +1220,28 @@
         }
       }
     },
-    "Deletes all saved title translations on this device. Titles are translated again as you view them.": {},
+    "Deletes all saved title translations on this device. Titles are translated again as you view them.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この端末に保存されたタイトル翻訳をすべて削除します。タイトルは表示時に再度翻訳されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에 저장된 제목 번역을 모두 삭제해요. 제목은 다시 볼 때 새로 번역돼요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除本机上保存的所有标题翻译。再次浏览时会重新翻译标题。"
+          }
+        }
+      }
+    },
     "Deselect All": {
       "localizations": {
         "en": {
@@ -3736,7 +3796,28 @@
         }
       }
     },
-    "Open in Safari": {},
+    "Open in Safari": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safariで開く"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safari에서 열기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Safari 中打开"
+          }
+        }
+      }
+    },
     "Or follow a site by its address": {
       "localizations": {
         "ja": {
@@ -6428,7 +6509,9 @@
         }
       }
     },
-    "https://example.com": {},
+    "https://example.com": {
+      "shouldTranslate": false
+    },
     "https://example.com/feed.xml": {
       "extractionState": "stale",
       "localizations": {

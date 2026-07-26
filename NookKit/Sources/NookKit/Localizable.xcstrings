@@ -3,14 +3,7 @@
   "strings": {
     "": {},
     "%@%@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@%2$@"
-          }
-        }
-      }
+      "shouldTranslate": false
     },
     "%lld articles downloaded": {
       "localizations": {
@@ -81,14 +74,7 @@
       }
     },
     "%lld/%lld": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$lld/%2$lld"
-          }
-        }
-      }
+      "shouldTranslate": false
     },
     "'%@' is not a valid URL.": {
       "localizations": {
@@ -448,7 +434,28 @@
         }
       }
     },
-    "Apple Intelligence": {},
+    "Apple Intelligence": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence"
+          }
+        }
+      }
+    },
     "Article list titles": {
       "localizations": {
         "ja": {
@@ -1692,7 +1699,28 @@
         }
       }
     },
-    "Gemini": {},
+    "Gemini": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemini"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemini"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemini"
+          }
+        }
+      }
+    },
     "Gemini API key": {
       "localizations": {
         "ja": {
@@ -2207,7 +2235,28 @@
         }
       }
     },
-    "Match in": {},
+    "Match in": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "対象"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용 대상"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匹配范围"
+          }
+        }
+      }
+    },
     "Matches are tidied away": {
       "localizations": {
         "en": {
@@ -2604,7 +2653,28 @@
         }
       }
     },
-    "OK": {},
+    "OK": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
     "Off — this filter isn't hiding anything.": {
       "localizations": {
         "en": {
@@ -3743,7 +3813,28 @@
         }
       }
     },
-    "Translating…": {},
+    "Translating…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "翻訳中…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "번역 중…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "翻译中…"
+          }
+        }
+      }
+    },
     "Try Again": {
       "localizations": {
         "ja": {
