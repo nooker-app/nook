@@ -580,7 +580,9 @@ private struct FeedSidebar: View {
                     onAddFeed()
                 } label: {
                     Label("Add Feed", systemImage: "plus")
+                        .modifier(SidebarCapsuleGlassModifier())
                 }
+                .buttonStyle(.plain)
                 // Allowed during a refresh: adding cancels the in-flight refresh
                 // and re-runs it afterward (see ReaderStore.addFeed).
                 .disabled(!store.isStorageConfigured)
@@ -594,7 +596,9 @@ private struct FeedSidebar: View {
                     isCreatingFolder = true
                 } label: {
                     Image(systemName: "folder.badge.plus")
+                        .modifier(SidebarCapsuleGlassModifier())
                 }
+                .buttonStyle(.plain)
                 .help("New Folder")
                 .disabled(!store.isStorageConfigured)
 
@@ -610,7 +614,9 @@ private struct FeedSidebar: View {
                     .disabled(store.feeds.isEmpty)
                 } label: {
                     Image(systemName: "ellipsis")
+                        .modifier(SidebarCapsuleGlassModifier())
                 }
+                .buttonStyle(.plain)
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Import or export subscriptions (OPML)")
@@ -953,6 +959,24 @@ private struct FeedSidebar: View {
                 Text(title)
             }
         }
+    }
+}
+
+private struct SidebarCapsuleGlassModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .glassEffect(
+                .regular
+                    .tint(Color.primary.opacity(0.08))
+                    .interactive(),
+                in: Capsule()
+            )
+            .overlay {
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5)
+            }
     }
 }
 
