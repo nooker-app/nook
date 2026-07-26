@@ -45,6 +45,9 @@ struct ReaderDetailView: View {
     @AppStorage("readerBackgroundHex") private var readerBackgroundHex = "#FFFFFF"
     @AppStorage("readerTextOption") private var readerTextOption = ReaderColorOption.automatic
     @AppStorage("readerTextHex") private var readerTextHex = "#1A1A1A"
+    @AppStorage("readerControlHand") private var defaultControlSide = ReaderControlSide.right
+    @AppStorage("readerHandedness") private var readerHandedness = ReaderHandedness.right
+    @AppStorage("readerAdaptiveControlsEnabled") private var adaptiveControlsEnabled = true
 
     @State private var isShowingInfo = false
     @State private var confirmingDelete = false
@@ -61,6 +64,14 @@ struct ReaderDetailView: View {
     @State private var imagePresenter = ArticleImagePresenter()
     @State private var haptics = ReaderHaptics()
     @State private var pendingBuildup: Task<Void, Never>?
+    /// Session-only override inferred from qualified native-reader scrolls. The
+    /// configured default remains untouched and is restored as soon as the policy
+    /// sees scrolling return to that side.
+    @State private var controlsAreAdaptivelyMirrored = false
+    /// Non-observable storage keeps the first few evidence samples from
+    /// invalidating the reader. SwiftUI state changes only when the effective
+    /// control layout actually changes.
+    @State private var handAdaptation = HandAdaptationBookkeeping()
 
     // Native title handling: the full title renders inline at the top of the
     // article; once it scrolls up under the navigation bar, the bar's own title
@@ -88,6 +99,22 @@ struct ReaderDetailView: View {
     private final class ScrollBookkeeping {
         var lastY: CGFloat = 0
         var accum: CGFloat = 0
+    }
+
+    @MainActor
+    private final class HandAdaptationBookkeeping {
+        private var policy = ReaderControlAdaptationPolicy()
+
+        func record(
+            _ observedSide: ReaderControlSide,
+            primaryHand: ReaderHandedness
+        ) -> Bool {
+            policy.record(observedSide, primaryHand: primaryHand)
+        }
+
+        func reset() {
+            policy.reset()
+        }
     }
     /// A bottom-edge pull clears only the floating action bar so the next-article
     /// indicator can own that space. It deliberately does not change `chromeHidden`:
@@ -320,6 +347,15 @@ struct ReaderDetailView: View {
                         }
                     }
                 ))
+                // This marker lives INSIDE the scroll content, so its ancestor
+                // chain reliably reaches the outer UIScrollView. It adds a target
+                // to that view's existing pan recognizer rather than introducing
+                // another recognizer, leaving horizontal pop gestures untouched.
+                .background {
+                    ReaderScrollPanObserver(enabled: adaptiveControlsEnabled) { side in
+                        recordReaderScroll(from: side)
+                    }
+                }
             }
             // Pull past the bottom for the next article, past the top for the
             // previous one. The web reader keeps its own bottom-only affordance.
@@ -510,6 +546,15 @@ struct ReaderDetailView: View {
         .onChange(of: store.readerContentState(for: article)) { _, newValue in
             guard nativeTranslator.isActive, case .ready(let extracted) = newValue else { return }
             nativeTranslator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
+        }
+        .onChange(of: defaultControlSide) { _, _ in
+            resetHandAdaptation()
+        }
+        .onChange(of: readerHandedness) { _, _ in
+            resetHandAdaptation()
+        }
+        .onChange(of: adaptiveControlsEnabled) { _, _ in
+            resetHandAdaptation()
         }
         .translationPresentation(
             isPresented: $isShowingTranslation,
@@ -724,71 +769,20 @@ struct ReaderDetailView: View {
     /// pull indicator owns the same space.
     private func readerBottomBar(_ article: Article) -> some View {
         let isHidden = chromeHidden || bottomPullEngaged
+        let effectiveSide = adaptiveControlsEnabled && controlsAreAdaptivelyMirrored
+            ? defaultControlSide.opposite
+            : defaultControlSide
         return GlassBarContainer {
             HStack(spacing: 0) {
-                HStack(spacing: 2) {
-                    ArticleShareMenu(
-                        articleURL: article.url,
-                        title: article.title,
-                        markdown: {
-                            nativeTranslator.translatedMarkdown
-                                ?? store.nativeReaderMarkdown(for: article)
-                        }
-                    ) { copied in
-                        Image(systemName: copied ? "checkmark" : "square.and.arrow.up")
-                            .font(.system(size: 20))
-                            .frame(width: 52, height: 48)
-                    }
-                    Button {
-                        let willStar = !article.isStarred
-                        store.toggleStarred(articleID: article.id)
-                        haptics.star(on: willStar)
-                    } label: {
-                        Image(systemName: article.isStarred ? "star.fill" : "star")
-                            .font(.system(size: 20))
-                            .contentTransition(.symbolEffect(.replace))
-                            .frame(width: 52, height: 48)
-                    }
+                if effectiveSide == .right {
+                    readerSecondaryControls(article, for: effectiveSide)
+                    Spacer(minLength: 0)
+                    readerPrimaryControls(article, for: effectiveSide)
+                } else {
+                    readerPrimaryControls(article, for: effectiveSide)
+                    Spacer(minLength: 0)
+                    readerSecondaryControls(article, for: effectiveSide)
                 }
-                .glassCapsule()
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 2) {
-                    // Translate is offered only when the article's language differs
-                    // from the reader's — surfaced here for one-tap access.
-                    if canTranslate {
-                        Button {
-                            toggleTranslation(article)
-                        } label: {
-                            Group {
-                                if translationBusy {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Image(systemName: translationActive(article) ? "character.bubble.fill" : "character.bubble")
-                                        .font(.system(size: 20))
-                                        .contentTransition(.symbolEffect(.replace))
-                                }
-                            }
-                            .frame(width: 52, height: 48)
-                        }
-                        .disabled(translationBusy)
-                        .help(translationActive(article) ? "Show Original" : "Translate")
-                    }
-
-                    Button {
-                        openBrowser(for: article)
-                    } label: {
-                        Image(systemName: "doc.plaintext")
-                            .font(.system(size: 20))
-                            .frame(width: 52, height: 48)
-                    }
-                    // Publish the real capsule frame so the coach mark spotlights it.
-                    .reportGlobalFrame(OriginalButtonFrameKey.self)
-                    .help("Open Reader / Original")
-                }
-                .glassCapsule()
-                .animation(.easeInOut(duration: 0.2), value: canTranslate)
             }
             .tint(Color("AccentColor"))
             .foregroundStyle(Color.accentColor)
@@ -798,6 +792,127 @@ struct ReaderDetailView: View {
         .opacity(isHidden ? 0 : 1)
         .allowsHitTesting(!isHidden)
         .animation(.easeInOut(duration: 0.25), value: isHidden)
+        .animation(.snappy(duration: 0.3), value: effectiveSide)
+    }
+
+    /// Frequent reading actions. These favor the configured/effective side.
+    @ViewBuilder
+    private func readerPrimaryControls(
+        _ article: Article,
+        for side: ReaderControlSide
+    ) -> some View {
+        HStack(spacing: 2) {
+            if side == .left {
+                readerOpenButton(article)
+                readerTranslateButton(article)
+            } else {
+                readerTranslateButton(article)
+                readerOpenButton(article)
+            }
+        }
+        .glassCapsule()
+        .animation(.easeInOut(duration: 0.2), value: canTranslate)
+    }
+
+    @ViewBuilder
+    private func readerSecondaryControls(
+        _ article: Article,
+        for side: ReaderControlSide
+    ) -> some View {
+        HStack(spacing: 2) {
+            if side == .left {
+                readerStarButton(article)
+                readerShareButton(article)
+            } else {
+                readerShareButton(article)
+                readerStarButton(article)
+            }
+        }
+        .glassCapsule()
+    }
+
+    @ViewBuilder
+    private func readerTranslateButton(_ article: Article) -> some View {
+        if canTranslate {
+            Button {
+                toggleTranslation(article)
+            } label: {
+                Group {
+                    if translationBusy {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: translationActive(article) ? "character.bubble.fill" : "character.bubble")
+                            .font(.system(size: 20))
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                }
+                .frame(width: 52, height: 48)
+            }
+            .disabled(translationBusy)
+            .help(translationActive(article) ? "Show Original" : "Translate")
+        }
+    }
+
+    private func readerOpenButton(_ article: Article) -> some View {
+        Button {
+            openBrowser(for: article)
+        } label: {
+            Image(systemName: "doc.plaintext")
+                .font(.system(size: 20))
+                .frame(width: 52, height: 48)
+        }
+        .reportGlobalFrame(OriginalButtonFrameKey.self)
+        .help("Open Reader / Original")
+    }
+
+    private func readerShareButton(_ article: Article) -> some View {
+        ArticleShareMenu(
+            articleURL: article.url,
+            title: article.title,
+            markdown: {
+                nativeTranslator.translatedMarkdown
+                    ?? store.nativeReaderMarkdown(for: article)
+            }
+        ) { copied in
+            Image(systemName: copied ? "checkmark" : "square.and.arrow.up")
+                .font(.system(size: 20))
+                .frame(width: 52, height: 48)
+        }
+    }
+
+    private func readerStarButton(_ article: Article) -> some View {
+        Button {
+            let willStar = !article.isStarred
+            store.toggleStarred(articleID: article.id)
+            haptics.star(on: willStar)
+        } label: {
+            Image(systemName: article.isStarred ? "star.fill" : "star")
+                .font(.system(size: 20))
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 52, height: 48)
+        }
+    }
+
+    private func resetHandAdaptation() {
+        handAdaptation.reset()
+        withAnimation(.snappy(duration: 0.3)) {
+            controlsAreAdaptivelyMirrored = false
+        }
+    }
+
+    /// Records one already-qualified vertical scroll sample. Handedness decides
+    /// whether the DEFAULT layout remains in force; control placement is a
+    /// separate preference and is only mirrored for opposite-hand use.
+    private func recordReaderScroll(from observedSide: ReaderControlSide) {
+        guard adaptiveControlsEnabled else { return }
+        let shouldMirror = handAdaptation.record(
+            observedSide,
+            primaryHand: readerHandedness
+        )
+        guard shouldMirror != controlsAreAdaptivelyMirrored else { return }
+        withAnimation(.snappy(duration: 0.3)) {
+            controlsAreAdaptivelyMirrored = shouldMirror
+        }
     }
 
     // MARK: - Translation
@@ -892,6 +1007,145 @@ struct ReaderDetailView: View {
         }
     }
 
+}
+
+/// Passively observes the native reader's EXISTING UIScrollView pan recognizer.
+/// Adding a target does not participate in gesture arbitration, so UIKit remains
+/// free to give a horizontal drag to NavigationStack's interactive pop gesture.
+/// The observer reports only completed, clearly vertical reading scrolls.
+private struct ReaderScrollPanObserver: UIViewRepresentable {
+    var enabled: Bool
+    var onQualifiedScroll: (ReaderControlSide) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(enabled: enabled, onQualifiedScroll: onQualifiedScroll)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let marker = UIView(frame: .zero)
+        marker.backgroundColor = .clear
+        marker.isUserInteractionEnabled = false
+        return marker
+    }
+
+    func updateUIView(_ marker: UIView, context: Context) {
+        context.coordinator.enabled = enabled
+        context.coordinator.onQualifiedScroll = onQualifiedScroll
+        context.coordinator.isActive = true
+
+        if enabled {
+            context.coordinator.scheduleAttachment(from: marker)
+        } else {
+            context.coordinator.detach()
+        }
+    }
+
+    static func dismantleUIView(_ marker: UIView, coordinator: Coordinator) {
+        coordinator.isActive = false
+        coordinator.detach()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var enabled: Bool
+        var onQualifiedScroll: (ReaderControlSide) -> Void
+        var isActive = true
+
+        private weak var scrollView: UIScrollView?
+        private var beganOnSide: ReaderControlSide?
+        private var attachmentScheduled = false
+
+        init(
+            enabled: Bool,
+            onQualifiedScroll: @escaping (ReaderControlSide) -> Void
+        ) {
+            self.enabled = enabled
+            self.onQualifiedScroll = onQualifiedScroll
+        }
+
+        /// SwiftUI can update the representable before it has joined the UIKit
+        /// hierarchy. Retry across a few run-loop turns; once attached, later
+        /// updates are constant-time.
+        func scheduleAttachment(from marker: UIView, attemptsRemaining: Int = 4) {
+            guard isActive, enabled, scrollView == nil, !attachmentScheduled else { return }
+            attachmentScheduled = true
+            DispatchQueue.main.async { [weak self, weak marker] in
+                guard let self else { return }
+                self.attachmentScheduled = false
+                guard self.isActive, self.enabled, let marker else { return }
+                if !self.attachIfPossible(from: marker), attemptsRemaining > 1 {
+                    self.scheduleAttachment(
+                        from: marker,
+                        attemptsRemaining: attemptsRemaining - 1
+                    )
+                }
+            }
+        }
+
+        @discardableResult
+        private func attachIfPossible(from marker: UIView) -> Bool {
+            var ancestor = marker.superview
+            while let current = ancestor, !(current is UIScrollView) {
+                ancestor = current.superview
+            }
+            guard let resolved = ancestor as? UIScrollView else { return false }
+
+            scrollView = resolved
+            resolved.panGestureRecognizer.addTarget(self, action: #selector(handlePan(_:)))
+            return true
+        }
+
+        func detach() {
+            scrollView?.panGestureRecognizer.removeTarget(
+                self,
+                action: #selector(handlePan(_:))
+            )
+            scrollView = nil
+            beganOnSide = nil
+        }
+
+        @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard enabled, let scrollView else {
+                beganOnSide = nil
+                return
+            }
+
+            switch gesture.state {
+            case .began:
+                let width = scrollView.bounds.width
+                guard width > 0 else {
+                    beganOnSide = nil
+                    return
+                }
+                let xRatio = gesture.location(in: scrollView).x / width
+                if xRatio <= 0.42 {
+                    beganOnSide = .left
+                } else if xRatio >= 0.58 {
+                    beganOnSide = .right
+                } else {
+                    // The middle band is deliberately weak evidence of either
+                    // hand, so it never moves the controls.
+                    beganOnSide = nil
+                }
+
+            case .ended:
+                defer { beganOnSide = nil }
+                guard let beganOnSide else { return }
+                let movement = gesture.translation(in: scrollView)
+                guard abs(movement.y) >= 44,
+                      abs(movement.y) > abs(movement.x) * 1.35 else { return }
+                onQualifiedScroll(beganOnSide)
+
+            case .cancelled, .failed:
+                // Interactive pop normally causes the scroll pan to fail/cancel.
+                // Such a horizontal navigation gesture is never adaptation data.
+                beganOnSide = nil
+
+            default:
+                break
+            }
+        }
+    }
 }
 
 /// Restores the navigation stack's left-edge swipe-to-go-back while a pushed

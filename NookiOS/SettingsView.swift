@@ -337,6 +337,11 @@ private struct ReaderSettingsScreen: View {
     @AppStorage("readerBackgroundHex") private var readerBackgroundHex = "#FFFFFF"
     @AppStorage("readerTextOption") private var readerTextOption = ReaderColorOption.automatic
     @AppStorage("readerTextHex") private var readerTextHex = "#1A1A1A"
+    // Keep the original defaults key so people who already chose a side retain
+    // that exact layout after the setting is reframed around control placement.
+    @AppStorage("readerControlHand") private var defaultControlSide = ReaderControlSide.right
+    @AppStorage("readerHandedness") private var readerHandedness = ReaderHandedness.right
+    @AppStorage("readerAdaptiveControlsEnabled") private var adaptiveControlsEnabled = true
 
     private var backgroundColor: Binding<Color> {
         Binding { Color(hex: readerBackgroundHex) } set: { readerBackgroundHex = $0.hexString }
@@ -374,6 +379,27 @@ private struct ReaderSettingsScreen: View {
                 if readerTextOption == .custom {
                     ColorPicker("Text Color", selection: textColor, supportsOpacity: false)
                 }
+            }
+            .warmRows()
+
+            Section {
+                Picker("Default Position", selection: $defaultControlSide) {
+                    Text("Left Side").tag(ReaderControlSide.left)
+                    Text("Right Side").tag(ReaderControlSide.right)
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Primary Hand", selection: $readerHandedness) {
+                    Text("Left Hand").tag(ReaderHandedness.left)
+                    Text("Right Hand").tag(ReaderHandedness.right)
+                }
+                .pickerStyle(.segmented)
+
+                Toggle("Adapt to scrolling side", isOn: $adaptiveControlsEnabled)
+            } header: {
+                Text("Bottom Controls")
+            } footer: {
+                Text("Choose your default control position separately from your primary hand. Adaptive mode keeps that layout while you scroll with your primary hand, mirrors it after several scrolls with the other hand, and restores it when you switch back.")
             }
             .warmRows()
         }
