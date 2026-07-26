@@ -511,6 +511,8 @@ private struct CompactShell: View {
     @State private var showListHint = false
     /// The first article row's measured global frame, for an exact spotlight.
     @State private var firstRowFrame: CGRect = .zero
+    /// When the Home tab was last re-tapped, for double-tap segment cycling.
+    @State private var lastHomeReselect: ContinuousClock.Instant?
 
     var body: some View {
         TabView(selection: $selection) {
@@ -649,12 +651,33 @@ private struct CompactShell: View {
     }
 
     /// Native tab-bar re-tap semantics: a drilled-in Feeds tab pops to its
-    /// root; everything else scrolls the visible list back to the top.
+    /// root; everything else scrolls the visible list back to the top. On the
+    /// Home tab, a quick second re-tap (double-tap) cycles the segment
+    /// (Unread → Today → All) instead — and each further tap inside the window
+    /// keeps cycling. Only re-taps count, so arriving from another tab (a
+    /// selection change) can never trigger it.
     private func handleTabReselect(_ tab: AppTab) {
-        if tab == .feeds, !feedsPath.isEmpty {
+        if tab == .home {
+            let now = ContinuousClock.now
+            if let last = lastHomeReselect, last.duration(to: now) < .milliseconds(400) {
+                advanceHomeFilter()
+            } else {
+                tabChrome.requestScrollToTop()
+            }
+            lastHomeReselect = now
+        } else if tab == .feeds, !feedsPath.isEmpty {
             withAnimation { feedsPath.removeAll() }
         } else {
             tabChrome.requestScrollToTop()
+        }
+    }
+
+    /// Cycles Home's segmented filter to the next source, wrapping around.
+    private func advanceHomeFilter() {
+        let order: [SmartSource] = [.unread, .today, .all]
+        guard let index = order.firstIndex(of: homeFilter) else { return }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            homeFilter = order[(index + 1) % order.count]
         }
     }
 
