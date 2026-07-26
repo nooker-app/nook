@@ -41,6 +41,25 @@ public final class ReaderStore {
     /// the write); only the didSet recomputes are skipped.
     private var suppressArticlesDidSet = false
 
+    /// Article ids with an active deletion tombstone, across every known shard
+    /// (this device's and peers'). Deletion tombstones are applied by the CRDT
+    /// `materialize`, but a refresh merge inserts whatever the feed still
+    /// serves — without this guard a deleted article whose entry is still in
+    /// the RSS response resurrects on every refresh, only to vanish again at
+    /// the next materialize (the flapping this set exists to prevent).
+    /// Maintained by `deleteArticle` and refreshed whenever shards are loaded
+    /// (bootstrap, folder configure, `reloadMerged`).
+    private(set) var deletedArticleIDs: Set<Article.ID> = []
+
+    /// The active deletion tombstones across `shards`, with the same LWW merge
+    /// semantics `materialize` applies.
+    nonisolated static func tombstonedArticleIDs(in shards: [DeviceStateDocument]) -> Set<Article.ID> {
+        let merged = DeviceStateDocument.mergedState(from: shards)
+        return Set(merged.articles.compactMap { id, state in
+            state.tombstone?.value == true ? id : nil
+        })
+    }
+
     // Sidebar badge counts, recomputed in a single pass whenever `articles`
     // changes, so rendering a feed/folder/source badge is an O(1)/O(feeds)
     // lookup instead of an O(articles) scan on every re-render (the sidebar
@@ -1017,6 +1036,8 @@ public final class ReaderStore {
     private func mergeShardsAndApply(base: ReaderLibrary, storage: ReaderStorage) {
         let shards = observedShards(from: storage)
         witness(shards)
+        // Freshly loaded shards are the authority on deletions (peers' too).
+        deletedArticleIDs = Self.tombstonedArticleIDs(in: shards)
         apply(DeviceStateDocument.materialize(base: base, shards: shards))
     }
 
@@ -1059,7 +1080,7 @@ public final class ReaderStore {
         let generationBefore = ownShardSnapshot.generation
         let deviceID = deviceID
         let loaded = await Task.detached(priority: .userInitiated) {
-            () -> (ReplicaSnapshot, HLC, ReaderLibrary, PrecomputedFilterState)? in
+            () -> (ReplicaSnapshot, HLC, ReaderLibrary, PrecomputedFilterState, Set<Article.ID>)? in
             guard let snapshot = try? replicaStore.reconcile(storage: storage) else { return nil }
             try? replicaStore.publishIfNeeded(to: storage)
             // Fold in this device's authoritative in-memory shard (a
@@ -1074,10 +1095,11 @@ public final class ReaderStore {
             let precomputed = ReaderStore.precomputeFilterState(
                 articles: merged.articles, filters: merged.filters, categories: merged.categories
             )
-            return (snapshot, folded, merged, precomputed)
+            let deleted = ReaderStore.tombstonedArticleIDs(in: peers + [ownShardSnapshot])
+            return (snapshot, folded, merged, precomputed, deleted)
         }.value
         guard !isPreparingLocalReset,
-              let (snapshot, foldedPeerHLC, mergedRaw, precomputed) = loaded,
+              let (snapshot, foldedPeerHLC, mergedRaw, precomputed, deleted) = loaded,
               snapshot.revision >= appliedReplicaRevision else { return }
         // A refresh may have started during the off-main decode; its in-memory
         // articles would be newer than this disk snapshot, so don't clobber them.
@@ -1089,6 +1111,9 @@ public final class ReaderStore {
 
         lastHLC = lastHLC.witnessed(foldedPeerHLC)
         ownShard.clock = lastHLC
+        // The shard scan is the authority on deletions, including peers'
+        // (a peer-deleted article must not resurrect via OUR next refresh).
+        deletedArticleIDs = deleted
         // Fill bodies from the cache so the (list-light) baseline's stripped
         // bodies don't read as a change and the applied result keeps content.
         // Hydration stays on the main actor: `bodyCache` can advance while the
@@ -2699,6 +2724,10 @@ public final class ReaderStore {
         readerContentStates[articleID] = nil
         retainedArticleIDs.remove(articleID)
         recordArticleDeleted(articleID)
+        // Guard the refresh merge immediately: the feed most likely still
+        // serves this article, and without the local set it would re-insert on
+        // the very next refresh (the tombstone only applies at materialize).
+        deletedArticleIDs.insert(articleID)
         // Tombstones write through immediately — losing a delete on a kill is
         // worse than losing a read bit.
         scheduleShardSave(urgent: true)
@@ -3039,6 +3068,7 @@ public final class ReaderStore {
         var foldedPeerHLC: HLC
         var merged: ReaderLibrary
         var precomputed: PrecomputedFilterState
+        var deletedArticleIDs: Set<Article.ID>
         var hasLegacySeed: Bool
         var libraryModDate: Date?
         var stateModDate: Date?
@@ -3076,7 +3106,9 @@ public final class ReaderStore {
         )
         return SyncFolderLoad(
             ownShard: own, replica: replica, snapshot: snapshot, foldedPeerHLC: folded,
-            merged: merged, precomputed: precomputed, hasLegacySeed: hasLegacySeed,
+            merged: merged, precomputed: precomputed,
+            deletedArticleIDs: tombstonedArticleIDs(in: peers + [own]),
+            hasLegacySeed: hasLegacySeed,
             libraryModDate: storage.libraryModificationDate,
             stateModDate: storage.stateDirectoryModificationDate,
             contentModDate: storage.contentDirectoryModificationDate,
@@ -3113,6 +3145,7 @@ public final class ReaderStore {
             lastHLC = load.ownShard.clock.witnessed(load.foldedPeerHLC)
             ownShard.clock = lastHLC
             replicaStore = load.replica
+            deletedArticleIDs = load.deletedArticleIDs
             if load.snapshot.revision >= appliedReplicaRevision {
                 if !load.snapshot.bodies.isEmpty { bodyCache.merge(load.snapshot.bodies) { _, new in new } }
                 apply(load.merged, precomputed: load.precomputed)
@@ -3400,6 +3433,16 @@ public final class ReaderStore {
         }
     }
 
+    /// Test-only factory (the app uses `shared`): lets regression tests drive
+    /// store flows on an isolated instance without touching global state.
+    static func _makeForTesting() -> ReaderStore { ReaderStore() }
+
+    /// Test-only entry into the refresh merge path (`merge` stays private so
+    /// production callers can't bypass the batching buffer by accident).
+    func _mergeForTesting(_ parsedFeed: ParsedFeed) {
+        merge(parsedFeed, animated: false)
+    }
+
     /// Single-feed merge — a batch of one. Kept as the entry point for every
     /// single-feed path (add feed, refresh one feed, OPML import) so those stay
     /// immediate and never ride the refresh batching buffer.
@@ -3488,6 +3531,11 @@ public final class ReaderStore {
 
             var feedGainedNewArticles = false
             for newArticle in parsedFeed.articles {
+                // A deleted article's entry usually survives in the feed's
+                // response for days; re-inserting it here would resurrect it
+                // until the next materialize re-applies the tombstone — over
+                // and over, once per refresh. Deletions win.
+                if deletedArticleIDs.contains(newArticle.id) { continue }
                 var article = newArticle
                 if let existing = existingArticlesByID[article.id] {
                     article.isRead = existing.isRead
@@ -3574,7 +3622,8 @@ public final class ReaderStore {
         // re-merge (which reloads the list-light baseline) restores these bodies
         // rather than blanking them until the next refresh.
         for parsedFeed in batch {
-            for article in parsedFeed.articles where article.hasBody {
+            for article in parsedFeed.articles
+            where article.hasBody && !deletedArticleIDs.contains(article.id) {
                 bodyCache[article.id] = article.body
             }
         }
