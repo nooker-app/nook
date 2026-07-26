@@ -130,9 +130,11 @@ public final class ReaderStore {
         case mergingDevices
 
         public var label: String {
+            // Storage-agnostic phrasing: the same pipeline serves both the
+            // iOS local library and a synced iCloud folder.
             switch self {
-            case .connectingFolder: String(localized: "Connecting your sync folder…", bundle: .module)
-            case .readingLibrary: String(localized: "Reading your library…", bundle: .module)
+            case .connectingFolder: String(localized: "Opening your library…", bundle: .module)
+            case .readingLibrary: String(localized: "Loading your articles…", bundle: .module)
             case .mergingDevices: String(localized: "Merging changes from your devices…", bundle: .module)
             }
         }
@@ -706,6 +708,10 @@ public final class ReaderStore {
     public func configureSyncFolder(_ directoryURL: URL) {
         do {
             try ReaderStorage.saveBookmark(for: directoryURL)
+            // A real folder supersedes the app-local library mode; the flag
+            // must clear so a later broken bookmark can't silently fall back
+            // to (and shadow the real library with) stale local data.
+            UserDefaults.standard.set(false, forKey: Self.usesLocalLibraryKey)
             startAccessing(directoryURL)
 
             let storage = ReaderStorage(directoryURL: directoryURL)
@@ -2744,9 +2750,63 @@ public final class ReaderStore {
         }
     }
 
+    /// UserDefaults sentinel for the iOS "local library" mode: the library
+    /// lives in the app's own Documents container, recorded as a flag rather
+    /// than a bookmark because container paths change with every app update
+    /// (a bookmark would resolve stale and alert the user for no reason).
+    public static let usesLocalLibraryKey = "usesLocalLibrary"
+
+    /// Whether the library currently lives in app-local storage (no sync
+    /// folder chosen yet). Drives the "move to iCloud" promotion surfaces.
+    public var usesLocalLibrary: Bool {
+        UserDefaults.standard.bool(forKey: Self.usesLocalLibraryKey)
+    }
+
+    /// The app-local library directory for the local-first mode.
+    private nonisolated static func localLibraryURL() -> URL? {
+        guard let documents = try? FileManager.default.url(
+            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        ) else { return nil }
+        let directory = documents.appendingPathComponent("Nook", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    /// iOS-only first-run path (the iOS app calls this right after bootstrap;
+    /// macOS keeps its explicit iCloud-folder product policy): brings a local
+    /// library online so nothing — adding sites, reading, starring — is gated
+    /// on the folder picker. Guarded so an EXISTING user whose bookmark failed
+    /// to resolve never gets an empty local library shadowing their real one:
+    /// any prior folder record (display path) disqualifies the fresh-install
+    /// path.
+    public func configureLocalStorageIfNeeded() async {
+        guard storage == nil, let localURL = Self.localLibraryURL() else { return }
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: Self.usesLocalLibraryKey) {
+            guard defaults.string(forKey: ReaderStorage.displayPathDefaultsKey) == nil else { return }
+            defaults.set(true, forKey: Self.usesLocalLibraryKey)
+        }
+        let storage = ReaderStorage(directoryURL: localURL)
+        self.storage = storage
+        do {
+            try await bringSyncFolderOnline(storage: storage, directoryURL: localURL)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func restoreStorageIfPossible() async {
         do {
             guard let directoryURL = try ReaderStorage.resolveBookmarkedDirectory() else {
+                // Returning local-library user (iOS): reconstruct storage from
+                // the CURRENT container path — never from a stored bookmark.
+                if UserDefaults.standard.bool(forKey: Self.usesLocalLibraryKey),
+                   let localURL = Self.localLibraryURL() {
+                    let storage = ReaderStorage(directoryURL: localURL)
+                    self.storage = storage
+                    try await bringSyncFolderOnline(storage: storage, directoryURL: localURL)
+                    return
+                }
                 syncFolderDisplayPath = UserDefaults.standard.string(forKey: ReaderStorage.displayPathDefaultsKey)
                 return
             }

@@ -83,6 +83,11 @@ struct RootView: View {
                     // serializing them: launch takes max(bootstrap, 1.85s), not the sum.
                     let splashStart = ContinuousClock.now
                     await store.bootstrap()
+                    // First run (iOS only): bring a local library online so the
+                    // tour can subscribe starter picks — and reading works —
+                    // before any folder is ever chosen. No-op for existing
+                    // users and once a real sync folder is configured.
+                    await store.configureLocalStorageIfNeeded()
                     // Keep the splash up while the nest assembles and the wordmark
                     // appears, then reveal the loaded UI.
                     let remaining = .milliseconds(1850) - splashStart.duration(to: .now)
@@ -265,8 +270,6 @@ private struct RegularShell: View {
     @State private var importKind: ImportKind = .folder
     @State private var isImporting = false
     @State private var isAddingFeed = false
-    /// True when Add Feed was opened by the tutorial, so it shows a paste hint.
-    @State private var addFeedIsTutorial = false
     @State private var isExportingOPML = false
     @State private var opmlImport: OPMLImportRequest?
     @State private var isCreatingFolder = false
@@ -317,15 +320,8 @@ private struct RegularShell: View {
         ) { result in
             store.handleOPMLExport(result)
         }
-        .onChange(of: tour.wantsAddSampleFeed) { _, want in
-            if want {
-                tour.wantsAddSampleFeed = false
-                addFeedIsTutorial = true
-                isAddingFeed = true
-            }
-        }
-        .sheet(isPresented: $isAddingFeed, onDismiss: { addFeedIsTutorial = false }) {
-            AddFeedView(folders: store.feedFolders, tutorialPaste: addFeedIsTutorial) { feedURL, folder in
+        .sheet(isPresented: $isAddingFeed) {
+            AddFeedView(folders: store.feedFolders) { feedURL, folder in
                 try await store.addFeed(urlString: feedURL, toFolder: folder)
             }
         }
@@ -593,13 +589,9 @@ private struct CompactShell: View {
             // minimize behavior and Instagram's).
             tabChrome.expand()
         }
-        // Tutorial hand-off: the welcome cover asks to add the starter feed (jump
-        // to Feeds, where Add Feed opens); once the Add Feed sheet is dismissed the
-        // Feeds tab flips `pendingFirstStoryHint`, and the whole "route to Home →
-        // wait for articles → spotlight the list" sequence is serialized here.
-        .onChange(of: tour.wantsAddSampleFeed) { _, want in
-            if want { selection = .feeds }
-        }
+        // Tutorial hand-off: the welcome cover subscribed the starter picks and
+        // flipped `pendingFirstStoryHint`; the "route to Home → wait for
+        // articles → spotlight the list" sequence is serialized here.
         .onChange(of: tour.pendingFirstStoryHint) { _, pending in
             guard pending else { return }
             tour.pendingFirstStoryHint = false
@@ -1190,12 +1182,7 @@ private struct FeedsTab: View {
     @Environment(TourCoordinator.self) private var tour
     @Environment(TabBarChrome.self) private var tabChrome
     @State private var isAddingFeed = false
-    /// True when Add Feed was opened by the tutorial, so it shows a paste hint and
-    /// its success advances the tour to the "open a story" step.
-    @State private var addFeedIsTutorial = false
-    /// Whether the tutorial's Add Feed actually added a feed (so dismissing hands
-    /// off to the list spotlight; a plain Cancel does not).
-    @State private var addFeedSucceeded = false
+    @State private var isShowingStarterPicks = false
     @State private var isCreatingFolder = false
     @State private var newFolderName = ""
     @State private var folderPendingRename: String?
@@ -1317,7 +1304,7 @@ private struct FeedsTab: View {
                         Button {
                             isAddingFeed = true
                         } label: {
-                            Label("Add Feed", systemImage: "plus")
+                            Label("Follow a Site", systemImage: "plus")
                         }
                         Button {
                             isCreatingFolder = true
@@ -1332,6 +1319,25 @@ private struct FeedsTab: View {
             .refreshable { await store.refreshAllAndWait() }
             // Keep the library list's tail above the floating tab bar.
             .modifier(TabBarInset())
+            // Skipped the tour? This is where curiosity lands — teach instead
+            // of showing a bare "All Articles" row.
+            .overlay {
+                if store.feeds.isEmpty {
+                    ContentUnavailableView {
+                        Label("Follow your first site", systemImage: "plus.circle")
+                    } description: {
+                        Text("Nook gathers new posts from the sites you follow — start with a few picks, or any website address.")
+                    } actions: {
+                        Button("Browse Starter Picks") { isShowingStarterPicks = true }
+                            .buttonStyle(.borderedProminent)
+                        Button("Follow a Site by Address") { isAddingFeed = true }
+                    }
+                    .background(Color("ListBackground"))
+                }
+            }
+            .sheet(isPresented: $isShowingStarterPicks) {
+                StarterPicksSheet(store: store)
+            }
             // Native re-tap semantics: at the Feeds root, re-tapping the tab
             // scrolls the library list back to the top.
             .onChange(of: tabChrome.scrollToTopSignal) { _, _ in
@@ -1341,25 +1347,9 @@ private struct FeedsTab: View {
             }
             }
         }
-        // The tutorial asks to add the starter feed: open Add Feed with a paste hint.
-        .onChange(of: tour.wantsAddSampleFeed) { _, want in
-            if want {
-                tour.wantsAddSampleFeed = false
-                addFeedIsTutorial = true
-                isAddingFeed = true
-            }
-        }
-        .sheet(isPresented: $isAddingFeed, onDismiss: {
-            // Signal the hand-off only after the sheet is gone (so the shell doesn't
-            // route Home behind a still-visible sheet), and only if a feed was
-            // actually added (dedupe on replay still counts as success).
-            if addFeedIsTutorial, addFeedSucceeded { tour.pendingFirstStoryHint = true }
-            addFeedIsTutorial = false
-            addFeedSucceeded = false
-        }) {
-            AddFeedView(folders: store.feedFolders, tutorialPaste: addFeedIsTutorial) { feedURL, folder in
+        .sheet(isPresented: $isAddingFeed) {
+            AddFeedView(folders: store.feedFolders) { feedURL, folder in
                 try await store.addFeed(urlString: feedURL, toFolder: folder)
-                addFeedSucceeded = true
             }
         }
         .alert("New Folder", isPresented: $isCreatingFolder) {
@@ -1780,7 +1770,7 @@ private struct Sidebar: View {
                     Button {
                         isAddingFeed = true
                     } label: {
-                        Label("Add Feed", systemImage: "plus")
+                        Label("Follow a Site", systemImage: "plus")
                     }
                     Button {
                         isCreatingFolder = true
@@ -2209,11 +2199,36 @@ private struct ArticleList: View {
         titleTargetLocale.language.languageCode?.identifier ?? "en"
     }
 
-    /// When the Unread view is empty, offer a shortcut to All Articles; otherwise
-    /// the plain "No Articles" state.
+    /// Empty-list states that teach instead of dead-ending: a first refresh in
+    /// flight shows that posts are on their way (the moment right after the
+    /// tour's "Start Reading"), an empty library points at following a site,
+    /// Starred teaches the double-tap, and the empty Unread view offers All.
     @ViewBuilder
     private var emptyState: some View {
-        if let onShowAllArticles,
+        if store.isRefreshing {
+            ContentUnavailableView {
+                Label {
+                    Text("Fetching new posts…")
+                } icon: {
+                    ProgressView()
+                }
+            } description: {
+                Text("Your sites are being checked for their latest posts.")
+            }
+        } else if store.feeds.isEmpty, store.activeSearchQuery.isEmpty {
+            ContentUnavailableView {
+                Label("Follow your first site", systemImage: "plus.circle")
+            } description: {
+                Text("Posts from the sites you follow will gather here.")
+            }
+        } else if store.smartSelection == .starred, store.feedSelection.isEmpty,
+                  store.activeSearchQuery.isEmpty {
+            ContentUnavailableView {
+                Label("Nothing starred yet", systemImage: "star")
+            } description: {
+                Text("Double-tap any article while reading to star it — starred stories live here.")
+            }
+        } else if let onShowAllArticles,
            store.smartSelection == .unread,
            store.feedSelection.isEmpty,
            store.activeSearchQuery.isEmpty {

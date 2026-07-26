@@ -148,11 +148,63 @@ public struct RSSFeedService: Sendable {
     }
 }
 
-private enum FeedLinkDiscovery {
+enum FeedLinkDiscovery {
     static func feedDiscoveryCandidates(in html: String, baseURL: URL) -> [URL] {
+        let platform = platformFeedURLs(for: baseURL)
         let discovered = feedLinks(in: html, baseURL: baseURL)
         let probes = fallbackFeedURLs(for: baseURL)
-        return orderedUniqueURLs(discovered + probes)
+        return orderedUniqueURLs(platform + discovered + probes)
+    }
+
+    /// Canonical feed locations for platforms whose pages advertise nothing —
+    /// most importantly Korean blog hosts. A newcomer's first personal add is
+    /// very likely a Naver blog, whose feed lives on a DIFFERENT host
+    /// (`rss.blog.naver.com`) that neither `<link rel=alternate>` scanning nor
+    /// same-host path probing can ever find.
+    static func platformFeedURLs(for pageURL: URL) -> [URL] {
+        guard let host = pageURL.host()?.lowercased() else { return [] }
+        let pathParts = pageURL.path(percentEncoded: false).split(separator: "/").map(String.init)
+        var urls: [URL] = []
+
+        // Naver blog: blog.naver.com/{id}[/…] (or PostList.naver?blogId={id})
+        // → https://rss.blog.naver.com/{id}.xml
+        if host == "blog.naver.com" || host == "m.blog.naver.com" {
+            var blogID = pathParts.first
+            if blogID == nil || blogID?.lowercased().hasSuffix(".naver") == true {
+                blogID = URLComponents(url: pageURL, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first { $0.name.lowercased() == "blogid" }?.value
+            }
+            if let blogID, !blogID.isEmpty,
+               let url = URL(string: "https://rss.blog.naver.com/\(blogID).xml") {
+                urls.append(url)
+            }
+        }
+
+        // Tistory: {name}.tistory.com → /rss. The generic probes reach it too,
+        // but only after a stack of dead variants — put the canonical one first.
+        if host.hasSuffix(".tistory.com"), host != "www.tistory.com",
+           let url = URL(string: "https://\(host)/rss") {
+            urls.append(url)
+        }
+
+        // Velog: velog.io/@{handle} → https://v2.velog.io/rss/@{handle}
+        if host == "velog.io" || host == "www.velog.io" {
+            if let handle = pathParts.first, handle.hasPrefix("@"), handle.count > 1,
+               let url = URL(string: "https://v2.velog.io/rss/\(handle)") {
+                urls.append(url)
+            }
+        }
+
+        // YouTube channels (canonical /channel/UC… form only; handles would
+        // need a page fetch to resolve).
+        if host == "www.youtube.com" || host == "youtube.com" || host == "m.youtube.com" {
+            if pathParts.count >= 2, pathParts[0] == "channel",
+               let url = URL(string: "https://www.youtube.com/feeds/videos.xml?channel_id=\(pathParts[1])") {
+                urls.append(url)
+            }
+        }
+
+        return urls
     }
 
     static func feedLinks(in html: String, baseURL: URL) -> [URL] {

@@ -381,7 +381,7 @@ struct ListTapHint: View {
                 CoachCallout(
                     systemImage: "hand.tap.fill",
                     title: "Open a story",
-                    message: "Tap any story to open it in the clean, native reader.",
+                    message: "Tap any story to start reading.",
                     primaryTitle: "Got it",
                     onPrimary: onDismiss
                 )

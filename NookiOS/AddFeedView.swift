@@ -2,13 +2,12 @@ import NookKit
 import SwiftUI
 import UIKit
 
-/// Adds a feed by URL. Nook validates and fetches it first, then dismisses only
-/// after the feed has actually been accepted.
+/// Follows a site by URL. Nook validates and fetches it first, then dismisses
+/// only after the site has actually been accepted. Framed for people who have
+/// never heard of feeds: any website address works — discovery finds the
+/// site's posts automatically.
 struct AddFeedView: View {
     var folders: [String]
-    /// When true (opened from the tutorial), show a one-tap paste button and a
-    /// guiding hint so the user can drop in the feed they just copied.
-    var tutorialPaste: Bool = false
     var onAdd: (String, String) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -54,49 +53,38 @@ struct AddFeedView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("https://example.com/feed.xml", text: $feedURL)
+                    TextField("https://example.com", text: $feedURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                         .focused($focused)
                         .disabled(isSubmitting)
                         .onSubmit(add)
-
-                    if tutorialPaste {
-                        Button {
-                            if let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
-                               !pasted.isEmpty {
-                                feedURL = pasted
-                            }
-                        } label: {
-                            Label("Paste Copied Link", systemImage: "doc.on.clipboard")
-                        }
-                        .disabled(isSubmitting)
-                    }
-                } footer: {
-                    if tutorialPaste {
-                        Text("Paste the Hacker News link you copied, then tap Add.")
-                    }
                 }
+                // Folder choice only appears once folders exist — a first-time
+                // user shouldn't face an organizational decision before their
+                // first site is even in.
                 Section {
-                    Picker("Folder", selection: $folderChoice) {
-                        Text("Top Level").tag(FolderChoice.topLevel)
-                        ForEach(folders, id: \.self) { folder in
-                            Text(folder).tag(FolderChoice.existing(folder))
+                    if !folders.isEmpty {
+                        Picker("Folder", selection: $folderChoice) {
+                            Text("Top Level").tag(FolderChoice.topLevel)
+                            ForEach(folders, id: \.self) { folder in
+                                Text(folder).tag(FolderChoice.existing(folder))
+                            }
+                            Text("New Folder…").tag(FolderChoice.newFolder)
                         }
-                        Text("New Folder…").tag(FolderChoice.newFolder)
-                    }
-                    .pickerStyle(.menu)
+                        .pickerStyle(.menu)
 
-                    if folderChoice == .newFolder {
-                        TextField("Folder Name", text: $newFolderName)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
+                        if folderChoice == .newFolder {
+                            TextField("Folder Name", text: $newFolderName)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()
+                        }
                     }
                 } footer: {
                     if isSubmitting {
                         Label {
-                            Text("Checking RSS/Atom feed…")
+                            Text("Checking the site…")
                         } icon: {
                             ProgressView()
                         }
@@ -109,11 +97,13 @@ struct AddFeedView: View {
                         }
                         .foregroundStyle(.red)
                     } else {
-                        Text("Paste an RSS or Atom feed URL, or a website address. Nook will check it before closing.")
+                        // The one place "RSS" may appear, as reassurance for
+                        // people who arrived with a feed link in hand.
+                        Text("Paste a website address — Nook finds its posts automatically. Direct RSS links work too.")
                     }
                 }
             }
-            .navigationTitle("Add Feed")
+            .navigationTitle("Follow a Site")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

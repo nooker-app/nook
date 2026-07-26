@@ -300,3 +300,44 @@ private extension RSSFeedServiceTests {
         return "/" + pieces.joined(separator: "/")
     }
 }
+
+@Suite("Platform feed discovery")
+struct PlatformFeedDiscoveryTests {
+    @Test("Naver blog URLs map to the rss.blog.naver.com host")
+    func naverBlog() {
+        let cases = [
+            "https://blog.naver.com/someone",
+            "https://blog.naver.com/someone/223456789",
+            "https://m.blog.naver.com/someone",
+            "https://blog.naver.com/PostList.naver?blogId=someone",
+        ]
+        for raw in cases {
+            let urls = FeedLinkDiscovery.platformFeedURLs(for: URL(string: raw)!)
+            #expect(urls.first?.absoluteString == "https://rss.blog.naver.com/someone.xml", "for \(raw)")
+        }
+    }
+
+    @Test("Tistory blogs map straight to /rss")
+    func tistory() {
+        let urls = FeedLinkDiscovery.platformFeedURLs(for: URL(string: "https://example.tistory.com/123")!)
+        #expect(urls.first?.absoluteString == "https://example.tistory.com/rss")
+    }
+
+    @Test("Velog handles map to the v2 rss endpoint")
+    func velog() {
+        let urls = FeedLinkDiscovery.platformFeedURLs(for: URL(string: "https://velog.io/@writer/some-post")!)
+        #expect(urls.first?.absoluteString == "https://v2.velog.io/rss/@writer")
+    }
+
+    @Test("YouTube channel pages map to the videos.xml feed")
+    func youtubeChannel() {
+        let urls = FeedLinkDiscovery.platformFeedURLs(for: URL(string: "https://www.youtube.com/channel/UCabc123")!)
+        #expect(urls.first?.absoluteString == "https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123")
+    }
+
+    @Test("Unrelated hosts produce no platform candidates")
+    func unrelated() {
+        #expect(FeedLinkDiscovery.platformFeedURLs(for: URL(string: "https://example.com/blog")!).isEmpty)
+        #expect(FeedLinkDiscovery.platformFeedURLs(for: URL(string: "https://www.tistory.com")!).isEmpty)
+    }
+}
