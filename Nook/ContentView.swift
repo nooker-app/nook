@@ -3292,7 +3292,7 @@ private struct AboutSettingsPane: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                Link(destination: URL(string: "https://github.com/selenehyun/nook")!) {
+                Link(destination: URL(string: "https://github.com/nooker-app/nook")!) {
                     Label {
                         Text(verbatim: "GitHub")
                     } icon: {

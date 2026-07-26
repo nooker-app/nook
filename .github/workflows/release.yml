@@ -127,15 +127,15 @@ jobs:
       # --- Homebrew cask: publish/update a cask in the custom tap ---
       # Requires repo secret HOMEBREW_TAP_DEPLOY_KEY: the PRIVATE half of an SSH
       # deploy key added (with write access) to the tap repo
-      # selenehyun/homebrew-tap. Users then:
-      #   brew install --cask selenehyun/tap/nook
+      # nooker-app/homebrew-tap. Users then:
+      #   brew install --cask nooker-app/tap/nook
       - name: Publish Homebrew cask
         if: github.event_name == 'push'
         env:
           HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           VERSION: ${{ steps.version.outputs.version }}
           DMG_PATH: ${{ steps.dmg.outputs.path }}
-          TAP_REPO: selenehyun/homebrew-tap
+          TAP_REPO: nooker-app/homebrew-tap
         run: |
           set -euo pipefail
           if [ -z "${HOMEBREW_TAP_DEPLOY_KEY:-}" ]; then
@@ -166,10 +166,10 @@ jobs:
               f'  version "{ver}"',
               f'  sha256 "{sha}"',
               '',
-              '  url "https://github.com/selenehyun/nook/releases/download/v#{version}/Nook-#{version}.dmg"',
+              '  url "https://github.com/nooker-app/nook/releases/download/v#{version}/Nook-#{version}.dmg"',
               '  name "Nook"',
               '  desc "Native RSS reader that keeps your feeds in a plain folder"',
-              '  homepage "https://github.com/selenehyun/nook"',
+              '  homepage "https://github.com/nooker-app/nook"',
               '',
               '  livecheck do',
               '    url :url',
@@ -194,7 +194,7 @@ jobs:
               '      xattr -dr com.apple.quarantine "#{appdir}/Nook.app"',
               '',
               '    To skip that next time, install without quarantine:',
-              '      HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask selenehyun/tap/nook',
+              '      HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask nooker-app/tap/nook',
               '  CAVEAT',
               'end',
               '',

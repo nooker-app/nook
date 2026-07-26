@@ -6,17 +6,17 @@
 <p align="center">A small, native RSS reader for macOS and iOS — offline-first, free, and stored in a plain folder on whatever cloud you already use.</p>
 
 <p align="center">
-  <a href="https://github.com/selenehyun/nook/releases/latest">
+  <a href="https://github.com/nooker-app/nook/releases/latest">
     <img src="https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" />
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/selenehyun/nook/releases/latest"><img src="https://img.shields.io/github/v/release/selenehyun/nook?label=latest&color=4c71f2" alt="Latest release" /></a>
+  <a href="https://github.com/nooker-app/nook/releases/latest"><img src="https://img.shields.io/github/v/release/nooker-app/nook?label=latest&color=4c71f2" alt="Latest release" /></a>
   <img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white" alt="macOS 26+" />
   <img src="https://img.shields.io/badge/iOS-18%2B-000000?logo=apple&logoColor=white" alt="iOS 18+" />
   <img src="https://img.shields.io/badge/built%20with-SwiftUI-fa7343?logo=swift&logoColor=white" alt="Built with SwiftUI" />
-  <a href="https://github.com/selenehyun/nook/stargazers"><img src="https://img.shields.io/github/stars/selenehyun/nook?style=flat&logo=github&label=stars&color=4c71f2" alt="GitHub stars" /></a>
+  <a href="https://github.com/nooker-app/nook/stargazers"><img src="https://img.shields.io/github/stars/nooker-app/nook?style=flat&logo=github&label=stars&color=4c71f2" alt="GitHub stars" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c71f2" alt="MIT License" /></a>
 </p>
 
@@ -63,18 +63,18 @@ See the neutral [RSS reader comparison](docs/reader-comparison.md) for Nook, Net
 ### macOS (Homebrew)
 
 ```sh
-brew install --cask selenehyun/tap/nook
+brew install --cask nooker-app/tap/nook
 ```
 
 Nook is ad-hoc signed rather than notarized. On first launch, right-click **Nook** in Applications and choose **Open**, or install without quarantine:
 
 ```sh
-HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask selenehyun/tap/nook
+HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask nooker-app/tap/nook
 ```
 
 ### macOS (DMG)
 
-1. Download the latest [Nook DMG](https://github.com/selenehyun/nook/releases/latest).
+1. Download the latest [Nook DMG](https://github.com/nooker-app/nook/releases/latest).
 2. Drag **Nook** into **Applications**.
 3. Right-click `Nook.app` and choose **Open**, or run `xattr -dr com.apple.quarantine /Applications/Nook.app` once.
 4. Choose the folder where Nook should keep and sync your library.
@@ -102,7 +102,7 @@ Requires **iOS/iPadOS 18** or later. Apple Intelligence translation requires a s
 ## Build from source
 
 ```sh
-git clone https://github.com/selenehyun/nook
+git clone https://github.com/nooker-app/nook
 cd nook
 make build
 ```

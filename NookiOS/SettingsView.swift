@@ -924,7 +924,7 @@ private struct ExperimentalSettingsScreen: View {
 // MARK: - About
 
 private struct AboutSettingsScreen: View {
-    static let repositoryURL = URL(string: "https://github.com/selenehyun/nook")!
+    static let repositoryURL = URL(string: "https://github.com/nooker-app/nook")!
 
     private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0" }
     private var build: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1" }

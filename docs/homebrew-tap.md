@@ -3,7 +3,7 @@
 Nook ships a Homebrew **cask** through a custom tap so people can install it with:
 
 ```sh
-brew install --cask selenehyun/tap/nook
+brew install --cask nooker-app/tap/nook
 ```
 
 The release workflow (`.github/workflows/release.yml`) generates the cask
@@ -14,9 +14,9 @@ setup**; after it's in place, releases keep the cask up to date automatically.
 ## One-time setup
 
 1. **Create the tap repository.** A Homebrew tap must be a repo named
-   `homebrew-<tap>`. Create a public repo **`selenehyun/homebrew-tap`** (empty is
+   `homebrew-<tap>`. Create a public repo **`nooker-app/homebrew-tap`** (empty is
    fine — the workflow creates `Casks/nook.rb`). Users reference it as
-   `selenehyun/tap`.
+   `nooker-app/tap`.
 
 2. **Add a write deploy key to the tap.** A deploy key is scoped to the single
    repo, so it's cleaner than an account-wide token. Generate a keypair:
@@ -25,11 +25,11 @@ setup**; after it's in place, releases keep the cask up to date automatically.
    ssh-keygen -t ed25519 -f homebrew-tap-deploy -N "" -C "nook-cask-publish"
    ```
 
-   Then in **`selenehyun/homebrew-tap`** → Settings → Deploy keys → **Add deploy
+   Then in **`nooker-app/homebrew-tap`** → Settings → Deploy keys → **Add deploy
    key**: paste the contents of `homebrew-tap-deploy.pub` and **check "Allow
    write access"**.
 
-3. **Add the private key as a secret on this repo.** In `selenehyun/nook` →
+3. **Add the private key as a secret on this repo.** In `nooker-app/nook` →
    Settings → Secrets and variables → Actions → **New repository secret**:
    - Name: `HOMEBREW_TAP_DEPLOY_KEY`
    - Value: the full contents of `homebrew-tap-deploy` (the **private** key,
