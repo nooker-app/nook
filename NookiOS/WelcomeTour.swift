@@ -102,9 +102,10 @@ struct WelcomeSheet: View {
 
     @Environment(TourCoordinator.self) private var tour
 
-    private enum Page: Hashable { case welcome, starter }
+    private enum Page: Hashable { case welcome, discover, starter }
 
     @State private var page: Page = .welcome
+    @State private var isTryingOwnSite = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -116,9 +117,23 @@ struct WelcomeSheet: View {
                     title: "Your favorite sites, one quiet place",
                     message: "Follow the sites you love, and their new posts gather here automatically — no accounts, no algorithm, just your reading. Don't know where to start? We'll suggest some next.",
                     primaryTitle: "Continue",
-                    onPrimary: { withAnimation { page = .starter } }
+                    onPrimary: { withAnimation { page = .discover } }
                 )
                 .tag(Page.welcome)
+
+                // Answers the question every curious newcomer is already
+                // asking: "would MY site work?" — and names the magic
+                // (automatic RSS/Atom discovery) without requiring it.
+                TourPage(
+                    illustration: AnyView(FeedDiscoveryIllustration()),
+                    title: "Have a site in mind already?",
+                    message: "Paste its address and Nook finds the posts for you — it automatically discovers the site's RSS or Atom feed, so you don't need to know what that is. If the site shares its posts, one tap and you're following.",
+                    primaryTitle: "Continue",
+                    onPrimary: { withAnimation { page = .starter } },
+                    secondaryTitle: "Try It with Your Site",
+                    onSecondary: { isTryingOwnSite = true }
+                )
+                .tag(Page.discover)
 
                 StarterPicksPage(store: store, onStart: startReading)
                     .tag(Page.starter)
@@ -138,6 +153,11 @@ struct WelcomeSheet: View {
             .accessibilityLabel(Text("Skip tutorial"))
         }
         .tint(Color("AccentColor"))
+        .sheet(isPresented: $isTryingOwnSite) {
+            AddFeedView(folders: store.feedFolders) { feedURL, folder in
+                try await store.addFeed(urlString: feedURL, toFolder: folder)
+            }
+        }
     }
 
     /// Subscribes the chosen bundles and hands off to the list spotlight. The
@@ -332,6 +352,8 @@ private struct TourPage: View {
     let message: LocalizedStringKey
     var primaryTitle: LocalizedStringKey? = nil
     var onPrimary: (() -> Void)? = nil
+    var secondaryTitle: LocalizedStringKey? = nil
+    var onSecondary: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 22) {
@@ -366,6 +388,13 @@ private struct TourPage: View {
                 .padding(.top, 2)
             }
 
+            if let secondaryTitle, let onSecondary {
+                Button(action: onSecondary) {
+                    Text(secondaryTitle)
+                        .font(.subheadline)
+                }
+            }
+
             Spacer()
             Spacer()
         }
@@ -386,6 +415,55 @@ struct MiniArticleCard: View {
         .padding(10)
         .background(.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+    }
+}
+
+/// The discovery scene: a website address pill gets swept by a magnifier,
+/// which finds the site's posts — a card pops out with a checkmark. "Paste an
+/// address, Nook finds the posts" said without words.
+private struct FeedDiscoveryIllustration: View {
+    var body: some View {
+        PhaseAnimator([0, 1, 2]) { phase in
+            ZStack {
+                // The address pill being inspected.
+                HStack(spacing: 8) {
+                    Image(systemName: "globe")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text(verbatim: "yoursite.com")
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.background, in: Capsule())
+                .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+                .offset(y: phase == 2 ? -34 : -10)
+
+                // The magnifier sweeping across the address.
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .offset(x: phase == 0 ? -52 : (phase == 1 ? 48 : 0), y: phase == 2 ? -34 : -16)
+                    .opacity(phase == 2 ? 0 : 1)
+
+                // The found posts: a card pops in with a confirming check.
+                MiniArticleCard()
+                    .overlay(alignment: .topTrailing) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(Color.accentColor)
+                            .background(Circle().fill(.background))
+                            .offset(x: 8, y: -8)
+                    }
+                    .scaleEffect(phase == 2 ? 1 : 0.6)
+                    .opacity(phase == 2 ? 1 : 0)
+                    .offset(y: 34)
+            }
+            .animation(.spring(response: 0.5, dampingFraction: 0.75), value: phase)
+        } animation: { _ in
+            .easeInOut(duration: 0.9)
+        }
     }
 }
 

@@ -2027,6 +2027,28 @@
         }
       }
     },
+    "Have a site in mind already?": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "気になっているサイトはありますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이미 봐둔 사이트가 있나요?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已经有想关注的网站了？"
+          }
+        }
+      }
+    },
     "Help": {
       "localizations": {
         "ja": {
@@ -2207,6 +2229,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "将从你所有设备的列表中移除，此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "Keep Gemini API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Gemini API key"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemini APIキーを保持"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemini API 키 유지"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留 Gemini API 密钥"
+          }
+        }
+      }
+    },
+    "Keep website login sessions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep website login sessions"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webサイトのログインセッションを保持"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹사이트 로그인 세션 유지"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留网站登录会话"
           }
         }
       }
@@ -2471,6 +2549,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在加载订阅源…"
+          }
+        }
+      }
+    },
+    "Local settings and downloaded data can't be recovered. Your sync folder will not be changed. Nook will return to the welcome screen.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local settings and downloaded data can't be recovered. Your sync folder will not be changed. Nook will return to the welcome screen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカル設定とダウンロード済みデータは復元できません。同期フォルダは変更されません。Nookはようこそ画面に戻ります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로컬 설정과 다운로드 데이터는 복구할 수 없습니다. 동기화 폴더는 변경되지 않으며 Nook은 시작 화면으로 돌아갑니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地设置和已下载数据无法恢复。同步文件夹不会被更改。Nook 将返回欢迎界面。"
           }
         }
       }
@@ -3756,6 +3862,28 @@
         }
       }
     },
+    "Paste its address and Nook finds the posts for you — it automatically discovers the site's RSS or Atom feed, so you don't need to know what that is. If the site shares its posts, one tap and you're following.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アドレスを貼り付けるだけで、Nookが記事を探してくれます。サイトのRSS・Atomフィードを自動で見つけるので、その意味を知らなくても大丈夫。サイトが記事を公開していれば、ワンタップでフォローできます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주소만 붙여넣으면 Nook이 글을 대신 찾아드려요 — 사이트의 RSS·Atom 피드를 자동으로 탐색하니, 그게 뭔지 몰라도 괜찮아요. 사이트가 글을 공개하고 있다면 탭 한 번으로 구독돼요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "粘贴网址，Nook 会替你找到它的文章——它会自动发现网站的 RSS 或 Atom 源，你完全不需要了解这些。只要网站公开文章，一键即可关注。"
+          }
+        }
+      }
+    },
     "Paste the Hacker News link you copied, then tap Add.": {
       "extractionState": "stale",
       "localizations": {
@@ -4249,6 +4377,34 @@
         }
       }
     },
+    "Removes this device's settings, sync folder connection, offline articles, and caches. Files in your sync folder are never changed. Sign-in data is deleted unless you choose to keep it above.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removes this device's settings, sync folder connection, offline articles, and caches. Files in your sync folder are never changed. Sign-in data is deleted unless you choose to keep it above."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスの設定、同期フォルダ接続、オフライン記事、キャッシュを削除します。同期フォルダ内のファイルは変更されません。上で保持を選択しない限り、サインイン情報も削除されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기의 설정, 동기화 폴더 연결, 오프라인 글과 캐시를 삭제합니다. 동기화 폴더의 파일은 변경하지 않습니다. 위에서 유지하도록 선택하지 않은 로그인 정보도 삭제됩니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除此设备的设置、同步文件夹连接、离线文章和缓存。同步文件夹内的文件不会被更改。除非在上方选择保留，否则登录信息也会被删除。"
+          }
+        }
+      }
+    },
     "Rename": {
       "localizations": {
         "en": {
@@ -4351,6 +4507,90 @@
           "stringUnit": {
             "state": "translated",
             "value": "重新观看教程"
+          }
+        }
+      }
+    },
+    "Reset Nook": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Nook"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nookをリセット"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook 초기화"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置 Nook"
+          }
+        }
+      }
+    },
+    "Reset Nook?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Nook?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nookをリセットしますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook을 초기화할까요?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置 Nook？"
+          }
+        }
+      }
+    },
+    "Reset Nook…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Nook…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nookをリセット…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook 초기화…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置 Nook…"
           }
         }
       }
@@ -5669,6 +5909,28 @@
         }
       }
     },
+    "Try It with Your Site": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自分のサイトで試す"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 사이트로 해보기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用你的网站试试"
+          }
+        }
+      }
+    },
     "Turn on Background App Refresh": {
       "localizations": {
         "en": {
@@ -6178,62 +6440,6 @@
             "value": "·"
           }
         }
-      }
-    },
-    "Keep Gemini API key": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Keep Gemini API key" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "Gemini APIキーを保持" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "Gemini API 키 유지" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "保留 Gemini API 密钥" } }
-      }
-    },
-    "Keep website login sessions": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Keep website login sessions" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "Webサイトのログインセッションを保持" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "웹사이트 로그인 세션 유지" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "保留网站登录会话" } }
-      }
-    },
-    "Local settings and downloaded data can't be recovered. Your sync folder will not be changed. Nook will return to the welcome screen.": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Local settings and downloaded data can't be recovered. Your sync folder will not be changed. Nook will return to the welcome screen." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ローカル設定とダウンロード済みデータは復元できません。同期フォルダは変更されません。Nookはようこそ画面に戻ります。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "로컬 설정과 다운로드 데이터는 복구할 수 없습니다. 동기화 폴더는 변경되지 않으며 Nook은 시작 화면으로 돌아갑니다." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地设置和已下载数据无法恢复。同步文件夹不会被更改。Nook 将返回欢迎界面。" } }
-      }
-    },
-    "Removes this device's settings, sync folder connection, offline articles, and caches. Files in your sync folder are never changed. Sign-in data is deleted unless you choose to keep it above.": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Removes this device's settings, sync folder connection, offline articles, and caches. Files in your sync folder are never changed. Sign-in data is deleted unless you choose to keep it above." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "このデバイスの設定、同期フォルダ接続、オフライン記事、キャッシュを削除します。同期フォルダ内のファイルは変更されません。上で保持を選択しない限り、サインイン情報も削除されます。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "이 기기의 설정, 동기화 폴더 연결, 오프라인 글과 캐시를 삭제합니다. 동기화 폴더의 파일은 변경하지 않습니다. 위에서 유지하도록 선택하지 않은 로그인 정보도 삭제됩니다." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "删除此设备的设置、同步文件夹连接、离线文章和缓存。同步文件夹内的文件不会被更改。除非在上方选择保留，否则登录信息也会被删除。" } }
-      }
-    },
-    "Reset Nook": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Reset Nook" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "Nookをリセット" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "Nook 초기화" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置 Nook" } }
-      }
-    },
-    "Reset Nook?": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Reset Nook?" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "Nookをリセットしますか？" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "Nook을 초기화할까요?" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置 Nook？" } }
-      }
-    },
-    "Reset Nook…": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Reset Nook…" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "Nookをリセット…" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "Nook 초기화…" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重置 Nook…" } }
       }
     },
     "— Diagnostics (helps with troubleshooting; feel free to delete) —": {
