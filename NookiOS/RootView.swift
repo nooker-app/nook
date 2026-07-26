@@ -378,36 +378,15 @@ final class TabBarChrome {
     private(set) var readerOpen = false
     /// True while a Settings detail screen is pushed — the bar hides there too.
     private(set) var settingsDetailOpen = false
-    /// Count of settings detail screens currently mounted. A balanced
-    /// per-screen appear/disappear count (not a boolean flipped by the root
-    /// list's lifecycle): an instant back-gesture after a push interrupts the
-    /// transition so the root never re-fires onAppear, which used to strand
-    /// the bar hidden for good.
-    @ObservationIgnored private var settingsDetailDepth = 0
 
     /// Whether the bar (and its reserved bottom inset) should be gone.
     var barHidden: Bool { readerOpen || settingsDetailOpen }
 
-    func settingsDetailAppeared() {
-        settingsDetailDepth += 1
-        syncSettingsDetailOpen()
-    }
-
-    func settingsDetailDisappeared() {
-        settingsDetailDepth = max(0, settingsDetailDepth - 1)
-        syncSettingsDetailOpen()
-    }
-
-    /// The settings ROOT list came on screen. Fires as a pop transition starts
-    /// (instant bar return) and doubles as a drift-healing reset: whenever the
-    /// root is visible there are, by definition, no detail screens above it.
-    func settingsRootRevealed() {
-        settingsDetailDepth = 0
-        syncSettingsDetailOpen()
-    }
-
-    private func syncSettingsDetailOpen() {
-        let open = settingsDetailDepth > 0
+    /// The explicit NavigationStack path is the source of truth. In particular,
+    /// a cancelled interactive pop returns to a non-zero depth, so the bar
+    /// cannot remain visible over a Settings detail screen.
+    func setSettingsDetailDepth(_ depth: Int) {
+        let open = depth > 0
         guard settingsDetailOpen != open else { return }
         settingsDetailOpen = open
         if !open { expand() }
@@ -554,9 +533,8 @@ private struct CompactShell: View {
 
             SettingsView(store: store, isTab: true, onNavigationEvent: { event in
                 switch event {
-                case .detailAppeared: tabChrome.settingsDetailAppeared()
-                case .detailDisappeared: tabChrome.settingsDetailDisappeared()
-                case .rootRevealed: tabChrome.settingsRootRevealed()
+                case .depthChanged(let depth):
+                    tabChrome.setSettingsDetailDepth(depth)
                 }
             })
                 .tabItem {

@@ -17,16 +17,24 @@ struct SettingsView: View {
     /// into a "Data" section here). Defaults to sheet presentation (iPad),
     /// leaving that path unchanged.
     var isTab: Bool = false
-    /// Navigation lifecycle signals for the iPhone shell's custom tab bar
-    /// (hide on detail screens, like the reader push does).
+    /// Navigation state for the iPhone shell's custom tab bar. Reporting the
+    /// stack's path depth (instead of view appear/disappear callbacks) makes a
+    /// cancelled interactive pop settle back to the correct hidden state.
     var onNavigationEvent: ((NavigationEvent) -> Void)? = nil
 
-    /// Detail appear/disappear are balanced per screen instance so the shell
-    /// can keep an exact count; rootRevealed is a drift-healing reset.
     enum NavigationEvent {
-        case detailAppeared
-        case detailDisappeared
-        case rootRevealed
+        case depthChanged(Int)
+    }
+    private enum Destination: Hashable {
+        case general
+        case reading
+        case reader
+        case feeds
+        case articleRules
+        case filters
+        case offline
+        case experimental
+        case about
     }
     @Environment(\.dismiss) private var dismiss
     @AppStorage(TourFlags.hasCompletedWelcomeKey) private var hasCompletedWelcome = false
@@ -40,54 +48,37 @@ struct SettingsView: View {
     @State private var isImporting = false
     @State private var isExportingOPML = false
     @State private var opmlImport: OPMLImportRequest?
+    @State private var navigationPath: [Destination] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             List {
                 Section {
-                    NavigationLink {
-                        detail(GeneralSettingsScreen())
-                    } label: {
+                    NavigationLink(value: Destination.general) {
                         Label("General", systemImage: "gearshape")
                     }
-                    NavigationLink {
-                        detail(ReadingSettingsScreen())
-                    } label: {
+                    NavigationLink(value: Destination.reading) {
                         Label("Reading", systemImage: "book")
                     }
-                    NavigationLink {
-                        detail(ReaderSettingsScreen())
-                    } label: {
+                    NavigationLink(value: Destination.reader) {
                         Label("Reader", systemImage: "textformat")
                     }
-                    NavigationLink {
-                        detail(FeedsSettingsScreen(store: store))
-                    } label: {
+                    NavigationLink(value: Destination.feeds) {
                         Label("Feeds", systemImage: "dot.radiowaves.up.forward")
                     }
-                    NavigationLink {
-                        detail(ArticleRulesSettingsScreen(store: store))
-                    } label: {
+                    NavigationLink(value: Destination.articleRules) {
                         Label("Article Rules", systemImage: "tag")
                     }
-                    NavigationLink {
-                        detail(FiltersSettingsScreen(store: store))
-                    } label: {
+                    NavigationLink(value: Destination.filters) {
                         Label("Filters", systemImage: "line.3.horizontal.decrease.circle")
                     }
-                    NavigationLink {
-                        detail(OfflineSettingsScreen(store: store))
-                    } label: {
+                    NavigationLink(value: Destination.offline) {
                         Label("Offline", systemImage: "arrow.down.circle")
                     }
-                    NavigationLink {
-                        detail(ExperimentalSettingsScreen())
-                    } label: {
+                    NavigationLink(value: Destination.experimental) {
                         Label("Experimental", systemImage: "flask")
                     }
-                    NavigationLink {
-                        detail(AboutSettingsScreen())
-                    } label: {
+                    NavigationLink(value: Destination.about) {
                         Label("About", systemImage: "info.circle")
                     }
                 }
@@ -139,11 +130,6 @@ struct SettingsView: View {
             .warmListBackground()
             // Keep the last section above the floating tab bar (iPhone tab only).
             .modifier(TabBarInset(enabled: isTab))
-            // The bar returns the moment a pop STARTS (this appear fires at
-            // transition start); hiding is signalled by each detail's own
-            // lifecycle below — the root's onDisappear would land only after
-            // the push transition finished, hiding the bar visibly late.
-            .onAppear { onNavigationEvent?(.rootRevealed) }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -161,40 +147,40 @@ struct SettingsView: View {
                 isExportingOPML: $isExportingOPML,
                 opmlImport: $opmlImport
             ))
+            .navigationDestination(for: Destination.self) { destination in
+                destinationView(destination)
+            }
+        }
+        .onAppear {
+            onNavigationEvent?(.depthChanged(navigationPath.count))
+        }
+        .onChange(of: navigationPath) { _, path in
+            onNavigationEvent?(.depthChanged(path.count))
         }
     }
 
-    /// Wraps a pushed detail screen: its `onAppear` fires as the push
-    /// transition STARTS, so the tab bar hides immediately with the
-    /// transition instead of after it settles; its `onDisappear` balances the
-    /// count when the screen unmounts, which is what survives an instant
-    /// back-gesture (the root never re-appears in that case, so it can't be
-    /// the one to restore the bar).
-    private func detail<Content: View>(_ content: Content) -> some View {
-        SettingsDetailScreen(content: content, onEvent: onNavigationEvent)
-    }
-}
-
-/// Balanced appear/disappear reporting for one pushed settings screen. The
-/// `counted` state guarantees each instance contributes at most +1 to the
-/// shell's depth count even if SwiftUI fires duplicate lifecycle callbacks.
-private struct SettingsDetailScreen<Content: View>: View {
-    let content: Content
-    var onEvent: ((SettingsView.NavigationEvent) -> Void)?
-    @State private var counted = false
-
-    var body: some View {
-        content
-            .onAppear {
-                guard !counted else { return }
-                counted = true
-                onEvent?(.detailAppeared)
-            }
-            .onDisappear {
-                guard counted else { return }
-                counted = false
-                onEvent?(.detailDisappeared)
-            }
+    @ViewBuilder
+    private func destinationView(_ destination: Destination) -> some View {
+        switch destination {
+        case .general:
+            GeneralSettingsScreen()
+        case .reading:
+            ReadingSettingsScreen()
+        case .reader:
+            ReaderSettingsScreen()
+        case .feeds:
+            FeedsSettingsScreen(store: store)
+        case .articleRules:
+            ArticleRulesSettingsScreen(store: store)
+        case .filters:
+            FiltersSettingsScreen(store: store)
+        case .offline:
+            OfflineSettingsScreen(store: store)
+        case .experimental:
+            ExperimentalSettingsScreen()
+        case .about:
+            AboutSettingsScreen()
+        }
     }
 }
 
