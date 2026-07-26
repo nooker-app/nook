@@ -48,6 +48,13 @@ struct SettingsView: View {
     @State private var isImporting = false
     @State private var isExportingOPML = false
     @State private var opmlImport: OPMLImportRequest?
+
+    /// One-shot spotlight on the sync-folder row while the library is still
+    /// app-local: the tour's sync page is skippable, so Settings gets a second
+    /// chance to teach that an iCloud folder syncs every device (Mac included).
+    @AppStorage(TourFlags.seenSyncFolderHintKey) private var seenSyncFolderHint = false
+    @State private var showSyncHint = false
+    @State private var syncRowFrame: CGRect = .zero
     @State private var navigationPath: [Destination] = []
 
     var body: some View {
@@ -110,6 +117,15 @@ struct SettingsView: View {
                                 store.isStorageConfigured ? "Change Sync Folder" : "Choose Sync Folder",
                                 systemImage: store.isStorageConfigured ? "checkmark.icloud" : "icloud"
                             )
+                            // Measured for the one-shot sync spotlight; the
+                            // publisher unmounts once the hint has been seen.
+                            .background {
+                                if !seenSyncFolderHint {
+                                    GeometryReader { g in
+                                        Color.clear.preference(key: SyncFolderRowFrameKey.self, value: g.frame(in: .global))
+                                    }
+                                }
+                            }
                         }
                         Button {
                             importKind = .opml
@@ -153,10 +169,47 @@ struct SettingsView: View {
         }
         .onAppear {
             onNavigationEvent?(.depthChanged(navigationPath.count))
+            maybeShowSyncHint()
         }
         .onChange(of: navigationPath) { _, path in
             onNavigationEvent?(.depthChanged(path.count))
+            // Navigating away while the hint is up counts as seen.
+            if !path.isEmpty, showSyncHint { dismissSyncHint() }
         }
+        // Tapping the spotlighted row means the hint found its mark.
+        .onChange(of: isImporting) { _, importing in
+            if importing, importKind == .folder, showSyncHint { dismissSyncHint() }
+        }
+        .onPreferenceChange(SyncFolderRowFrameKey.self) { frame in
+            if syncRowFrame != frame { syncRowFrame = frame }
+        }
+        .overlay {
+            if showSyncHint {
+                SyncFolderHint(
+                    rowFrame: syncRowFrame == .zero ? nil : syncRowFrame,
+                    onDismiss: dismissSyncHint
+                )
+                .transition(.opacity)
+            }
+        }
+    }
+
+    /// Shows the sync-folder spotlight once: only in the tab presentation,
+    /// after the welcome tour, while the library is still app-local, and only
+    /// at the settings root.
+    private func maybeShowSyncHint() {
+        guard isTab, hasCompletedWelcome, !seenSyncFolderHint, !showSyncHint,
+              store.usesLocalLibrary, navigationPath.isEmpty else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !seenSyncFolderHint, navigationPath.isEmpty else { return }
+            withAnimation { showSyncHint = true }
+        }
+    }
+
+    private func dismissSyncHint() {
+        seenSyncFolderHint = true
+        withAnimation { showSyncHint = false }
     }
 
     @ViewBuilder

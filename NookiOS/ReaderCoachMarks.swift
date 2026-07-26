@@ -404,6 +404,45 @@ struct FeedsAddHint: View {
     }
 }
 
+/// Spotlights the Settings "Choose Sync Folder" row while the library is
+/// still app-local: the tour's sync page is skippable, so this is the second
+/// chance to learn that one iCloud folder keeps every device — Mac included —
+/// on the same library.
+struct SyncFolderHint: View {
+    /// The sync-folder row's measured global frame; nil falls back to a band
+    /// near the Data section's usual position.
+    var rowFrame: CGRect?
+    var onDismiss: () -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let fallback = CGRect(x: 12, y: geo.size.height * 0.55, width: geo.size.width - 24, height: 48)
+            let rect = (rowFrame ?? fallback).insetBy(dx: -6, dy: -5)
+            ZStack(alignment: .top) {
+                CoachScrim(spotlight: rect, cornerRadius: 14)
+                CoachCallout(
+                    systemImage: "icloud",
+                    title: "Sync with your Mac",
+                    message: "Pick a folder in iCloud Drive here, and every device — Mac included — shares the same sites, articles, and read status.",
+                    primaryTitle: "Got it",
+                    onPrimary: onDismiss
+                )
+                .padding(.top, max(rect.minY - 250, 40))
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// The Settings sync-folder row frame, for the one-shot sync hint.
+struct SyncFolderRowFrameKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
 struct ListTapHint: View {
     /// The first row's global frame, if measured; nil falls back to a region.
     var rowFrame: CGRect?

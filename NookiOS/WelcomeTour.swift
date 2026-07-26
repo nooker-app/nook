@@ -12,6 +12,7 @@ enum TourFlags {
     static let seenReaderGestureHintKey = "seenReaderGestureHint"
     static let seenListHintKey = "seenListTapHint"
     static let seenFeedsAddHintKey = "seenFeedsAddHint"
+    static let seenSyncFolderHintKey = "seenSyncFolderHint"
 }
 
 /// In-memory coordinator that lets the welcome cover drive the live app: after
@@ -103,10 +104,21 @@ struct WelcomeSheet: View {
 
     @Environment(TourCoordinator.self) private var tour
 
-    private enum Page: Hashable { case welcome, discover, starter }
+    private enum Page: Hashable { case welcome, discover, sync, starter }
 
     @State private var page: Page = .welcome
     @State private var isTryingOwnSite = false
+    @State private var isChoosingFolder = false
+    /// Whether to include the sync-folder step, captured once at presentation
+    /// so the page set stays stable. Shown while the library is app-local (the
+    /// default first-run state); a replay with a real folder configured skips it.
+    @State private var includeSyncStep: Bool
+
+    init(store: ReaderStore, onFinish: @escaping () -> Void) {
+        self.store = store
+        self.onFinish = onFinish
+        _includeSyncStep = State(initialValue: store.usesLocalLibrary || !store.isStorageConfigured)
+    }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -130,11 +142,27 @@ struct WelcomeSheet: View {
                     title: "Have a site in mind already?",
                     message: "Paste its address and Nook finds the posts for you — it automatically discovers the site's RSS or Atom feed, so you don't need to know what that is. If the site shares its posts, one tap and you're following.",
                     primaryTitle: "Continue",
-                    onPrimary: { withAnimation { page = .starter } },
+                    onPrimary: { withAnimation { page = includeSyncStep ? .sync : .starter } },
                     secondaryTitle: "Try It with Your Site",
                     onSecondary: { isTryingOwnSite = true }
                 )
                 .tag(Page.discover)
+
+                if includeSyncStep {
+                    // Optional, benefit-first: reading works locally already,
+                    // so the folder is framed as "keep going on your Mac", not
+                    // as a setup requirement. Fully skippable.
+                    TourPage(
+                        illustration: AnyView(TwoDeviceSyncIllustration()),
+                        title: "Keep reading on your Mac",
+                        message: "Right now your library lives on this iPhone. Pick a folder in iCloud Drive and every device — Mac included — shares the same sites, articles, and read status. You can also do this anytime in Settings.",
+                        primaryTitle: "Continue",
+                        onPrimary: { withAnimation { page = .starter } },
+                        secondaryTitle: "Choose iCloud Folder",
+                        onSecondary: { isChoosingFolder = true }
+                    )
+                    .tag(Page.sync)
+                }
 
                 StarterPicksPage(store: store, onStart: startReading)
                     .tag(Page.starter)
@@ -158,6 +186,18 @@ struct WelcomeSheet: View {
             AddFeedView(folders: store.feedFolders) { feedURL, folder in
                 try await store.addFeed(urlString: feedURL, toFolder: folder)
             }
+        }
+        .fileImporter(
+            isPresented: $isChoosingFolder,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            _ = url.startAccessingSecurityScopedResource()
+            // Switching before the starter picks means everything added next
+            // lands straight in the synced folder.
+            store.configureSyncFolder(url)
+            withAnimation { page = .starter }
         }
     }
 
@@ -465,6 +505,42 @@ private struct FeedDiscoveryIllustration: View {
         } animation: { _ in
             .easeInOut(duration: 0.9)
         }
+    }
+}
+
+/// The sync scene: an iPhone and a Mac, each holding the same nest, with a
+/// post traveling between them — "one library, every device" without words.
+private struct TwoDeviceSyncIllustration: View {
+    var body: some View {
+        PhaseAnimator([0, 1]) { phase in
+            HStack(spacing: 46) {
+                deviceFrame(width: 54, height: 96)   // iPhone
+                deviceFrame(width: 116, height: 78)  // Mac
+            }
+            .overlay {
+                // The traveling post: hops between the two nests, forever.
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.accentColor)
+                    .background(Circle().fill(.background).padding(-6))
+                    .offset(x: phase == 0 ? -50 : 50, y: -6)
+                    .animation(.spring(response: 0.7, dampingFraction: 0.8), value: phase)
+            }
+        } animation: { _ in
+            .easeInOut(duration: 1.2)
+        }
+    }
+
+    private func deviceFrame(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(Color.primary.opacity(0.25), lineWidth: 2)
+            .frame(width: width, height: height)
+            .overlay {
+                Image(uiImage: TabGlyph.nest)
+                    .renderingMode(.template)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .background(.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
