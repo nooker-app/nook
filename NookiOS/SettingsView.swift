@@ -383,11 +383,25 @@ private struct ReaderSettingsScreen: View {
             .warmRows()
 
             Section {
-                Picker("Default Position", selection: $defaultControlSide) {
-                    Text("Left Side").tag(ReaderControlSide.left)
-                    Text("Right Side").tag(ReaderControlSide.right)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Default Position")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 12) {
+                        ForEach(ReaderControlSide.allCases) { side in
+                            ReaderControlPositionChoice(
+                                side: side,
+                                isSelected: defaultControlSide == side
+                            ) {
+                                withAnimation(.snappy(duration: 0.25)) {
+                                    defaultControlSide = side
+                                }
+                            }
+                        }
+                    }
                 }
-                .pickerStyle(.segmented)
+                .padding(.vertical, 4)
 
                 Picker("Primary Hand", selection: $readerHandedness) {
                     Text("Left Hand").tag(ReaderHandedness.left)
@@ -406,6 +420,96 @@ private struct ReaderSettingsScreen: View {
         .warmListBackground()
         .navigationTitle("Reader")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// A compact preview of the native reader bar. The accent-colored capsule shows
+/// where the frequently used controls will sit, making the setting understandable
+/// before someone has to leave Settings and open an article.
+private struct ReaderControlPositionChoice: View {
+    let side: ReaderControlSide
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var label: LocalizedStringKey {
+        side == .left ? "Left Side" : "Right Side"
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.primary.opacity(0.045))
+
+                    VStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.secondary.opacity(0.22))
+                            .frame(width: 46, height: 4)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.secondary.opacity(0.14))
+                            .frame(width: 58, height: 4)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.secondary.opacity(0.14))
+                            .frame(width: 52, height: 4)
+                        Spacer(minLength: 4)
+                    }
+                    .padding(.top, 12)
+
+                    HStack(spacing: 0) {
+                        controlCapsule(highlighted: side == .left)
+                        Spacer(minLength: 10)
+                        controlCapsule(highlighted: side == .right)
+                    }
+                    .padding(7)
+                }
+                .frame(height: 76)
+
+                HStack(spacing: 5) {
+                    Text(label)
+                        .font(.subheadline.weight(.semibold))
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary.opacity(0.55))
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(
+                        isSelected ? Color.accentColor : Color.secondary.opacity(0.22),
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(label))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func controlCapsule(highlighted: Bool) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: highlighted ? "doc.plaintext" : "square.and.arrow.up")
+            Image(systemName: highlighted ? "character.bubble" : "star")
+        }
+        .font(.system(size: 9, weight: .semibold))
+        .foregroundStyle(highlighted ? Color.accentColor : Color.secondary)
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(.thinMaterial, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(
+                    highlighted ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.18),
+                    lineWidth: 0.75
+                )
+        }
     }
 }
 
