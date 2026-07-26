@@ -1191,6 +1191,12 @@ private struct FeedsTab: View {
     @State private var isAddingFeed = false
     @State private var isShowingStarterPicks = false
     @State private var isCreatingFolder = false
+    /// One-shot spotlight on the "+" button: the tour subscribes starter picks
+    /// for the user, so the library's own add affordance needs introducing.
+    @AppStorage(TourFlags.seenFeedsAddHintKey) private var seenFeedsAddHint = false
+    @AppStorage(TourFlags.hasCompletedWelcomeKey) private var hasCompletedWelcome = false
+    @State private var showAddHint = false
+    @State private var addButtonFrame: CGRect = .zero
     @State private var newFolderName = ""
     @State private var folderPendingRename: String?
     @State private var renameFolderName = ""
@@ -1320,8 +1326,20 @@ private struct FeedsTab: View {
                         }
                     } label: {
                         Image(systemName: "plus")
+                            // Measure the button for the one-shot add-hint
+                            // spotlight; the publisher unmounts once seen.
+                            .background {
+                                if !seenFeedsAddHint {
+                                    GeometryReader { g in
+                                        Color.clear.preference(key: FeedsAddButtonFrameKey.self, value: g.frame(in: .global))
+                                    }
+                                }
+                            }
                     }
                 }
+            }
+            .onPreferenceChange(FeedsAddButtonFrameKey.self) { frame in
+                if addButtonFrame != frame { addButtonFrame = frame }
             }
             .refreshable { await store.refreshAllAndWait() }
             // Keep the library list's tail above the floating tab bar.
@@ -1354,10 +1372,40 @@ private struct FeedsTab: View {
             }
             }
         }
+        // First visit with a library already in place (the tour subscribed the
+        // starter picks for them): show once where new sites are added.
+        .overlay {
+            if showAddHint {
+                FeedsAddHint(
+                    buttonFrame: addButtonFrame == .zero ? nil : addButtonFrame,
+                    onDismiss: dismissAddHint
+                )
+                .transition(.opacity)
+            }
+        }
+        .onAppear {
+            guard hasCompletedWelcome, !seenFeedsAddHint, !store.feeds.isEmpty else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !seenFeedsAddHint else { return }
+                withAnimation { showAddHint = true }
+            }
+        }
+        // Opening the add menu means they found the button — done teaching.
+        .onChange(of: isAddingFeed) { _, adding in
+            if adding, showAddHint { dismissAddHint() }
+        }
+        .onDisappear {
+            if showAddHint { dismissAddHint() }
+        }
         .sheet(isPresented: $isAddingFeed) {
             AddFeedView(folders: store.feedFolders) { feedURL, folder in
                 try await store.addFeed(urlString: feedURL, toFolder: folder)
             }
+        }
+        // Drilling into a source while the hint is up: it's done its job.
+        .onChange(of: path) { _, _ in
+            if showAddHint { dismissAddHint() }
         }
         .alert("New Folder", isPresented: $isCreatingFolder) {
             TextField("Folder Name", text: $newFolderName)
@@ -1396,6 +1444,11 @@ private struct FeedsTab: View {
         } message: { _ in
             Text("Enter a new name, or leave empty to use the feed's own name.")
         }
+    }
+
+    private func dismissAddHint() {
+        seenFeedsAddHint = true
+        withAnimation { showAddHint = false }
     }
 
     @ViewBuilder

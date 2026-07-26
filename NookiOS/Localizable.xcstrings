@@ -1854,6 +1854,28 @@
         }
       }
     },
+    "Follow more sites here": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいサイトはここから追加"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 사이트는 여기서 추가해요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这里关注更多网站"
+          }
+        }
+      }
+    },
     "Follow the sites you love, and their new posts gather here automatically — no accounts, no algorithm, just your reading. Don't know where to start? We'll suggest some next.": {
       "localizations": {
         "ja": {
@@ -5515,6 +5537,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "点按高亮的按钮，打开完整网页——支持阅读视图与翻译。"
+          }
+        }
+      }
+    },
+    "Tap the plus button anytime to follow another site — paste any website address and Nook finds its posts.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "いつでもプラスボタンからサイトをフォローできます。ウェブサイトのアドレスを貼り付ければ、Nookが記事を自動で見つけます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "언제든 더하기 버튼을 눌러 사이트를 구독할 수 있어요. 아무 웹사이트 주소나 붙여넣으면 Nook이 글을 자동으로 찾아드려요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "随时点按加号按钮关注新网站——粘贴任意网址，Nook 会自动找到它的文章。"
           }
         }
       }

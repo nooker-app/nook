@@ -308,6 +308,15 @@ struct FirstRowFrameKey: PreferenceKey {
     }
 }
 
+/// The Feeds tab's "+" toolbar button frame, for the one-shot add-site hint.
+struct FeedsAddButtonFrameKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
 // MARK: - Liquid Glass helpers (native look, with pre-iOS-26 fallback)
 
 /// Groups glass capsules for consistent Liquid Glass sampling on iOS 26; a plain
@@ -365,6 +374,36 @@ extension View {
 /// A one-step spotlight over the first article row, nudging the user to open a
 /// story (which then starts the reader coach marks). Uses the row's measured
 /// frame when available, else a sensible top-of-list region.
+/// Spotlights the Feeds tab's "+" button on the first visit: the tour
+/// subscribes starter picks FOR the user, so many would otherwise never learn
+/// where new sites are added by hand.
+struct FeedsAddHint: View {
+    /// The "+" toolbar button's measured global frame; nil falls back to the
+    /// top-trailing corner where the button lives.
+    var buttonFrame: CGRect?
+    var onDismiss: () -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let fallback = CGRect(x: geo.size.width - 66, y: geo.safeAreaInsets.top + 4, width: 52, height: 44)
+            let rect = (buttonFrame ?? fallback).insetBy(dx: -8, dy: -6)
+            ZStack(alignment: .top) {
+                CoachScrim(spotlight: rect, cornerRadius: 22)
+                CoachCallout(
+                    systemImage: "plus.circle",
+                    title: "Follow more sites here",
+                    message: "Tap the plus button anytime to follow another site — paste any website address and Nook finds its posts.",
+                    primaryTitle: "Got it",
+                    onPrimary: onDismiss
+                )
+                // Right under the spotlighted button, where the eye already is.
+                .padding(.top, max(rect.maxY + 16, 80))
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
 struct ListTapHint: View {
     /// The first row's global frame, if measured; nil falls back to a region.
     var rowFrame: CGRect?

@@ -11,6 +11,7 @@ enum TourFlags {
     static let hasCompletedWelcomeKey = "hasCompletedWelcome"
     static let seenReaderGestureHintKey = "seenReaderGestureHint"
     static let seenListHintKey = "seenListTapHint"
+    static let seenFeedsAddHintKey = "seenFeedsAddHint"
 }
 
 /// In-memory coordinator that lets the welcome cover drive the live app: after
