@@ -6581,6 +6581,125 @@
         }
       }
     },
+    "Always Removed" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "常に削除される項目" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "항상 삭제되는 항목" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "始终删除" } }
+      }
+    },
+    "Both are deleted by default. Select only the sign-in data you want to keep." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "どちらもデフォルトでは削除されます。残したいサインイン情報だけを選択してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기본적으로 모두 삭제됩니다. 남기려는 로그인 정보만 선택하세요." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "默认都会删除。请仅选择要保留的登录信息。" } }
+      }
+    },
+    "Keep Gemini API key" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Gemini APIキーを保持" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Gemini API 키 유지" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保留 Gemini API 密钥" } }
+      }
+    },
+    "Keep Sign-In Data" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サインイン情報を保持" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "로그인 정보 유지" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保留登录信息" } }
+      }
+    },
+    "Keep website login sessions" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Webサイトのログインセッションを保持" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "웹사이트 로그인 세션 유지" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保留网站登录会话" } }
+      }
+    },
+    "Local App Data" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカルアプリデータ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "로컬 앱 데이터" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地应用数据" } }
+      }
+    },
+    "Local database and network caches" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカルデータベースとネットワークキャッシュ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "로컬 데이터베이스 및 네트워크 캐시" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地数据库和网络缓存" } }
+      }
+    },
+    "Local settings and downloaded data can't be recovered. Your sync folder will not be changed." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカル設定とダウンロード済みデータは復元できません。同期フォルダは変更されません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "로컬 설정과 다운로드 데이터는 복구할 수 없습니다. 동기화 폴더는 변경되지 않습니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地设置和已下载数据无法恢复。同步文件夹不会被更改。" } }
+      }
+    },
+    "Offline articles and translation caches" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オフライン記事と翻訳キャッシュ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "오프라인 글 및 번역 캐시" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "离线文章和翻译缓存" } }
+      }
+    },
+    "Removes this Mac's settings, sync folder connection, offline articles, and caches. Files in your sync folder are never changed." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このMacの設定、同期フォルダ接続、オフライン記事、キャッシュを削除します。同期フォルダ内のファイルは変更されません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 Mac의 설정, 동기화 폴더 연결, 오프라인 글과 캐시를 삭제합니다. 동기화 폴더의 파일은 변경하지 않습니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除此 Mac 的设置、同步文件夹连接、离线文章和缓存。同步文件夹内的文件绝不会被更改。" } }
+      }
+    },
+    "Reset and Relaunch" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リセットして再起動" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "초기화하고 재실행" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重置并重新启动" } }
+      }
+    },
+    "Reset Nook" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Nookをリセット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Nook 초기화" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重置 Nook" } }
+      }
+    },
+    "Reset Nook and Relaunch?" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Nookをリセットして再起動しますか？" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Nook을 초기화하고 재실행할까요?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重置 Nook 并重新启动？" } }
+      }
+    },
+    "Reset Nook…" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Nookをリセット…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "Nook 초기화…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重置 Nook…" } }
+      }
+    },
+    "Start this app again with clean local data." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカルデータを消去して、このアプリを最初から始めます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "로컬 데이터를 정리하고 앱을 처음부터 다시 시작합니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清除本地数据并重新开始使用此应用。" } }
+      }
+    },
+    "Sync folder connection and app settings" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "同期フォルダ接続とアプリ設定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "동기화 폴더 연결 및 앱 설정" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "同步文件夹连接和应用设置" } }
+      }
+    },
+    "Your sync folder and every file inside it stay untouched. Reconnecting the same folder restores its synced feeds and reading state." : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "同期フォルダとその中のファイルには一切触れません。同じフォルダを再接続すると、同期済みフィードと閲覧状態が復元されます。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "동기화 폴더와 내부 파일은 그대로 유지됩니다. 같은 폴더를 다시 연결하면 동기화된 피드와 읽기 상태가 복원됩니다." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "同步文件夹及其中所有文件均保持不变。重新连接同一文件夹会恢复已同步的订阅和阅读状态。" } }
+      }
+    },
     "You're All Caught Up" : {
       "localizations" : {
         "ja" : {

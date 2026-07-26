@@ -2883,6 +2883,7 @@ private struct ExperimentalSettingsSections: View {
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
     @AppStorage(ReaderStore.coherentArticleTranslationKey) private var coherentArticleTranslation = false
     @State private var confirmingClearTranslationCache = false
+    @State private var showingAppReset = false
 
     var body: some View {
         Section("Translation Engine") {
@@ -2913,6 +2914,21 @@ private struct ExperimentalSettingsSections: View {
                 }
             }
         }
+
+        Section("Reset Nook") {
+            LabeledContent("Local App Data") {
+                Button("Reset Nook…", role: .destructive) {
+                    showingAppReset = true
+                }
+            }
+
+            Text("Removes this Mac's settings, sync folder connection, offline articles, and caches. Files in your sync folder are never changed.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .sheet(isPresented: $showingAppReset) {
+            AppResetSheet()
+        }
         // Attach to a single concrete Section (not the whole group) so there's
         // one presentation anchor, not one per section.
         .confirmationDialog(
@@ -2925,6 +2941,119 @@ private struct ExperimentalSettingsSections: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Deletes all saved title translations on this device. Titles are translated again as you view them.")
+        }
+    }
+}
+
+private struct AppResetSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var preservesGeminiCredential = false
+    @State private var preservesWebSessions = false
+    @State private var confirmingReset = false
+    @State private var isResetting = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.counterclockwise.circle")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Reset Nook")
+                        .font(.title2.weight(.semibold))
+                    Text("Start this app again with clean local data.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            GroupBox("Always Removed") {
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("Sync folder connection and app settings", systemImage: "folder.badge.minus")
+                    Label("Offline articles and translation caches", systemImage: "externaldrive.badge.xmark")
+                    Label("Local database and network caches", systemImage: "cylinder.split.1x2")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
+            }
+
+            GroupBox("Keep Sign-In Data") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Keep Gemini API key", isOn: $preservesGeminiCredential)
+                    Toggle("Keep website login sessions", isOn: $preservesWebSessions)
+                    Text("Both are deleted by default. Select only the sign-in data you want to keep.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
+            }
+
+            Label(
+                "Your sync folder and every file inside it stay untouched. Reconnecting the same folder restores its synced feeds and reading state.",
+                systemImage: "checkmark.shield"
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isResetting)
+
+                Button(role: .destructive) {
+                    confirmingReset = true
+                } label: {
+                    if isResetting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("Reset and Relaunch")
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(isResetting)
+            }
+        }
+        .padding(24)
+        .frame(width: 500)
+        .interactiveDismissDisabled(isResetting)
+        .confirmationDialog(
+            "Reset Nook and Relaunch?",
+            isPresented: $confirmingReset
+        ) {
+            Button("Reset and Relaunch", role: .destructive) {
+                performReset()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Local settings and downloaded data can't be recovered. Your sync folder will not be changed.")
+        }
+    }
+
+    private func performReset() {
+        errorMessage = nil
+        isResetting = true
+        let options = LocalAppResetOptions(
+            preservesGeminiCredential: preservesGeminiCredential,
+            preservesWebSessions: preservesWebSessions
+        )
+        Task {
+            do {
+                try await AppResetCoordinator.reset(options: options)
+            } catch {
+                errorMessage = error.localizedDescription
+                isResetting = false
+            }
         }
     }
 }

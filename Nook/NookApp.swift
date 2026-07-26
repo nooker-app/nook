@@ -133,6 +133,21 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
         ReaderStore.shared.flushPendingShardSave()
     }
 
+    func prepareForLocalReset() async {
+        let runningLoop = loopTask
+        loopTask?.cancel()
+        loopTask = nil
+        engagementTask?.cancel()
+        engagementTask = nil
+        if let localEventMonitor {
+            NSEvent.removeMonitor(localEventMonitor)
+            self.localEventMonitor = nil
+        }
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        await runningLoop?.value
+    }
+
     // Keep running in the background when the window is closed so scheduled
     // refreshes and notifications continue; the user quits explicitly with ⌘Q.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -311,5 +326,36 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
             secondsSinceLastInput: idleSeconds
         )
         ReaderStore.shared.setForegroundActive(engaged)
+    }
+}
+
+@MainActor
+enum AppResetCoordinator {
+    static func reset(options: LocalAppResetOptions) async throws {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        // Capture the identity before clearing preferences. Reusing it is what
+        // prevents the untouched sync folder from gaining an orphaned old shard
+        // and a second shard for the freshly reset app.
+        let deviceID = DeviceIdentity.current()
+        // Set the write barrier before waiting for the background controller:
+        // its cancelled refresh may still unwind through save defers.
+        ReaderStore.shared.beginPreparingForLocalReset()
+        await BackgroundRefreshController.shared?.prepareForLocalReset()
+        await ReaderStore.shared.prepareForLocalReset()
+
+        try await LocalAppResetService.reset(
+            options: options,
+            preservingDeviceID: deviceID,
+            bundleIdentifier: bundleIdentifier
+        )
+
+        let notifications = UNUserNotificationCenter.current()
+        notifications.removeAllPendingNotificationRequests()
+        notifications.removeAllDeliveredNotifications()
+        NSApp.dockTile.badgeLabel = nil
+        AppLanguage.relaunch()
     }
 }

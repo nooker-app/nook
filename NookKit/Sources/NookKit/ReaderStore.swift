@@ -299,6 +299,7 @@ public final class ReaderStore {
     // written, and whether a writer task is already draining them.
     private var pendingSave: ReaderLibrary?
     private var isDrainingSaves = false
+    private var saveDrainTask: Task<Void, Never>?
     // While a full refresh runs, per-feed saves are held so the whole (large)
     // library isn't re-encoded and rewritten once per feed; one write flushes
     // the final state when the refresh finishes.
@@ -331,6 +332,7 @@ public final class ReaderStore {
     /// Per-article reader-mode extraction state, observed by the reader views.
     /// Rebuilt per session; the durable results live in the CRDT reader shards.
     private(set) var readerContentStates: [Article.ID: ReaderContentState] = [:]
+    private var readerContentTasks: [Article.ID: Task<Void, Never>] = [:]
     /// The CRDT-synced cache of extracted reader content (separate from every
     /// other store; see `ReaderContentStore`). Created with storage.
     private var readerContentStore: ReaderContentStore?
@@ -354,6 +356,7 @@ public final class ReaderStore {
     private var ownShard = DeviceStateDocument(deviceID: "")
     private var pendingShard: DeviceStateDocument?
     private var isDrainingShardSaves = false
+    private var shardSaveDrainTask: Task<Void, Never>?
     /// The open trailing-save window for the shard (see `scheduleShardSave`).
     private var shardSaveDebounceTask: Task<Void, Never>?
     private var replicaStore: ReplicaStore?
@@ -365,6 +368,10 @@ public final class ReaderStore {
     public static let shared = ReaderStore()
 
     private var didBootstrap = false
+    private var isBootstrapping = false
+    private var bootstrapWaiters: [CheckedContinuation<Void, Never>] = []
+    public private(set) var isPreparingLocalReset = false
+    private var didQuiesceForLocalReset = false
 
     private init() {}
 
@@ -377,8 +384,15 @@ public final class ReaderStore {
     /// the main thread repeatedly and pinned the CPU near 100%. Deferring it to a
     /// one-time call from `.task` keeps those re-evaluations cheap.
     public func bootstrap() async {
-        guard !didBootstrap else { return }
+        guard !didBootstrap, !isPreparingLocalReset else { return }
         didBootstrap = true
+        isBootstrapping = true
+        defer {
+            isBootstrapping = false
+            let waiters = bootstrapWaiters
+            bootstrapWaiters.removeAll()
+            waiters.forEach { $0.resume() }
+        }
         deviceID = DeviceIdentity.current()
         ownShard = DeviceStateDocument(deviceID: deviceID)
         // Read the offline index off-main while storage restores, so the first
@@ -386,10 +400,93 @@ public final class ReaderStore {
         async let offlineIndexPreload: Void = OfflineArticleStore.shared.preloadIndex()
         await restoreStorageIfPossible()
         await offlineIndexPreload
+        guard !isPreparingLocalReset else { return }
         // Drop offline copies past their expiry (device-local; independent of the
         // sync folder), so stale downloads don't linger or inflate the count.
         purgeExpiredOffline()
         scheduleArticleFilter()
+    }
+
+    /// Stops every tracked operation that can feed a later local or sync write.
+    /// Reset deliberately drops pending snapshots instead of flushing them: the
+    /// selected sync folder must remain byte-for-byte untouched.
+    public func beginPreparingForLocalReset() {
+        isPreparingLocalReset = true
+    }
+
+    public func prepareForLocalReset() async {
+        beginPreparingForLocalReset()
+        guard !didQuiesceForLocalReset else { return }
+        didQuiesceForLocalReset = true
+
+        if isBootstrapping {
+            await withCheckedContinuation { continuation in
+                bootstrapWaiters.append(continuation)
+            }
+        }
+
+        stopObservingLibrary()
+        searchDebounceTask?.cancel()
+        filterTask?.cancel()
+        filterDebounceTask?.cancel()
+        bulkCategorizeTask?.cancel()
+        externalReloadTask?.cancel()
+        allFeedsRefreshTask?.cancel()
+        dateResolutionTask?.cancel()
+        bulkDownloadTask?.cancel()
+        let offlineSaveTasks = Array(offlineSaveTasks.values)
+        offlineSaveTasks.forEach { $0.cancel() }
+        let readerContentTasks = Array(readerContentTasks.values)
+        readerContentTasks.forEach { $0.cancel() }
+        batchMergeFlushTask?.cancel()
+        shardSaveDebounceTask?.cancel()
+
+        pendingSave = nil
+        pendingShard = nil
+        pendingBatchMerges.removeAll()
+        aiCategorizeQueue.removeAll()
+
+        await allFeedsRefreshTask?.value
+        await dateResolutionTask?.value
+        await bulkDownloadTask?.value
+        await bulkCategorizeTask?.value
+        await externalReloadTask?.value
+        await batchMergeFlushTask?.value
+        for task in offlineSaveTasks { await task.value }
+        for task in readerContentTasks { await task.value }
+        // A drain may already be inside an atomic coordinated write. Waiting for
+        // it before releasing the security scope prevents an in-flight writer
+        // from racing the reset boundary.
+        await saveDrainTask?.value
+        await shardSaveDrainTask?.value
+
+        allFeedsRefreshTask = nil
+        dateResolutionTask = nil
+        bulkDownloadTask = nil
+        bulkCategorizeTask = nil
+        externalReloadTask = nil
+        batchMergeFlushTask = nil
+        self.offlineSaveTasks.removeAll()
+        self.readerContentTasks.removeAll()
+        saveDrainTask = nil
+        shardSaveDrainTask = nil
+        refreshingFeedIDs.removeAll()
+        spinningFeedIDs.removeAll()
+        isBatchRefreshing = false
+        isDrainingSaves = false
+        isDrainingShardSaves = false
+
+        ListTitleTranslator.shared.clearCache()
+        readerContentStore = nil
+        readerModeExtractor = nil
+        replicaStore = nil
+        storage = nil
+
+        if isAccessingSecurityScopedResource {
+            securityScopedDirectoryURL?.stopAccessingSecurityScopedResource()
+        }
+        securityScopedDirectoryURL = nil
+        isAccessingSecurityScopedResource = false
     }
 
     public var isStorageConfigured: Bool {
@@ -776,6 +873,7 @@ public final class ReaderStore {
     /// for legacy and shard changes, so a read on another device shows up
     /// live without a relaunch.
     private func scheduleExternalReload() {
+        guard !isPreparingLocalReset else { return }
         externalReloadTask?.cancel()
         externalReloadTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -876,7 +974,7 @@ public final class ReaderStore {
     /// main actor so a foreground/observer wake never stalls the UI; only the
     /// merge with our in-memory shard and the apply run on the main actor.
     private func reloadMerged() async {
-        guard let storage else { return }
+        guard !isPreparingLocalReset, let storage else { return }
 
         // Pull any peer's reader-mode extractions (CRDT-merged) so content a
         // sibling device already extracted shows here without re-fetching.
@@ -907,7 +1005,8 @@ public final class ReaderStore {
             )
             return (snapshot, folded, merged, precomputed)
         }.value
-        guard let (snapshot, foldedPeerHLC, mergedRaw, precomputed) = loaded,
+        guard !isPreparingLocalReset,
+              let (snapshot, foldedPeerHLC, mergedRaw, precomputed) = loaded,
               snapshot.revision >= appliedReplicaRevision else { return }
         // A refresh may have started during the off-main decode; its in-memory
         // articles would be newer than this disk snapshot, so don't clobber them.
@@ -1015,7 +1114,7 @@ public final class ReaderStore {
     /// promptly — it bypasses the baseline mtime gate so shard-only edits (a read
     /// on another device) are pulled even when the baseline is unchanged.
     public func syncFromDisk() {
-        guard let storage, !isRefreshing else { return }
+        guard !isPreparingLocalReset, let storage, !isRefreshing else { return }
         storage.startDownloadingLibraryIfNeeded()
         storage.startDownloadingStateIfNeeded()
         // reloadMerged decodes off-main and records the mod dates itself.
@@ -1869,7 +1968,7 @@ public final class ReaderStore {
     /// unread) articles that arrived, so a background refresher can decide
     /// whether to notify. Assumes the library is already loaded.
     public func refreshAllReportingNew(mode: RefreshMode = .ambient) async -> BackgroundRefreshResult {
-        guard isStorageConfigured, !feeds.isEmpty else {
+        guard !isPreparingLocalReset, isStorageConfigured, !feeds.isEmpty else {
             return BackgroundRefreshResult(newArticleCount: 0, sampleTitles: [])
         }
 
@@ -1877,8 +1976,14 @@ public final class ReaderStore {
         // another device already fetched (and possibly read) is already known
         // here and isn't re-announced as new.
         await reloadMerged()
+        guard !isPreparingLocalReset else {
+            return BackgroundRefreshResult(newArticleCount: 0, sampleTitles: [])
+        }
         // Already synced above; skip the redundant reload inside refreshAllFeeds.
         await refreshAllFeeds(syncFirst: false, mode: mode)
+        guard !isPreparingLocalReset else {
+            return BackgroundRefreshResult(newArticleCount: 0, sampleTitles: [])
+        }
         try? persistReplica()
         // Never notify about an article the user already saw in the list on any
         // device — "seen" syncs via the shards, so it suppresses across devices.
@@ -2080,12 +2185,16 @@ public final class ReaderStore {
         // the synchronous `.loading` write keeps this idempotent.
         if OfflineArticleStore.shared.isSaved(article.id) {
             readerContentStates[article.id] = .loading
-            Task { await loadOfflineReaderContent(for: article) }
+            startReaderContentTask(for: article) {
+                await self.loadOfflineReaderContent(for: article)
+            }
             return
         }
         guard usesReaderContentByDefault else { return }
         readerContentStates[article.id] = .loading
-        Task { await loadReaderContent(for: article, forceRefresh: false) }
+        startReaderContentTask(for: article) {
+            await self.loadReaderContent(for: article, forceRefresh: false)
+        }
     }
 
     /// Serves an offline-saved article like the extraction path serves a cache
@@ -2120,6 +2229,7 @@ public final class ReaderStore {
     /// idle. Observed so the UI can show a progress indicator.
     public private(set) var offlineDownloadProgress: (completed: Int, total: Int)?
     private var bulkDownloadTask: Task<Void, Never>?
+    private var offlineSaveTasks: [Article.ID: Task<Void, Never>] = [:]
 
     /// Saved-offline articles, newest first (for the management list).
     public func offlineInfos() -> [OfflineArticleInfo] { OfflineArticleStore.shared.infos() }
@@ -2151,7 +2261,13 @@ public final class ReaderStore {
     /// Saves one article for offline reading (extract if needed; always stores
     /// something readable). Fire-and-forget from the UI.
     public func saveOffline(_ article: Article) {
-        Task { await performSaveOffline(article) }
+        guard !isPreparingLocalReset else { return }
+        offlineSaveTasks[article.id]?.cancel()
+        offlineSaveTasks[article.id] = Task { [weak self] in
+            guard let self else { return }
+            await self.performSaveOffline(article)
+            self.offlineSaveTasks[article.id] = nil
+        }
     }
 
     /// Removes one article's offline copy.
@@ -2255,7 +2371,21 @@ public final class ReaderStore {
     /// action on the fallback notice).
     public func retryReaderContent(for article: Article) {
         readerContentStates[article.id] = .loading
-        Task { await loadReaderContent(for: article, forceRefresh: true) }
+        startReaderContentTask(for: article) {
+            await self.loadReaderContent(for: article, forceRefresh: true)
+        }
+    }
+
+    private func startReaderContentTask(
+        for article: Article,
+        operation: @escaping @MainActor () async -> Void
+    ) {
+        guard !isPreparingLocalReset else { return }
+        readerContentTasks[article.id]?.cancel()
+        readerContentTasks[article.id] = Task { [weak self] in
+            await operation()
+            self?.readerContentTasks[article.id] = nil
+        }
     }
 
     private func loadReaderContent(for article: Article, forceRefresh: Bool) async {
@@ -2375,6 +2505,7 @@ public final class ReaderStore {
 
     /// Starts (or restarts) a full refresh, replacing any in-flight one.
     private func startAllFeedsRefresh() {
+        guard !isPreparingLocalReset else { return }
         allFeedsRefreshTask?.cancel()
         allFeedsRefreshTask = Task { [weak self] in
             await self?.refreshAllFeeds()
@@ -2397,7 +2528,8 @@ public final class ReaderStore {
     /// starts so the launch sync and the initial `didBecomeActive` (which both
     /// fire at startup) coalesce into a single refresh instead of two.
     public func refreshOnActivation(honorThrottle: Bool) {
-        guard isStorageConfigured, !feeds.isEmpty, !isRefreshing, !activationRefreshInFlight else { return }
+        guard !isPreparingLocalReset,
+              isStorageConfigured, !feeds.isEmpty, !isRefreshing, !activationRefreshInFlight else { return }
 
         if honorThrottle, let lastRefreshedAt,
            Date.now.timeIntervalSince(lastRefreshedAt) < Self.activationRefreshThrottle {
@@ -2425,13 +2557,13 @@ public final class ReaderStore {
     /// unhealthy), a few seconds later. Recovers transient post-background
     /// failures; a persistently-broken feed just re-flags itself (no alert).
     private func retryFailedFeedsOnce() async {
-        guard !isRetryingFailedFeeds else { return }
+        guard !isPreparingLocalReset, !isRetryingFailedFeeds else { return }
         let failed = feeds.filter { $0.healthScore <= 0 }.map(\.id)
         guard !failed.isEmpty else { return }
         isRetryingFailedFeeds = true
         defer { isRetryingFailedFeeds = false }
         try? await Task.sleep(for: .seconds(4))
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, !isPreparingLocalReset else { return }
         for feed in failed.compactMap(feed(for:)) {
             if Task.isCancelled { return }
             await refreshFeed(feed)
@@ -2439,7 +2571,7 @@ public final class ReaderStore {
     }
 
     func refresh(feedID: Feed.ID) {
-        guard feed(for: feedID) != nil else { return }
+        guard !isPreparingLocalReset, feed(for: feedID) != nil else { return }
         feedSelection = [feedID]
 
         Task {
@@ -2451,7 +2583,8 @@ public final class ReaderStore {
     }
 
     public func refreshFeeds(ids: [Feed.ID]) {
-        guard ids.contains(where: { feed(for: $0) != nil }) else { return }
+        guard !isPreparingLocalReset,
+              ids.contains(where: { feed(for: $0) != nil }) else { return }
         Task {
             await reloadMerged()
             for feed in ids.compactMap(feed(for:)) {
@@ -2969,11 +3102,13 @@ public final class ReaderStore {
     }
 
     private func refreshAllFeeds(syncFirst: Bool = true, mode: RefreshMode = .interactive) async {
+        guard !isPreparingLocalReset else { return }
         // Pull the latest content + state shards before fetching, so the save at
         // the end can't clobber a feed another device just added but that hasn't
         // reached this device's in-memory list yet. (Callers that already synced
         // — e.g. the background reporter — pass false to avoid a redundant read.)
         if syncFirst { await reloadMerged() }
+        guard !isPreparingLocalReset else { return }
         // Hold per-feed writes and flush once at the end, so a refresh of many
         // feeds doesn't rewrite the whole library repeatedly. `defer` guarantees
         // the flag clears and the final state is saved even on early exit.
@@ -3038,7 +3173,7 @@ public final class ReaderStore {
                 // way out. The interrupted refresh re-runs on the next turn.
                 // Results that arrived before the cancel still merge (they did
                 // before batching too) — flush them now, then drain untouched.
-                if Task.isCancelled {
+                if Task.isCancelled || isPreparingLocalReset {
                     flushBatchMerges()
                     continue
                 }
@@ -3080,6 +3215,7 @@ public final class ReaderStore {
 
     @discardableResult
     private func fetch(url: URL, existingFeedID: Feed.ID?) async throws -> ParsedFeed {
+        guard !isPreparingLocalReset else { throw CancellationError() }
         let refreshID = existingFeedID ?? url.absoluteString
         // Single-feed fetches are always user-initiated (add feed, refresh this
         // feed), so the spinner is expected feedback.
@@ -3089,6 +3225,7 @@ public final class ReaderStore {
         }
 
         var parsedFeed = try await feedService.fetch(url: url)
+        guard !isPreparingLocalReset else { throw CancellationError() }
         if let existingFeedID, existingFeedID != parsedFeed.feed.id {
             // Re-key onto the existing feed's id atomically: the article ids are
             // built as "\(feed.id)#\(seed)", so re-keying only the feed would leave
@@ -3115,6 +3252,7 @@ public final class ReaderStore {
     }
 
     private func refreshFeed(_ feed: Feed) async {
+        guard !isPreparingLocalReset else { return }
         do {
             _ = try await fetch(url: feed.feedURL, existingFeedID: feed.id)
         } catch {
@@ -3390,6 +3528,7 @@ public final class ReaderStore {
     /// while keeping progressive display (a slow refresh still shows articles
     /// every ~400ms, on par with the 300ms list-filter debounce).
     private func enqueueBatchMerge(_ parsed: ParsedFeed, animated: Bool) {
+        guard !isPreparingLocalReset else { return }
         pendingBatchMerges.append((parsed, animated))
         guard batchMergeFlushTask == nil else { return }
         batchMergeFlushTask = Task { [weak self] in
@@ -3414,6 +3553,12 @@ public final class ReaderStore {
     /// bucket is a no-op, and the merge reads `articles` at flush time so it
     /// always composes over the latest state.
     private func flushBatchMerges() {
+        if isPreparingLocalReset {
+            pendingBatchMerges.removeAll()
+            batchMergeFlushTask?.cancel()
+            batchMergeFlushTask = nil
+            return
+        }
         guard !pendingBatchMerges.isEmpty else { return }
         let bucket = pendingBatchMerges
         pendingBatchMerges = []
@@ -3653,14 +3798,14 @@ public final class ReaderStore {
     /// mutations (e.g. during a full refresh) are coalesced so only the most
     /// recent state is written — keeping the UI lag-free while syncing.
     private func scheduleSave() {
-        guard let storage else { return }
+        guard !isPreparingLocalReset, let storage else { return }
         // Always capture the latest snapshot (cheap: arrays are copy-on-write)...
         pendingSave = snapshotLibrary()
         // ...but hold the actual write until a batch refresh flushes it once.
         guard !isBatchRefreshing else { return }
         guard !isDrainingSaves else { return }
         isDrainingSaves = true
-        Task { await drainSaves(storage: storage) }
+        saveDrainTask = Task { await drainSaves(storage: storage) }
     }
 
     private func drainSaves(storage: ReaderStorage) async {
@@ -3684,13 +3829,14 @@ public final class ReaderStore {
             if errorMessage != nil { errorMessage = nil }
         }
         isDrainingSaves = false
+        saveDrainTask = nil
     }
 
     /// Writes the library immediately on the calling actor. Used only for the
     /// initial file creation when configuring a folder, where later code
     /// depends on the file already existing.
     private func persistReplica() throws {
-        guard let storage, let replicaStore else {
+        guard !isPreparingLocalReset, let storage, let replicaStore else {
             throw ReaderStorageError.noDirectorySelected
         }
         let snapshot = try replicaStore.recordLocal(
@@ -3796,7 +3942,7 @@ public final class ReaderStore {
     /// read bit) — and `flushPendingShardSave` drains on backgrounding /
     /// termination so no state is lost.
     private func scheduleShardSave(urgent: Bool = false) {
-        guard let storage else { return }
+        guard !isPreparingLocalReset, let storage else { return }
         ownShard.updatedAt = Date()
         ownShard.generation &+= 1
         pendingShard = ownShard
@@ -3823,6 +3969,7 @@ public final class ReaderStore {
     /// leaving the foreground (and the macOS app on termination) so the trailing
     /// save window can't drop state.
     public func flushPendingShardSave() {
+        guard !isPreparingLocalReset else { return }
         shardSaveDebounceTask?.cancel()
         shardSaveDebounceTask = nil
         guard let storage, pendingShard != nil else { return }
@@ -3830,9 +3977,9 @@ public final class ReaderStore {
     }
 
     private func startShardSaveDrain(storage: ReaderStorage) {
-        guard !isDrainingShardSaves else { return }
+        guard !isPreparingLocalReset, !isDrainingShardSaves else { return }
         isDrainingShardSaves = true
-        Task { await drainShardSaves(storage: storage) }
+        shardSaveDrainTask = Task { await drainShardSaves(storage: storage) }
     }
 
     private func drainShardSaves(storage: ReaderStorage) async {
@@ -3847,5 +3994,6 @@ public final class ReaderStore {
             lastKnownStateModDate = modDate
         }
         isDrainingShardSaves = false
+        shardSaveDrainTask = nil
     }
 }
