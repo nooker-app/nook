@@ -2,7 +2,7 @@
   "sourceLanguage" : "en",
   "strings" : {
     "" : {
-
+      "shouldTranslate" : false
     },
     "— Diagnostics (helps with troubleshooting; feel free to delete) —" : {
       "localizations" : {
@@ -61,7 +61,26 @@
       }
     },
     "“From” and “Until” are the same time, so notifications can arrive all day." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘시작’과 ‘종료’가 같은 시각이라 하루 종일 알림이 올 수 있습니다."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「開始」と「終了」が同じ時刻のため、一日中通知が届きます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“开始”与“结束”为同一时刻，因此全天都可能收到通知。"
+          }
+        }
+      }
     },
     "%lld" : {
       "shouldTranslate" : false
@@ -95,7 +114,7 @@
       }
     },
     "%lld new articles" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -242,7 +261,7 @@
       }
     },
     "Add a feed" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -265,7 +284,7 @@
       }
     },
     "Add Feed" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -727,35 +746,6 @@
         }
       }
     },
-    "Cancel Search" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel Search"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "検索をキャンセル"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "검색 취소"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "取消搜索"
-          }
-        }
-      }
-    },
     "Categories" : {
       "localizations" : {
         "en" : {
@@ -841,7 +831,7 @@
       }
     },
     "Checking RSS/Atom feed…" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -931,29 +921,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择一个同步文件夹，Nook 会在你的设备之间同步订阅源。"
-          }
-        }
-      }
-    },
-    "Choose Folder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フォルダを選択"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "폴더 선택"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择文件夹"
           }
         }
       }
@@ -1176,29 +1143,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已复制"
-          }
-        }
-      }
-    },
-    "Copy & Add" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コピーして追加"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "복사하고 추가"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "复制并添加"
           }
         }
       }
@@ -1587,29 +1531,6 @@
         }
       }
     },
-    "Double-tap anywhere on an article to star it — and find it later under Starred." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "記事のどこかをダブルタップするとスターが付き、後で「スター付き」から見つけられます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "글 아무 곳이나 더블 탭하면 별표가 됩니다. 나중에 별표 탭에서 찾을 수 있어요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在文章任意处双击即可收藏，稍后可在“已加星标”中找到。"
-          }
-        }
-      }
-    },
     "Double-tap anywhere on the article to star it — try it now, or tap Next." : {
       "localizations" : {
         "ja" : {
@@ -1654,54 +1575,8 @@
         }
       }
     },
-    "Double-tap to star · pull up for the next story" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ダブルタップでスター・上に引くと次の記事"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "더블 탭으로 별표 · 위로 당기면 다음 글"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "双击收藏 · 上拉看下一篇"
-          }
-        }
-      }
-    },
-    "Double-tap to star, pull up for the next story" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ダブルタップでスター、上に引くと次の記事"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "더블 탭으로 별표, 위로 당기면 다음 글"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "双击收藏，上拉看下一篇"
-          }
-        }
-      }
-    },
     "Download for Offline" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1887,29 +1762,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "订阅源名称"
-          }
-        }
-      }
-    },
-    "Feed URL" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フィードURL"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "피드 URL"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "订阅地址"
           }
         }
       }
@@ -2132,29 +1984,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件夹名称"
-          }
-        }
-      }
-    },
-    "Folder Ready" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フォルダ設定済み"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "폴더 설정됨"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文件夹已就绪"
           }
         }
       }
@@ -2392,7 +2221,27 @@
       }
     },
     "From" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始"
+          }
+        }
+      },
+      "comment" : "Start of the notification window (a time of day)"
     },
     "General" : {
       "localizations" : {
@@ -2418,29 +2267,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通用"
-          }
-        }
-      }
-    },
-    "Get Started" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "はじめる"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "시작하기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开始使用"
           }
         }
       }
@@ -2543,7 +2369,7 @@
       "shouldTranslate" : false
     },
     "https://example.com/feed.xml" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2995,29 +2821,6 @@
         }
       }
     },
-    "Like a bird gathering twigs into a nest, gather the reading you care about into a space that's yours." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "鳥が小枝を集めて巣を作るように、読みたいものを自分だけの場所に集めましょう。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "새가 가지를 물어다 둥지를 만들듯, 원하는 읽을거리를 나만의 공간에 모아보세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "就像鸟儿衔来树枝筑巢，把你在意的阅读收进属于你的空间。"
-          }
-        }
-      }
-    },
     "Line Spacing: %@" : {
       "localizations" : {
         "en" : {
@@ -3070,35 +2873,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "链接打开方式"
-          }
-        }
-      }
-    },
-    "Loading your feeds…" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loading your feeds…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フィードを読み込み中…"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "피드를 불러오는 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在加载订阅源…"
           }
         }
       }
@@ -3790,7 +3564,26 @@
       }
     },
     "Nook keeps collecting new articles around the clock, so nothing is missed when a feed drops an older item. Outside these hours it just stays silent and saves the alerts up, then tells you about them together once the window opens." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook은 하루 종일 새 글을 계속 수집하므로 피드에서 오래된 글이 사라져도 놓치지 않습니다. 지정한 시간 밖에서는 알리지 않고 모아 두었다가 시간이 되면 한 번에 알려 줍니다."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook は一日中新着記事を収集し続けるため、フィードから古い記事が消えても取りこぼしません。指定した時間帯の外では通知せずにためておき、時間になったらまとめてお知らせします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook 全天持续收集新文章，即使订阅源移除较早的文章也不会遗漏。在设定时段之外只是保持静默并累积通知，等到时段开始后一并告知。"
+          }
+        }
+      }
     },
     "Nook keeps your feeds in a folder in the cloud so they stay in sync across your devices." : {
       "localizations" : {
@@ -3816,29 +3609,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nook 将订阅源保存在云端的文件夹中，让它们在你的设备之间保持同步。"
-          }
-        }
-      }
-    },
-    "Nook keeps your feeds in a folder you choose. Put it in iCloud Drive and every device stays in sync — nothing ever leaves your own storage." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nookはフィードをあなたが選んだフォルダに保存します。iCloud Driveに置けば、すべてのデバイスで同期され、データがあなたのストレージの外に出ることはありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook은 피드를 사용자가 정한 폴더에 보관합니다. iCloud Drive에 두면 모든 기기가 동기화되며, 데이터는 사용자의 저장 공간을 벗어나지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook 会把你的订阅保存在你选择的文件夹里。放到 iCloud 云盘，所有设备都会保持同步——数据绝不会离开你自己的存储空间。"
           }
         }
       }
@@ -4122,7 +3892,26 @@
       }
     },
     "Only during set hours" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지정한 시간에만 받기"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指定した時間帯のみ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在设定时段内"
+          }
+        }
+      }
     },
     "Open a story" : {
       "localizations" : {
@@ -4408,37 +4197,8 @@
         }
       }
     },
-    "Paste an RSS or Atom feed URL, or a website address — Nook will find the feed." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Paste an RSS or Atom feed URL, or a website address — Nook will find the feed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RSS / Atom フィードの URL、または Web サイトのアドレスを貼り付けると、Nook がフィードを見つけます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RSS나 Atom 피드 URL 또는 웹사이트 주소를 붙여 넣으면 Nook이 피드를 찾아줍니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粘贴 RSS 或 Atom 订阅源网址，或网站地址 —— Nook 会自动找到订阅源。"
-          }
-        }
-      }
-    },
     "Paste an RSS or Atom feed URL, or a website address. Nook will check it before closing." : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -4456,29 +4216,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "粘贴 RSS 或 Atom 订阅源网址，或网站地址。Nook 会在关闭前进行检查。"
-          }
-        }
-      }
-    },
-    "Paste Copied Link" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コピーしたリンクを貼り付け"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "복사한 링크 붙여넣기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粘贴已复制的链接"
           }
         }
       }
@@ -4501,29 +4238,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "粘贴网址，Nook 会替你找到它的文章——它会自动发现网站的 RSS 或 Atom 源，你完全不需要了解这些。只要网站公开文章，一键即可关注。"
-          }
-        }
-      }
-    },
-    "Paste the Hacker News link you copied, then tap Add." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コピーしたHacker Newsのリンクを貼り付けて、「追加」をタップしてください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "복사한 해커뉴스 링크를 붙여넣은 뒤 추가를 누르세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粘贴你复制的 Hacker News 链接，然后点按“添加”。"
           }
         }
       }
@@ -4590,29 +4304,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在这里选择 iCloud 云盘中的文件夹，包括 Mac 在内的所有设备都会共享同样的网站、文章和已读状态。"
-          }
-        }
-      }
-    },
-    "Pick a home for your feeds" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フィードの置き場所を選ぶ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "피드를 담을 공간을 정하세요"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为你的订阅选个家"
           }
         }
       }
@@ -4992,7 +4683,7 @@
       }
     },
     "Remove" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5394,37 +5085,8 @@
         }
       }
     },
-    "Save" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "저장"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存"
-          }
-        }
-      }
-    },
     "Save for Offline" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6092,29 +5754,6 @@
         }
       }
     },
-    "Start with Hacker News" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hacker Newsから始める"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "해커뉴스로 시작하기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 Hacker News 开始"
-          }
-        }
-      }
-    },
     "Status" : {
       "localizations" : {
         "en" : {
@@ -6239,75 +5878,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "与 Mac 同步"
-          }
-        }
-      }
-    },
-    "Tap + to add a feed. Paste an RSS link or just a website — Nook finds the feed for you." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+ をタップしてフィードを追加。RSS リンクやウェブサイトの URL を貼るだけで、Nook がフィードを見つけます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+ 를 눌러 피드를 추가하세요. RSS 링크나 그냥 웹사이트 주소를 붙여넣으면 Nook이 피드를 찾아줍니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "点按 + 添加订阅源。粘贴 RSS 链接或直接粘贴网址，Nook 会为你找到订阅源。"
-          }
-        }
-      }
-    },
-    "Tap any story in the list to open it in the clean, native reader." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "リストの記事をタップすると、すっきりしたネイティブリーダーで開きます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "목록에서 아무 글이나 누르면 깔끔한 네이티브 리더로 열립니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "点按列表中的任意文章，即可在简洁的原生阅读器中打开。"
-          }
-        }
-      }
-    },
-    "Tap any story to open it in the clean, native reader." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "記事をタップすると、すっきりとしたネイティブリーダーで開きます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "글을 누르면 깔끔한 네이티브 리더로 열립니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "点按任意文章，即可在简洁的原生阅读器中打开。"
           }
         }
       }
@@ -6452,29 +6022,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文本颜色"
-          }
-        }
-      }
-    },
-    "The full page, and back" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "元のページと戻る"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "원문 보기, 그리고 되돌아가기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "查看原文，以及返回"
           }
         }
       }
@@ -6740,7 +6287,7 @@
       }
     },
     "Translating…" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6981,7 +6528,27 @@
       }
     },
     "Until" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종료"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束"
+          }
+        }
+      },
+      "comment" : "End of the notification window (a time of day)"
     },
     "Untitled" : {
       "localizations" : {
@@ -7057,75 +6624,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看全部文章"
-          }
-        }
-      }
-    },
-    "Want the original? Tap the document button at the bottom. Swipe in from the left edge to return to your list." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "元のページを見たいときは下部の書類ボタンをタップ。左端からスワイプするとリストに戻ります。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "원문이 궁금하면 하단의 문서 버튼을 누르세요. 왼쪽 가장자리에서 스와이프하면 목록으로 돌아갑니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "想看原文？点按底部的文档按钮。从左边缘向内滑动即可返回列表。"
-          }
-        }
-      }
-    },
-    "We'll copy a popular feed for you. Tap below, then paste it on the Add Feed screen. You can add any RSS link or website the same way." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "人気のフィードをコピーします。下をタップして、フィード追加画面に貼り付けてください。他のRSSリンクやWebサイトも同じ方法で追加できます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "인기 피드 하나를 복사해 드릴게요. 아래를 누른 뒤 피드 추가 화면에 붙여넣으세요. 다른 RSS 링크나 웹사이트도 같은 방법으로 추가할 수 있습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我们会为你复制一个热门订阅。点按下方，然后在“添加订阅”界面粘贴即可。任何 RSS 链接或网站都能用同样的方式添加。"
-          }
-        }
-      }
-    },
-    "Welcome to Nook" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook へようこそ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook에 오신 걸 환영해요"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "欢迎使用 Nook"
           }
         }
       }
