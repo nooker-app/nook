@@ -1478,7 +1478,8 @@ private struct ArticleRow: View {
 
                     CategoryBadgesBlock(
                         ReaderStore.shared.categories(forArticle: article),
-                        topPadding: 5
+                        topPadding: 5,
+                        animatesReveal: !ReaderStore.shared.isBulkCategorizing
                     )
                 }
             }

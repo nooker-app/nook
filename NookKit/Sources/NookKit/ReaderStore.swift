@@ -203,6 +203,15 @@ public final class ReaderStore {
     /// Progress of an in-flight "classify existing articles" migration (completed,
     /// total), or nil when idle. Observed for the settings progress indicator.
     public private(set) var categorizeAllProgress: (completed: Int, total: Int)?
+    /// True while a bulk pass is applying categories in batches. Article rows read
+    /// it to skip the badge reveal animation: a batch can tag many on-screen rows
+    /// at once, and animating them together makes each row invalidate the native
+    /// list height on every frame of its reveal.
+    ///
+    /// Deliberately **not** observable — a row reads this while it is already being
+    /// re-evaluated for its own category change, and making it observable would
+    /// subscribe every visible row to a flag that flips mid-migration.
+    @ObservationIgnored public private(set) var isBulkCategorizing = false
     private var bulkCategorizeTask: Task<Void, Never>?
     /// Background FIFO queue of new article ids awaiting AI categorization, drained
     /// serially so a refresh's new articles are classified without a burst of model
@@ -1828,6 +1837,7 @@ public final class ReaderStore {
             .map(\.id)
         guard !targets.isEmpty else { return }
         categorizeAllProgress = (0, targets.count)
+        isBulkCategorizing = true
         bulkCategorizeTask = Task { await performBulkCategorize(targets, provider: provider) }
     }
 
@@ -1882,6 +1892,12 @@ public final class ReaderStore {
             categorizeAllProgress = (offset + 1, ids.count)
         }
         flush()
+        // Hand the badge reveal animation back only after SwiftUI has had a turn
+        // to render the final batch, so the last flush lands instantly like every
+        // earlier one. Owned solely by this tail — `cancelClassifyAll` drops the
+        // task handle but the body still runs to here.
+        await Task.yield()
+        isBulkCategorizing = false
     }
 
     /// Installed by the platform app to reflect the unread badge (macOS Dock,

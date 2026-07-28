@@ -2404,7 +2404,8 @@ private struct ArticleRowView: View {
 
                 CategoryBadgesBlock(
                     store.categories(forArticle: article),
-                    topPadding: 4
+                    topPadding: 4,
+                    animatesReveal: !store.isBulkCategorizing
                 )
             }
         }

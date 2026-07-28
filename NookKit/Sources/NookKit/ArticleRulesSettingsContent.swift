@@ -396,6 +396,7 @@ public struct CategoryBadges: View {
 public struct CategoryBadgesBlock: View {
     private let categories: [ArticleCategory]
     private let topPadding: CGFloat
+    private let animatesReveal: Bool
 
     /// The last non-empty set, kept so a removal fades out its chips instead of
     /// blanking them the instant the collapse starts.
@@ -403,9 +404,18 @@ public struct CategoryBadgesBlock: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(_ categories: [ArticleCategory], topPadding: CGFloat) {
+    /// Pass `animatesReveal: false` when many rows are being tagged at once (a
+    /// bulk classification pass): the badges then appear in a single committed
+    /// step, which still remeasures the row but costs one height invalidation
+    /// instead of one per animation frame, per row.
+    public init(
+        _ categories: [ArticleCategory],
+        topPadding: CGFloat,
+        animatesReveal: Bool = true
+    ) {
         self.categories = categories
         self.topPadding = topPadding
+        self.animatesReveal = animatesReveal
         _lastNonEmpty = State(initialValue: categories)
     }
 
@@ -419,7 +429,7 @@ public struct CategoryBadgesBlock: View {
             }
             .expandReveal(
                 isVisible: !categories.isEmpty,
-                animateAppearance: !reduceMotion
+                animateAppearance: animatesReveal && !reduceMotion
             )
             .onChange(of: categories) { _, newValue in
                 guard !newValue.isEmpty else { return }
