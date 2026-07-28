@@ -258,6 +258,22 @@ public final class ReplicaStore: @unchecked Sendable {
         }
     }
 
+    /// Articles that were reserved but never announced. A refresh running inside
+    /// the user's quiet hours still fetches and reserves — feeds drop old items,
+    /// so collection can never pause — but leaves the receipt undelivered, and
+    /// the article waits here until a refresh inside the notification window
+    /// announces it. Also catches a run that died between reserving and posting.
+    ///
+    /// Undelivered is written as `0` by `insertReceipt`, so match that as well as
+    /// the column's nullable default.
+    public func pendingNotificationIDs() throws -> Set<Article.ID> {
+        try lock.withLock {
+            try withDatabase { db in
+                try textColumn(db, "SELECT article_id FROM notification_receipts WHERE COALESCE(delivered_at,0)<=0")
+            }
+        }
+    }
+
     public func markNotificationsDelivered(_ articleIDs: [Article.ID]) throws {
         try lock.withLock {
             try withDatabase { db in
@@ -342,6 +358,19 @@ public final class ReplicaStore: @unchecked Sendable {
         let count = Int(sqlite3_column_bytes(statement, 0))
         guard let bytes = sqlite3_column_blob(statement, 0) else { return Data() }
         return Data(bytes: bytes, count: count)
+    }
+
+    /// Every row of a single-column text query.
+    private func textColumn(_ db: OpaquePointer, _ sql: String) throws -> Set<String> {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw sqliteError(db) }
+        defer { sqlite3_finalize(statement) }
+        var rows: Set<String> = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let text = sqlite3_column_text(statement, 0) else { continue }
+            rows.insert(String(cString: text))
+        }
+        return rows
     }
 
     private func loadDocument(_ db: OpaquePointer) throws -> ContentShardDocument? {

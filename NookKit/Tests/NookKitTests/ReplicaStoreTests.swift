@@ -94,6 +94,38 @@ struct ReplicaStoreTests {
         #expect(try replica.reserveNotifications(for: [fresh]).isEmpty)
     }
 
+    @Test("An article held through quiet hours stays queued until it is delivered")
+    func reservedButUndeliveredStaysPending() throws {
+        let (storage, replica, root, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // A legacy-migrated article is written as already delivered, so it must
+        // never surface as a held alert.
+        let old = Fixture.article("old", feedID: "f")
+        try writeLegacy(Fixture.library(feeds: [Fixture.feed("f")], articles: [old]), to: storage)
+        _ = try replica.reconcile(storage: storage)
+        #expect(try replica.pendingNotificationIDs().isEmpty)
+
+        // Two articles arrive overnight. Reserving without delivering — what a
+        // refresh inside the user's quiet hours does — leaves them queued.
+        let night = Fixture.article("night", feedID: "f")
+        let dawn = Fixture.article("dawn", feedID: "f")
+        _ = try replica.recordLocal(
+            Fixture.library(feeds: [Fixture.feed("f")], articles: [old, night, dawn]),
+            retainBodies: []
+        )
+        _ = try replica.reserveNotifications(for: [old, night, dawn])
+        #expect(try replica.pendingNotificationIDs() == ["night", "dawn"])
+
+        // Re-reserving is still at-most-once, and must not drop the queue: the
+        // morning run has to find both articles waiting.
+        #expect(try replica.reserveNotifications(for: [night, dawn]).isEmpty)
+        #expect(try replica.pendingNotificationIDs() == ["night", "dawn"])
+
+        // The morning run announces them and the queue drains.
+        try replica.markNotificationsDelivered(["night", "dawn"])
+        #expect(try replica.pendingNotificationIDs().isEmpty)
+    }
+
     @Test("Legacy folders and read state are seeded without replacing newer registers")
     func legacyUserStateSeedPreservesLibraryShape() {
         var feed = Fixture.feed("f", category: "Design")

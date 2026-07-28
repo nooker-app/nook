@@ -651,7 +651,7 @@ private struct FeedsSettingsScreen: View {
                     }
                     Text("Nook checks for new articles in the background and sends a notification when some arrive. iOS decides exactly when to run this, so timing is approximate.")
                     if newArticleNotifications && notificationScheduleEnabled {
-                        Text("Outside these hours Nook stays quiet and doesn't check in the background, so nothing wakes you at night. Articles that arrive meanwhile aren't lost — they're announced in the first check after the window opens.")
+                        Text("Nook keeps collecting new articles around the clock, so nothing is missed when a feed drops an older item. Outside these hours it just stays silent and saves the alerts up, then tells you about them together once the window opens.")
                         if notificationStartMinute == notificationEndMinute {
                             Text("“From” and “Until” are the same time, so notifications can arrive all day.")
                                 .foregroundStyle(.orange)
@@ -711,11 +711,6 @@ private struct FeedsSettingsScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await checkAlerts() }
         }
-        // A pending wake-up was queued against the old window; re-submit it so the
-        // next one lands inside the new one.
-        .onChange(of: notificationScheduleEnabled) { _, _ in BackgroundRefresh.schedule() }
-        .onChange(of: notificationStartMinute) { _, _ in BackgroundRefresh.schedule() }
-        .onChange(of: notificationEndMinute) { _, _ in BackgroundRefresh.schedule() }
     }
 
     /// Bridges a "minutes from midnight" preference to the `Date` a `DatePicker`

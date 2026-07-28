@@ -23,18 +23,15 @@ enum BackgroundRefresh {
     /// Asks iOS to wake the app for a refresh. The system decides the actual
     /// time; `earliestBeginDate` is only a lower bound.
     ///
-    /// When the next slot would land inside the user's quiet hours, the wake-up
-    /// is parked at the moment the window reopens instead: waking only to
-    /// discover we may not notify would spend the app's background budget (and
-    /// battery) on nothing.
+    /// The interval is deliberately independent of the user's notification hours:
+    /// a feed can drop an old item at any time of day, so Nook keeps collecting
+    /// through quiet hours and only holds the alert back.
     static func schedule() {
         guard isEnabled else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: taskIdentifier)
         let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
         let minutes = UserDefaults.standard.object(forKey: intervalKey) as? Int ?? 30
-        let nextSlot = Date(timeIntervalSinceNow: TimeInterval(max(15, minutes) * 60))
-        let window = NotificationSchedule.current()
-        request.earliestBeginDate = window.nextOpening(after: nextSlot) ?? nextSlot
+        request.earliestBeginDate = Date(timeIntervalSinceNow: TimeInterval(max(15, minutes) * 60))
         do {
             try BGTaskScheduler.shared.submit(request)
             UserDefaults.standard.set(Date(), forKey: lastScheduleKey)
@@ -69,26 +66,30 @@ enum BackgroundRefresh {
     static func run() async {
         schedule()
         guard isEnabled else { return }
-        // Bail out BEFORE refreshing, not just before posting. `refreshForBackground`
-        // reserves each new article's notification receipt, and reservation — not
-        // delivery — is the at-most-once boundary (`ReplicaStore.reserveNotifications`).
-        // Fetching now and staying silent would therefore burn the receipts and the
-        // articles would never be announced at all. Skipping the run leaves them
-        // unreserved, so the first refresh after the window opens announces them.
-        guard NotificationSchedule.current().allows(Date()) else {
-            UserDefaults.standard.set(Date(), forKey: lastRunKey)
-            UserDefaults.standard.set("skipped — outside notification hours", forKey: lastFetchResultKey)
-            return
-        }
         UserDefaults.standard.set(Date(), forKey: lastRunKey)
         await withTaskCancellationHandler {
-            let result = await ReaderStore.shared.refreshForBackground()
+            // `includingHeldAlerts`: fold in anything an earlier run collected
+            // during quiet hours but deliberately didn't announce.
+            let result = await ReaderStore.shared.refreshForBackground(includingHeldAlerts: true)
             guard !Task.isCancelled else {
                 UserDefaults.standard.set("cancelled", forKey: lastFetchResultKey)
                 return
             }
-            UserDefaults.standard.set("\(result.newArticleCount) reserved", forKey: lastFetchResultKey)
+            // Counts this run's arrivals plus anything still held from quiet hours.
+            UserDefaults.standard.set("\(result.newArticleCount) to announce", forKey: lastFetchResultKey)
             guard result.newArticleCount > 0 else { return }
+            // The fetch above always runs — a feed can drop an old item at any
+            // hour, so collection never pauses. Only the alert waits: leaving the
+            // receipts undelivered keeps these articles queued, and the first run
+            // inside the window announces them together with whatever arrived by
+            // then.
+            guard NotificationSchedule.current().allows(Date()) else {
+                UserDefaults.standard.set(
+                    "held \(result.newArticleCount) until notification hours",
+                    forKey: lastNotificationResultKey
+                )
+                return
+            }
             await postNotification(for: result)
             ReaderStore.shared.markNotificationsDelivered(result.articleIDs)
             UserDefaults.standard.set("submitted \(result.newArticleCount)", forKey: lastNotificationResultKey)

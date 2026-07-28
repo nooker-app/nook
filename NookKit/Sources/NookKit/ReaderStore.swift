@@ -2159,11 +2159,14 @@ public final class ReaderStore {
     /// unread articles. Loads the library first if the process is fresh, and
     /// writes it synchronously so the result is saved before the OS suspends
     /// the app again.
-    public func refreshForBackground() async -> BackgroundRefreshResult {
+    public func refreshForBackground(includingHeldAlerts: Bool = false) async -> BackgroundRefreshResult {
         if !didBootstrap { await bootstrap() }
         // The iOS background task runs with no visible UI but a tight OS time
         // budget, so fetch fast (like interactive) yet without animation.
-        let result = await refreshAllReportingNew(mode: .background)
+        let result = await refreshAllReportingNew(
+            mode: .background,
+            includingHeldAlerts: includingHeldAlerts
+        )
         // Write synchronously so the result is saved before the OS suspends the
         // app again (the iOS background-task caller depends on this).
         try? persistReplica()
@@ -2173,7 +2176,16 @@ public final class ReaderStore {
     /// Refreshes all feeds and reports the genuinely new (previously unseen,
     /// unread) articles that arrived, so a background refresher can decide
     /// whether to notify. Assumes the library is already loaded.
-    public func refreshAllReportingNew(mode: RefreshMode = .ambient) async -> BackgroundRefreshResult {
+    ///
+    /// Pass `includingHeldAlerts` to also report articles reserved by an earlier
+    /// run that deliberately withheld their alert — what iOS quiet hours do. It
+    /// is opt-in because a caller that reserves without always marking the result
+    /// delivered (macOS skips the mark when notifications are off or the reader is
+    /// in use) would otherwise re-report the same articles forever.
+    public func refreshAllReportingNew(
+        mode: RefreshMode = .ambient,
+        includingHeldAlerts: Bool = false
+    ) async -> BackgroundRefreshResult {
         guard !isPreparingLocalReset, isStorageConfigured, !feeds.isEmpty else {
             return BackgroundRefreshResult(newArticleCount: 0, sampleTitles: [])
         }
@@ -2197,7 +2209,21 @@ public final class ReaderStore {
         // A filtered article is hidden and never treated as unread, so it must
         // never fire a "new article" notification either.
         let candidates = articles.filter { !$0.isRead && !seen.contains($0.id) && !filteredArticleIDs.contains($0.id) }
-        let fresh = (try? replicaStore?.reserveNotifications(for: candidates)) ?? []
+        let reserved = (try? replicaStore?.reserveNotifications(for: candidates)) ?? []
+        // A refresh inside the user's quiet hours fetches and reserves as usual —
+        // feeds drop old items, so collection must never pause — but holds the
+        // delivery, leaving those articles queued. Pick them up here so the first
+        // refresh after the window opens announces the whole batch. Re-filtering
+        // through `candidates` drops anything read (here or on another device)
+        // while it waited, so the digest can't announce stale news.
+        let held: [Article]
+        if includingHeldAlerts, let pending = try? replicaStore?.pendingNotificationIDs() {
+            let reservedIDs = Set(reserved.map(\.id))
+            held = candidates.filter { pending.contains($0.id) && !reservedIDs.contains($0.id) }
+        } else {
+            held = []
+        }
+        let fresh = reserved + held
         let sorted = fresh.sorted(by: Article.isOrderedBefore)
         return BackgroundRefreshResult(
             newArticleCount: fresh.count,

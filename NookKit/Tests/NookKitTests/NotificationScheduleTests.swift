@@ -23,7 +23,6 @@ struct NotificationScheduleTests {
 
         #expect(schedule.allows(date(3, 0), calendar: calendar))
         #expect(schedule.allows(date(14, 0), calendar: calendar))
-        #expect(schedule.nextOpening(after: date(3, 0), calendar: calendar) == nil)
     }
 
     @Test("A daytime window includes its start and excludes its end")
@@ -55,7 +54,6 @@ struct NotificationScheduleTests {
 
         #expect(schedule.allows(date(9, 0), calendar: calendar))
         #expect(schedule.allows(date(4, 0), calendar: calendar))
-        #expect(schedule.nextOpening(after: date(4, 0), calendar: calendar) == nil)
     }
 
     @Test("Out-of-hours minutes are normalized instead of trapping")
@@ -64,33 +62,6 @@ struct NotificationScheduleTests {
 
         #expect(schedule.startMinute == 60)        // 25:00 → 01:00
         #expect(schedule.endMinute == 23 * 60)     // -01:00 → 23:00
-    }
-
-    @Test("A wake-up inside quiet hours is parked at the next opening")
-    func nextOpeningParksAtWindowStart() {
-        let schedule = NotificationSchedule(isEnabled: true, startMinute: 8 * 60, endMinute: 22 * 60)
-
-        // Late evening, after the window closed: opens tomorrow morning.
-        let afterClose = schedule.nextOpening(after: date(23, 10), calendar: calendar)
-        #expect(afterClose == date(8, 0, day: 13))
-
-        // Small hours, before it opens: opens the same morning.
-        let beforeOpen = schedule.nextOpening(after: date(3, 30), calendar: calendar)
-        #expect(beforeOpen == date(8, 0))
-    }
-
-    @Test("An already-open window doesn't move the wake-up")
-    func nextOpeningIsNilWhileOpen() {
-        let schedule = NotificationSchedule(isEnabled: true, startMinute: 8 * 60, endMinute: 22 * 60)
-
-        #expect(schedule.nextOpening(after: date(9, 0), calendar: calendar) == nil)
-    }
-
-    @Test("An overnight window reopens the same evening")
-    func overnightNextOpening() {
-        let schedule = NotificationSchedule(isEnabled: true, startMinute: 22 * 60, endMinute: 6 * 60)
-
-        #expect(schedule.nextOpening(after: date(13, 0), calendar: calendar) == date(22, 0))
     }
 
     @Test("Defaults are off, so an upgrade keeps notifying exactly as before")

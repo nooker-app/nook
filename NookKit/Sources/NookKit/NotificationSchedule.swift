@@ -3,6 +3,12 @@ import Foundation
 /// Nook's own quiet hours: an opt-in window outside which new-article alerts are
 /// not delivered, so an overnight refresh can't wake the user.
 ///
+/// This gates *delivery only*. Background collection keeps running through quiet
+/// hours, because a feed can drop an older item at any time and an article missed
+/// then is gone for good; the alerts for what arrived simply queue up (as
+/// undelivered receipts, see `ReplicaStore.pendingNotificationIDs`) and are
+/// announced together by the first refresh after the window opens.
+///
 /// Off by default — with `isEnabled == false` every hour is allowed, which is
 /// exactly the behavior every existing install already has.
 ///
@@ -60,23 +66,6 @@ public struct NotificationSchedule: Equatable, Sendable {
         // Overnight window: open from the start until midnight, and again from
         // midnight until the end.
         return minute >= startMinute || minute < endMinute
-    }
-
-    /// The next instant the window opens, strictly after `date` — or nil when it
-    /// is already open (or not enforced). Used to park the background wake-up at
-    /// the edge of quiet hours instead of letting it fire inside them.
-    public func nextOpening(after date: Date, calendar: Calendar = .current) -> Date? {
-        guard isEnabled, !allows(date, calendar: calendar) else { return nil }
-        var components = DateComponents()
-        components.hour = startMinute / 60
-        components.minute = startMinute % 60
-        // `nextDate` walks the real calendar, so a DST transition on the boundary
-        // resolves to an instant that actually exists.
-        return calendar.nextDate(
-            after: date,
-            matching: components,
-            matchingPolicy: .nextTime
-        )
     }
 
     private static func minuteOfDay(_ date: Date, calendar: Calendar) -> Int {
