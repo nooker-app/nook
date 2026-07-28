@@ -379,35 +379,33 @@ public struct CategoryBadges: View {
     }
 }
 
-/// The article-list badge row, revealed without popping the layout.
+/// The article-list badge row.
 ///
 /// Categories almost never exist when a freshly fetched row is first laid out:
-/// keyword rules land with the merge and the AI classifier answers seconds
-/// later, while the app is in the foreground and the row is already on screen.
-/// Dropping the chips straight in leaves the native macOS list holding the
-/// height it measured for a badge-less row, so the chips render clipped. Growing
-/// the row first and fading the chips in afterwards — the same contract the
-/// translated title block uses — keeps the list height in step with the content.
+/// keyword rules land with the merge and the AI classifier answers seconds later,
+/// while the app is in the foreground and the row is already on screen.
+///
+/// On macOS the row must therefore be given a **new list identity** when the
+/// badges appear — see `ArticleRowIdentity` in `ContentView` — because a `List`
+/// inside a `NavigationSplitView` measures a row once, when its cell is created,
+/// and never again. That is also why the chips do not animate their height here:
+/// the cell's own fitting size does grow, but the enclosing `NSOutlineView`
+/// ignores it, so an animated height would just play out behind a clipped row.
+/// The transition below runs on the insertion that the identity change causes.
 ///
 /// `topPadding` is the gap this block would otherwise get from its parent's
-/// `VStack` spacing. It is folded into the revealed content and the block is
-/// placed in a zero-spacing group instead, so a row without categories collapses
-/// to exactly zero height and keeps its original spacing.
+/// `VStack` spacing. It is carried inside the block and the block is placed in a
+/// zero-spacing group instead, so a row without categories adds no gap at all.
 public struct CategoryBadgesBlock: View {
     private let categories: [ArticleCategory]
     private let topPadding: CGFloat
     private let animatesReveal: Bool
 
-    /// The last non-empty set, kept so a removal fades out its chips instead of
-    /// blanking them the instant the collapse starts.
-    @State private var lastNonEmpty: [ArticleCategory]
-
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Pass `animatesReveal: false` when many rows are being tagged at once (a
-    /// bulk classification pass): the badges then appear in a single committed
-    /// step, which still remeasures the row but costs one height invalidation
-    /// instead of one per animation frame, per row.
+    /// Pass `animatesReveal: false` when many rows are tagged at once (a bulk
+    /// classification pass), so a batch lands as one quiet update instead of
+    /// dozens of simultaneous transitions.
     public init(
         _ categories: [ArticleCategory],
         topPadding: CGFloat,
@@ -416,25 +414,18 @@ public struct CategoryBadgesBlock: View {
         self.categories = categories
         self.topPadding = topPadding
         self.animatesReveal = animatesReveal
-        _lastNonEmpty = State(initialValue: categories)
     }
 
     public var body: some View {
-        CategoryBadges(categories.isEmpty ? lastNonEmpty : categories)
-            .padding(.top, topPadding)
-            // A chip appearing or changing must not animate its own intrinsic
-            // size; the reveal owns the single intentional row expansion.
-            .transaction { transaction in
-                transaction.animation = nil
-            }
-            .expandReveal(
-                isVisible: !categories.isEmpty,
-                animateAppearance: animatesReveal && !reduceMotion
-            )
-            .onChange(of: categories) { _, newValue in
-                guard !newValue.isEmpty else { return }
-                lastNonEmpty = newValue
-            }
+        if !categories.isEmpty {
+            CategoryBadges(categories)
+                .padding(.top, topPadding)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .animation(
+                    animatesReveal && !reduceMotion ? .smooth(duration: 0.28) : nil,
+                    value: categories
+                )
+        }
     }
 }
 

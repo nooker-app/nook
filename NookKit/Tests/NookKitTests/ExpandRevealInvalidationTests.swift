@@ -1,4 +1,3 @@
-import CoreGraphics
 import Testing
 @testable import NookKit
 
@@ -32,25 +31,6 @@ struct ExpandRevealInvalidationTests {
         #expect(streamedLineGrowth)
         #expect(!duplicateRevision)
         #expect(categoryChange)
-    }
-
-    @Test("A second revealing block in the same row still moves the row sample")
-    func concurrentRevealsAccumulate() {
-        // The translated title has finished revealing; the category badges then
-        // arrive and start their own reveal. Maxing the samples would keep the
-        // row sample pinned at 1 and the badge growth would never invalidate.
-        var titleFinished: CGFloat = NativeListRowRevealProgressKey.defaultValue
-        NativeListRowRevealProgressKey.reduce(value: &titleFinished) { 1 }
-
-        var badgesGrowing = titleFinished
-        NativeListRowRevealProgressKey.reduce(value: &badgesGrowing) { 0.4 }
-
-        var tracker = ListRowHeightInvalidationTracker()
-        let initialLayout = tracker.consume(progress: titleFinished, layoutRevision: 0)
-        let badgeRevealFrame = tracker.consume(progress: badgesGrowing, layoutRevision: 0)
-
-        #expect(!initialLayout)
-        #expect(badgeRevealFrame)
     }
 
     @MainActor

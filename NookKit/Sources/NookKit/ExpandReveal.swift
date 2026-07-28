@@ -18,19 +18,13 @@ struct ListRowHeightInvalidationTracker {
     }
 }
 
-/// Carries the animated reveal samples from a row's revealing children to the
-/// outer macOS list row, where the native container can remeasure the actual row.
-///
-/// The samples are summed, not maxed: one row reveals more than one block (the
-/// translated title and the category badges), and a max would swallow a badge
-/// reveal entirely whenever the title block already sits at full progress.
-/// The aggregate is only ever compared against its own previous value, so its
-/// absolute scale is irrelevant — only that every child's frame moves it.
+/// Carries the animated reveal sample from a translated child to the outer
+/// macOS list row, where the native container can remeasure the actual row.
 public enum NativeListRowRevealProgressKey: PreferenceKey {
     public static let defaultValue: CGFloat = 0
 
     public static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value += nextValue()
+        value = max(value, nextValue())
     }
 }
 

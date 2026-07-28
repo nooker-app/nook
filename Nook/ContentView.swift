@@ -1277,6 +1277,18 @@ private struct ArticleListView: View {
                 List(selection: $store.selectedArticleID) {
                     ForEach(store.visibleArticles) { article in
                         ArticleRow(article: article, feed: store.feed(for: article.feedID), translationBox: titleTranslator.box(for: article.id))
+                            // A `List` inside a `NavigationSplitView` is backed by an
+                            // NSOutlineView that measures a row exactly once, when its
+                            // cell is created, and ignores every later size change —
+                            // `noteHeightOfRows`, `reloadData` and invalidating the
+                            // hosting hierarchy all leave the cached height in place
+                            // (verified against a standalone repro). Category badges
+                            // arrive seconds after the row does, so without a fresh
+                            // identity the chips render clipped by the stale row height.
+                            // Folding the badge count into the identity re-creates just
+                            // this cell, which is the one thing that does re-measure.
+                            // `tag` keeps selection keyed to the article itself.
+                            .id(ArticleRowIdentity(article: article))
                             .tag(article.id)
                             .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
                             .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
@@ -1409,12 +1421,26 @@ private struct ArticleListView: View {
     }
 }
 
+/// List identity for one article row. It carries the article's own id plus the
+/// things that change the row's height after the cell already exists, because
+/// the enclosing outline view only re-measures a cell it has to create.
+private struct ArticleRowIdentity: Hashable {
+    let id: Article.ID
+    let categoryCount: Int
+
+    init(article: Article) {
+        id = article.id
+        categoryCount = article.categories.count
+    }
+}
+
 private struct ArticleRow: View {
     var article: Article
     var feed: Feed?
     let translationBox: ListTitleTranslator.StateBox
-    /// Summed reveal progress of every animating block in this row (translated
-    /// title, category badges), used only to detect that the row height moved.
+    /// Reveal progress of the translated-title block, used only to detect that
+    /// the row height moved. Badges do not animate their height — see
+    /// ``ArticleRowIdentity`` for why the row is re-created for them instead.
     @State private var rowRevealProgress: CGFloat = 0
 
     var body: some View {
