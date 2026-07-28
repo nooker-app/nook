@@ -561,6 +561,9 @@ private struct FeedsSettingsScreen: View {
     @AppStorage("refreshIntervalMinutes") private var refreshIntervalMinutes = 30
     @AppStorage(ReaderStore.resolveMissingDatesKey) private var resolveMissingDates = true
     @AppStorage(BackgroundRefresh.enabledKey) private var newArticleNotifications = false
+    @AppStorage(NotificationSchedule.enabledKey) private var notificationScheduleEnabled = false
+    @AppStorage(NotificationSchedule.startKey) private var notificationStartMinute = NotificationSchedule.defaultStartMinute
+    @AppStorage(NotificationSchedule.endKey) private var notificationEndMinute = NotificationSchedule.defaultEndMinute
     @AppStorage(ReaderStorage.displayPathDefaultsKey) private var syncFolderDisplayPath = ""
     /// True when notifications are on but iOS won't actually show alert banners
     /// (denied, or authorized for badge only) — the usual reason "notifications
@@ -594,6 +597,21 @@ private struct FeedsSettingsScreen: View {
 
             Section {
                 Toggle("Notify me about new articles", isOn: $newArticleNotifications)
+                if newArticleNotifications {
+                    Toggle("Only during set hours", isOn: $notificationScheduleEnabled)
+                    if notificationScheduleEnabled {
+                        DatePicker(
+                            "From",
+                            selection: timeBinding($notificationStartMinute),
+                            displayedComponents: .hourAndMinute
+                        )
+                        DatePicker(
+                            "Until",
+                            selection: timeBinding($notificationEndMinute),
+                            displayedComponents: .hourAndMinute
+                        )
+                    }
+                }
                 if newArticleNotifications && backgroundRefreshBlocked {
                     Button {
                         openSystemSettings()
@@ -632,6 +650,13 @@ private struct FeedsSettingsScreen: View {
                             .foregroundStyle(.orange)
                     }
                     Text("Nook checks for new articles in the background and sends a notification when some arrive. iOS decides exactly when to run this, so timing is approximate.")
+                    if newArticleNotifications && notificationScheduleEnabled {
+                        Text("Outside these hours Nook stays quiet and doesn't check in the background, so nothing wakes you at night. Articles that arrive meanwhile aren't lost — they're announced in the first check after the window opens.")
+                        if notificationStartMinute == notificationEndMinute {
+                            Text("“From” and “Until” are the same time, so notifications can arrive all day.")
+                                .foregroundStyle(.orange)
+                        }
+                    }
                 }
             }
             .warmRows()
@@ -685,6 +710,29 @@ private struct FeedsSettingsScreen: View {
         .task(id: newArticleNotifications) { await checkAlerts() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await checkAlerts() }
+        }
+        // A pending wake-up was queued against the old window; re-submit it so the
+        // next one lands inside the new one.
+        .onChange(of: notificationScheduleEnabled) { _, _ in BackgroundRefresh.schedule() }
+        .onChange(of: notificationStartMinute) { _, _ in BackgroundRefresh.schedule() }
+        .onChange(of: notificationEndMinute) { _, _ in BackgroundRefresh.schedule() }
+    }
+
+    /// Bridges a "minutes from midnight" preference to the `Date` a `DatePicker`
+    /// needs. Only the hour/minute of the picked date is kept — the day it is
+    /// anchored to is irrelevant, and storing wall-clock minutes keeps the window
+    /// meaning the same time after a time-zone change.
+    private func timeBinding(_ minute: Binding<Int>) -> Binding<Date> {
+        Binding {
+            let midnight = Calendar.current.startOfDay(for: Date())
+            return Calendar.current.date(
+                byAdding: .minute,
+                value: minute.wrappedValue,
+                to: midnight
+            ) ?? midnight
+        } set: { picked in
+            let components = Calendar.current.dateComponents([.hour, .minute], from: picked)
+            minute.wrappedValue = (components.hour ?? 0) * 60 + (components.minute ?? 0)
         }
     }
 

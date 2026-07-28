@@ -22,12 +22,19 @@ enum BackgroundRefresh {
 
     /// Asks iOS to wake the app for a refresh. The system decides the actual
     /// time; `earliestBeginDate` is only a lower bound.
+    ///
+    /// When the next slot would land inside the user's quiet hours, the wake-up
+    /// is parked at the moment the window reopens instead: waking only to
+    /// discover we may not notify would spend the app's background budget (and
+    /// battery) on nothing.
     static func schedule() {
         guard isEnabled else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: taskIdentifier)
         let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
         let minutes = UserDefaults.standard.object(forKey: intervalKey) as? Int ?? 30
-        request.earliestBeginDate = Date(timeIntervalSinceNow: TimeInterval(max(15, minutes) * 60))
+        let nextSlot = Date(timeIntervalSinceNow: TimeInterval(max(15, minutes) * 60))
+        let window = NotificationSchedule.current()
+        request.earliestBeginDate = window.nextOpening(after: nextSlot) ?? nextSlot
         do {
             try BGTaskScheduler.shared.submit(request)
             UserDefaults.standard.set(Date(), forKey: lastScheduleKey)
@@ -62,6 +69,17 @@ enum BackgroundRefresh {
     static func run() async {
         schedule()
         guard isEnabled else { return }
+        // Bail out BEFORE refreshing, not just before posting. `refreshForBackground`
+        // reserves each new article's notification receipt, and reservation — not
+        // delivery — is the at-most-once boundary (`ReplicaStore.reserveNotifications`).
+        // Fetching now and staying silent would therefore burn the receipts and the
+        // articles would never be announced at all. Skipping the run leaves them
+        // unreserved, so the first refresh after the window opens announces them.
+        guard NotificationSchedule.current().allows(Date()) else {
+            UserDefaults.standard.set(Date(), forKey: lastRunKey)
+            UserDefaults.standard.set("skipped — outside notification hours", forKey: lastFetchResultKey)
+            return
+        }
         UserDefaults.standard.set(Date(), forKey: lastRunKey)
         await withTaskCancellationHandler {
             let result = await ReaderStore.shared.refreshForBackground()
