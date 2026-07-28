@@ -2390,15 +2390,23 @@ private struct ArticleRowView: View {
             if !article.summary.isEmpty {
                 Text(article.summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             }
-            HStack(spacing: 6) {
-                Text(store.feed(for: article.feedID)?.displayTitle ?? "")
-                Text("·")
-                RelativeTimeText(article.publishedAt)
-            }
-            .font(.caption)
-            .foregroundStyle(.tertiary)
+            // Metadata + badges share a zero-spacing group so the collapsed
+            // (height-zero) badge block leaves no gap below the metadata; the
+            // block carries the spacing itself once it reveals.
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Text(store.feed(for: article.feedID)?.displayTitle ?? "")
+                    Text("·")
+                    RelativeTimeText(article.publishedAt)
+                }
+                .font(.caption)
+                .foregroundStyle(.tertiary)
 
-            CategoryBadges(store.categories(forArticle: article))
+                CategoryBadgesBlock(
+                    store.categories(forArticle: article),
+                    topPadding: 4
+                )
+            }
         }
     }
 }

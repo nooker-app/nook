@@ -379,6 +379,55 @@ public struct CategoryBadges: View {
     }
 }
 
+/// The article-list badge row, revealed without popping the layout.
+///
+/// Categories almost never exist when a freshly fetched row is first laid out:
+/// keyword rules land with the merge and the AI classifier answers seconds
+/// later, while the app is in the foreground and the row is already on screen.
+/// Dropping the chips straight in leaves the native macOS list holding the
+/// height it measured for a badge-less row, so the chips render clipped. Growing
+/// the row first and fading the chips in afterwards — the same contract the
+/// translated title block uses — keeps the list height in step with the content.
+///
+/// `topPadding` is the gap this block would otherwise get from its parent's
+/// `VStack` spacing. It is folded into the revealed content and the block is
+/// placed in a zero-spacing group instead, so a row without categories collapses
+/// to exactly zero height and keeps its original spacing.
+public struct CategoryBadgesBlock: View {
+    private let categories: [ArticleCategory]
+    private let topPadding: CGFloat
+
+    /// The last non-empty set, kept so a removal fades out its chips instead of
+    /// blanking them the instant the collapse starts.
+    @State private var lastNonEmpty: [ArticleCategory]
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    public init(_ categories: [ArticleCategory], topPadding: CGFloat) {
+        self.categories = categories
+        self.topPadding = topPadding
+        _lastNonEmpty = State(initialValue: categories)
+    }
+
+    public var body: some View {
+        CategoryBadges(categories.isEmpty ? lastNonEmpty : categories)
+            .padding(.top, topPadding)
+            // A chip appearing or changing must not animate its own intrinsic
+            // size; the reveal owns the single intentional row expansion.
+            .transaction { transaction in
+                transaction.animation = nil
+            }
+            .expandReveal(
+                isVisible: !categories.isEmpty,
+                animateAppearance: !reduceMotion
+            )
+            .onChange(of: categories) { _, newValue in
+                guard !newValue.isEmpty else { return }
+                lastNonEmpty = newValue
+            }
+    }
+}
+
 /// A menu of the user's categories, each toggling on/off for an article — the
 /// quick per-article editor used from list/reader context menus.
 public struct CategoryMenuItems: View {

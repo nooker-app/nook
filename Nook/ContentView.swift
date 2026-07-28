@@ -1413,7 +1413,9 @@ private struct ArticleRow: View {
     var article: Article
     var feed: Feed?
     let translationBox: ListTitleTranslator.StateBox
-    @State private var translationRevealProgress: CGFloat = 0
+    /// Summed reveal progress of every animating block in this row (translated
+    /// title, category badges), used only to detect that the row height moved.
+    @State private var rowRevealProgress: CGFloat = 0
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -1459,29 +1461,37 @@ private struct ArticleRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
-                HStack(spacing: 6) {
-                    Text(feed?.displayTitle ?? String(localized: "Unknown Feed"))
-                    Text("·")
-                    RelativeTimeText(article.publishedAt)
-                    Text("·")
-                    Text("\(article.estimatedReadMinutes) min")
-                }
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
+                // Metadata + badges share a zero-spacing group so the collapsed
+                // (height-zero) badge block leaves no gap below the metadata; the
+                // block carries the spacing itself once it reveals.
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 6) {
+                        Text(feed?.displayTitle ?? String(localized: "Unknown Feed"))
+                        Text("·")
+                        RelativeTimeText(article.publishedAt)
+                        Text("·")
+                        Text("\(article.estimatedReadMinutes) min")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
 
-                CategoryBadges(ReaderStore.shared.categories(forArticle: article))
+                    CategoryBadgesBlock(
+                        ReaderStore.shared.categories(forArticle: article),
+                        topPadding: 5
+                    )
+                }
             }
         }
         .padding(.vertical, 8)
         .onPreferenceChange(
             NativeListRowRevealProgressKey.self
-        ) { translationRevealProgress = $0 }
+        ) { rowRevealProgress = $0 }
         // Observe the per-title revision at the row root. macOS native lists can
         // otherwise keep the height measured when a freshly inserted article had
         // no translation block, even though the child view later grows correctly.
         .synchronizeNativeListRowHeight(
-            progress: translationRevealProgress,
+            progress: rowRevealProgress,
             layoutRevision: translationBox.layoutRevision
                 ^ article.categories.hashValue
         )
