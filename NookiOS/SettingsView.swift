@@ -522,7 +522,7 @@ private struct ReaderSettingsScreen: View {
         .navigationTitle("Reader")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $showingCalibration, onDismiss: { calibrationRefresh += 1 }) {
-            CalibrationView(store: ReaderStore.shared)
+            CalibrationView()
         }
     }
 }

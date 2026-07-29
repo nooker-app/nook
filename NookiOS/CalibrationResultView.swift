@@ -54,23 +54,6 @@ struct CalibrationResultView: View {
                     }
                 }
 
-                if let result, !result.sourceTitles.isEmpty {
-                    DisclosureGroup {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(result.sourceTitles.prefix(6), id: \.self) { title in
-                                Text(verbatim: "〈\(title)〉")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 6)
-                    } label: {
-                        Text("What you read today")
-                            .font(.subheadline.weight(.medium))
-                    }
-                }
-
                 Text("A recommendation based on how fast you read — a starting point, not a verdict. Read with it for a few days, re-fit any time, or adjust it directly in Settings.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -126,12 +109,9 @@ struct CalibrationResultView: View {
                 .pickerStyle(.segmented)
             }
 
-            if let paragraph = session.previewParagraph {
-                let typography = showsRecommended ? recommended : current
-                Text(paragraph.text)
-                    .font(.system(size: typography.bodySize, design: typography.fontDesign))
-                    .kerning(typography.kern)
-                    .lineSpacing(typography.lineSpacing)
+            let typography = showsRecommended ? recommended : current
+            if let passage = session.previewPassage(for: typography) {
+                Text(CalibrationEngine.attributedString(passage, typography: typography))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.45), value: showsRecommended)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: lineHeight)

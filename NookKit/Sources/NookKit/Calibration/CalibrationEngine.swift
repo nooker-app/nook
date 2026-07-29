@@ -1,5 +1,11 @@
 import Foundation
 
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
+
 /// The decision core of 읽기 맞춤 (Reading Fit) — every function is pure, takes
 /// value types, and is deterministic (callers pass the randomness), so the
 /// whole recommendation logic is unit-testable without a pixel on screen.
@@ -246,50 +252,278 @@ public enum CalibrationEngine {
         return .keep(reason: .noClearDifference)
     }
 
-    // MARK: - Paragraph eligibility
+    // MARK: - Fitting a passage to the device
 
-    /// Whether a feed paragraph qualifies as test material: prose-like, a
-    /// single paragraph, free of URLs/markup/number-heavy content, sentence-
-    /// terminated, and inside the script's length band.
-    public static func isEligible(_ text: String, script: CalibrationScript) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !trimmed.contains("\n") else { return false }
-        let lowered = trimmed.lowercased()
-        if lowered.contains("http") || lowered.contains("www.") { return false }
-        if trimmed.contains("<") || trimmed.contains("&#") { return false }
+    /// Fraction of the measured viewport a passage may occupy. The margin
+    /// absorbs the difference between this estimate and SwiftUI's own line
+    /// breaking. The estimate errs high by design (measured at 15–20% over
+    /// SwiftUI's layout): over-estimating only costs a slightly shorter
+    /// passage, while under-estimating would clip one — the exact failure this
+    /// fitting exists to prevent.
+    static let fitSafetyFactor: CGFloat = 0.92
 
-        let countable = countableCharacters(in: trimmed)
-        guard script.paragraphLengthBand.contains(countable) else { return false }
-
-        // Number/symbol-heavy text (tables, scores, code) reads at a different
-        // cadence than prose and would contaminate the comparison.
-        let noisy = trimmed.unicodeScalars.filter {
-            CharacterSet.decimalDigits.contains($0) || CharacterSet.symbols.contains($0)
-        }.count
-        guard Double(noisy) < 0.15 * Double(max(countable, 1)) else { return false }
-
-        guard let last = trimmed.unicodeScalars.last else { return false }
-        let terminators = CharacterSet(charactersIn: ".!?…。？！”\"’)")
-        return terminators.contains(last)
+    /// Reading load bounds, in countable characters. The floor keeps a trial
+    /// long enough that the constant tap overhead stays a negligible share of
+    /// the measured time (≈8 seconds of reading); the ceiling keeps the whole
+    /// session inside its time budget.
+    /// The floor is what keeps a trial long enough that the constant tap
+    /// overhead stays a negligible share of the measured time (≈8 seconds of
+    /// reading). The ceiling sits just above the corpus's longest passage, so a
+    /// device with room trims nothing at all — the engine tests pin both ends
+    /// against the corpus itself.
+    static func readingLoadBounds(for script: CalibrationScript) -> ClosedRange<Int> {
+        switch script {
+        case .latin: 110...300
+        case .korean: 45...125
+        case .japanese: 50...132
+        case .chineseSimplified: 38...100
+        }
     }
 
-    /// The script a paragraph belongs to, by Hangul share — deterministic, so
-    /// tests don't depend on NaturalLanguage model versions.
-    public static func script(of text: String) -> CalibrationScript {
-        var hangul = 0
-        var letters = 0
-        for scalar in text.unicodeScalars {
-            if (0xAC00...0xD7A3).contains(scalar.value) || (0x1100...0x11FF).contains(scalar.value) {
-                hangul += 1
-                letters += 1
-            } else if CharacterSet.letters.contains(scalar) {
-                letters += 1
+    /// Renders a structured passage with the reader's own typography: the same
+    /// font factory, the same heading scale, the same kern. Built as one
+    /// attributed string — heading and paragraphs in a single text run — so the
+    /// height measured here is exactly the height that gets drawn, which is what
+    /// lets a passage be fitted instead of clipped.
+    ///
+    /// Line spacing lives *inside* the paragraph style rather than on a SwiftUI
+    /// modifier, so measurement and rendering read the same value. Paragraph
+    /// gaps are real short blank lines rather than `paragraphSpacing`: SwiftUI's
+    /// `Text` ignores `paragraphSpacing` while `boundingRect` counts it, so
+    /// using it would render no gap *and* over-predict the height (verified
+    /// against SwiftUI's own layout).
+    public static func attributed(
+        _ passage: CalibrationPassage,
+        typography: ReaderTypography
+    ) -> NSAttributedString {
+        let output = NSMutableAttributedString()
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = typography.lineSpacing
+        style.lineBreakMode = .byWordWrapping
+        style.alignment = .natural
+
+        func attributes(size: CGFloat, bold: Bool) -> [NSAttributedString.Key: Any] {
+            var attributes: [NSAttributedString.Key: Any] = [
+                .font: HTMLContentText.finalBodyFont(
+                    baseSize: size, bold: bold, italic: false, design: typography.design
+                ),
+                .paragraphStyle: style,
+            ]
+            if typography.kern != 0 { attributes[.kern] = typography.kern }
+            return attributes
+        }
+
+        /// A blank line whose height is the reader's paragraph gap.
+        func gap() -> NSAttributedString {
+            NSAttributedString(
+                string: "\n",
+                attributes: attributes(size: HTMLTextFlow.paragraphGap(for: typography.bodySize), bold: false)
+            )
+        }
+
+        if !passage.heading.isEmpty {
+            output.append(NSAttributedString(
+                string: passage.heading + "\n",
+                attributes: attributes(size: typography.headingSize(3), bold: true)
+            ))
+        }
+
+        for (index, paragraph) in passage.paragraphs.enumerated() {
+            if index > 0 || !passage.heading.isEmpty { output.append(gap()) }
+            for (text, bold) in emphasisRuns(paragraph) {
+                output.append(NSAttributedString(
+                    string: text, attributes: attributes(size: typography.bodySize, bold: bold)
+                ))
+            }
+            if index < passage.paragraphs.count - 1 {
+                output.append(NSAttributedString(
+                    string: "\n", attributes: attributes(size: typography.bodySize, bold: false)
+                ))
             }
         }
-        guard letters > 0 else { return .latin }
-        return Double(hangul) / Double(letters) > 0.3 ? .korean : .latin
+        return output
     }
 
+    /// SwiftUI-ready form of `attributed`.
+    public static func attributedString(
+        _ passage: CalibrationPassage,
+        typography: ReaderTypography
+    ) -> AttributedString {
+        let rendered = attributed(passage, typography: typography)
+        #if canImport(AppKit)
+        return (try? AttributedString(rendered, including: \.appKit)) ?? AttributedString(passage.plainText)
+        #else
+        return (try? AttributedString(rendered, including: \.uiKit)) ?? AttributedString(passage.plainText)
+        #endif
+    }
+
+    /// Splits `**emphasis**` markers into runs. Unbalanced markers degrade to
+    /// plain text rather than swallowing the passage.
+    static func emphasisRuns(_ text: String) -> [(String, Bool)] {
+        let pieces = text.components(separatedBy: "**")
+        guard pieces.count > 1, pieces.count.isMultiple(of: 2) == false else {
+            return [(text.replacingOccurrences(of: "**", with: ""), false)]
+        }
+        return pieces.enumerated().compactMap { index, piece in
+            piece.isEmpty ? nil : (piece, !index.isMultiple(of: 2))
+        }
+    }
+
+    /// Rendered height of a structured passage at this typography and width.
+    public static func measuredHeight(
+        _ passage: CalibrationPassage,
+        typography: ReaderTypography,
+        width: CGFloat
+    ) -> CGFloat {
+        guard width > 0 else { return 0 }
+        return attributed(passage, typography: typography).boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin],
+            context: nil
+        ).height.rounded(.up)
+    }
+
+    /// Countable characters across the whole passage, heading included — the
+    /// reader's eyes pass over all of it, so all of it counts toward speed.
+    public static func countableCharacters(in passage: CalibrationPassage) -> Int {
+        countableCharacters(in: passage.plainText)
+    }
+
+    /// The character load one session uses for **every** trial, whatever the
+    /// condition: the capacity of the tightest rung (the largest type size) on
+    /// this device, clamped to the reading-load bounds.
+    ///
+    /// Sizing every trial the same way is what keeps the comparison clean. If
+    /// each trial instead filled the viewport, the small-type rungs would show
+    /// several times more text than the large ones — different durations, so a
+    /// different share of per-trial tap overhead in each condition, biasing the
+    /// very plateau the knee search depends on.
+    public static func sessionCharacterTarget(
+        script: CalibrationScript,
+        largestSize: CGFloat,
+        design: ReaderFont,
+        width: CGFloat,
+        height: CGFloat
+    ) -> Int {
+        let bounds = readingLoadBounds(for: script)
+        guard width > 0, height > 0 else { return bounds.upperBound }
+        let typography = ReaderTypography(
+            font: design, fontSize: largestSize, lineHeightMultiple: 1.7, letterSpacingEM: 0
+        )
+        let budget = height * fitSafetyFactor
+        // Gauge against the corpus's TALLEST passage at the tightest rung: if
+        // the worst case fits, no passage in the session needs trimming, which
+        // is what keeps every trial's reading load identical. A real passage is
+        // used (not a flat sample) because the heading and the paragraph break
+        // take vertical space of their own.
+        let corpus = CalibrationCorpus.passages(for: script)
+        guard let sample = corpus.max(by: {
+            measuredHeight($0, typography: typography, width: width)
+                < measuredHeight($1, typography: typography, width: width)
+        }) else {
+            return bounds.upperBound
+        }
+        let full = corpus.map { countableCharacters(in: $0) }.max() ?? bounds.upperBound
+        if measuredHeight(sample, typography: typography, width: width) <= budget {
+            return min(max(full, bounds.lowerBound), bounds.upperBound)
+        }
+        // Too tall at the tightest rung: find the longest trimmed form that fits.
+        var low = bounds.lowerBound
+        var high = full
+        while low < high {
+            let mid = (low + high + 1) / 2
+            let candidate = trimmed(sample, toCountableCharacters: mid)
+            if measuredHeight(candidate, typography: typography, width: width) <= budget {
+                low = mid
+            } else {
+                high = mid - 1
+            }
+        }
+        return min(max(low, bounds.lowerBound), bounds.upperBound)
+    }
+
+    /// Fits one standardized passage to this trial: normally the passage as
+    /// written, and when the device cannot show all of it at this type size, the
+    /// same passage with trailing sentences dropped — heading and paragraph
+    /// break kept, ending on a complete sentence.
+    ///
+    /// Trimming to `targetCharacters`, a session-wide value derived from the
+    /// tightest rung, keeps every trial the same length, which is the property
+    /// the matched corpus exists to provide. Nothing is ever left to scroll:
+    /// scrolling would fold motor time into the reading measurement, and a
+    /// clipped paragraph is what makes text stop registering.
+    public static func fittedPassage(
+        _ passage: CalibrationPassage,
+        typography: ReaderTypography,
+        width: CGFloat,
+        height: CGFloat,
+        targetCharacters: Int
+    ) -> CalibrationPassage? {
+        guard !passage.paragraphs.isEmpty else { return nil }
+        // No viewport reported yet (a preview before layout): show it as written.
+        guard width > 1, height > 1 else { return passage }
+
+        let budget = height * fitSafetyFactor
+        if countableCharacters(in: passage) <= targetCharacters,
+           measuredHeight(passage, typography: typography, width: width) <= budget {
+            return passage
+        }
+
+        // Drop whole trailing sentences until it fits both bounds. The heading
+        // and the paragraph break survive — the structure is what makes the
+        // passage readable, so it is the last thing to go.
+        var candidate = trimmed(passage, toCountableCharacters: targetCharacters)
+        while measuredHeight(candidate, typography: typography, width: width) > budget {
+            let shorter = trimmed(candidate, toCountableCharacters: countableCharacters(in: candidate) - 1)
+            guard shorter != candidate, !shorter.paragraphs.isEmpty else { return nil }
+            candidate = shorter
+        }
+        return candidate.paragraphs.isEmpty ? nil : candidate
+    }
+
+    /// The passage with trailing sentences removed until it holds at most
+    /// `limit` countable characters. Never cuts inside a sentence, and drops an
+    /// emptied paragraph rather than leaving a stub.
+    static func trimmed(_ passage: CalibrationPassage, toCountableCharacters limit: Int) -> CalibrationPassage {
+        var paragraphs = passage.paragraphs
+        func total() -> Int {
+            countableCharacters(in: CalibrationPassage(heading: passage.heading, paragraphs: paragraphs))
+        }
+        while total() > limit, !paragraphs.isEmpty {
+            var sentences = splitSentences(paragraphs[paragraphs.count - 1])
+            if sentences.count <= 1 {
+                // A single-sentence paragraph goes whole rather than becoming a
+                // fragment — unless it is the only paragraph left.
+                if paragraphs.count == 1 { break }
+                paragraphs.removeLast()
+            } else {
+                sentences.removeLast()
+                paragraphs[paragraphs.count - 1] = sentences.joined(separator: " ")
+            }
+        }
+        return CalibrationPassage(id: passage.id, heading: passage.heading, paragraphs: paragraphs)
+    }
+
+    /// Splits on sentence terminators, keeping the terminator attached — so a
+    /// trimmed excerpt always ends on a complete sentence.
+    static func splitSentences(_ text: String) -> [String] {
+        var sentences: [String] = []
+        var current = ""
+        let terminators: Set<Character> = [".", "!", "?", "…", "。", "！", "？"]
+        for character in text {
+            current.append(character)
+            if terminators.contains(character) {
+                let candidate = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !candidate.isEmpty { sentences.append(candidate) }
+                current = ""
+            }
+        }
+        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty { sentences.append(tail) }
+        return sentences
+    }
+
+    
     // MARK: - Probes
 
     /// Builds a "was this word in it?" probe. Positive probes pick a content
@@ -299,12 +533,12 @@ public enum CalibrationEngine {
     /// probes only guard against skimming, they are not a quiz.
     public static func probe(
         for paragraph: String,
+        script: CalibrationScript,
         negativePool: [String],
         wantPresent: Bool,
         seed: UInt64
     ) -> CalibrationProbe? {
         var generator = SplitMix64(seed: seed)
-        let script = script(of: paragraph)
 
         if wantPresent {
             let words = contentWords(in: paragraph, script: script)
@@ -323,16 +557,39 @@ public enum CalibrationEngine {
     static func contentWords(in text: String, script: CalibrationScript) -> [String] {
         let tokens = text.split(whereSeparator: { $0.isWhitespace || $0.isPunctuation })
         switch script {
+        case .latin:
+            return tokens.map(String.init).filter { token in
+                token.count >= 4 && token.allSatisfy(\.isLetter)
+            }
         case .korean:
             return tokens.map(String.init).filter { token in
                 let syllables = token.unicodeScalars.filter { (0xAC00...0xD7A3).contains($0.value) }.count
                 return syllables >= 2 && syllables <= 4 && syllables == token.count
             }
-        case .latin:
-            return tokens.map(String.init).filter { token in
-                token.count >= 4 && token.allSatisfy(\.isLetter)
+        case .japanese, .chineseSimplified:
+            // Unsegmented scripts: probe on 2–3 character runs of Han/Kana,
+            // which read as words without needing a tokenizer.
+            var words: [String] = []
+            for token in tokens {
+                let scalars = Array(String(token).unicodeScalars)
+                guard scalars.count >= 2 else { continue }
+                var index = 0
+                while index + 2 <= scalars.count {
+                    let slice = scalars[index..<min(index + 2, scalars.count)]
+                    if slice.allSatisfy(isHanOrKana) {
+                        words.append(String(String.UnicodeScalarView(slice)))
+                    }
+                    index += 2
+                }
             }
+            return words
         }
+    }
+
+    private static func isHanOrKana(_ scalar: Unicode.Scalar) -> Bool {
+        (0x4E00...0x9FFF).contains(scalar.value)      // CJK unified ideographs
+            || (0x3040...0x309F).contains(scalar.value)   // Hiragana
+            || (0x30A0...0x30FF).contains(scalar.value)   // Katakana
     }
 
     // MARK: - Helpers

@@ -2,6 +2,12 @@ import Foundation
 import Testing
 @testable import NookKit
 
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
+
 /// The calibration engine's contract: recommendations only when the math has
 /// earned them, "keep" for every kind of doubt, and counterbalancing/detrending
 /// that actually neutralizes practice and fatigue.
@@ -275,39 +281,213 @@ struct CalibrationEngineTests {
 
     // MARK: - Paragraph eligibility and probes
 
-    @Test("The bundled corpus passes its own eligibility filter")
-    func corpusIsEligible() {
-        for paragraph in CalibrationCorpus.korean {
-            #expect(CalibrationEngine.isEligible(paragraph, script: .korean), "KO out of band: \(paragraph.prefix(24))…")
-            #expect(CalibrationEngine.script(of: paragraph) == .korean)
+    // MARK: - Standardized, structured corpus
+
+    @Test("Every language's passages match in load and structure", arguments: CalibrationScript.allCases)
+    func corpusIsMatched(script: CalibrationScript) {
+        let passages = CalibrationCorpus.passages(for: script)
+        // Enough for warm-up + 5 size + 6 spacing + replacements + preview.
+        #expect(passages.count >= 18)
+
+        // Structure is identical everywhere: a passage with an extra paragraph
+        // or a missing heading would give whichever condition drew it a
+        // different reading task.
+        for (index, passage) in passages.enumerated() {
+            #expect(!passage.heading.isEmpty, "\(script.rawValue)[\(index)] has no heading")
+            #expect(passage.paragraphs.count == 2, "\(script.rawValue)[\(index)] paragraphs")
+            #expect(passage.paragraphs.contains { $0.contains("**") }, "\(script.rawValue)[\(index)] emphasis")
         }
-        for paragraph in CalibrationCorpus.latin {
-            #expect(CalibrationEngine.isEligible(paragraph, script: .latin), "EN out of band: \(paragraph.prefix(24))…")
-            #expect(CalibrationEngine.script(of: paragraph) == .latin)
+
+        // Reading load matches within the language: with one trial per size
+        // rung, a longer passage would slow that rung on its own.
+        let counts = passages.map { CalibrationEngine.countableCharacters(in: $0) }
+        let median = counts.sorted()[counts.count / 2]
+        for (index, count) in counts.enumerated() {
+            let ratio = Double(count) / Double(median)
+            #expect(ratio > 0.85 && ratio < 1.15, "\(script.rawValue)[\(index)] = \(count) vs \(median)")
+        }
+
+        // …and inside the bounds that keep a trial measurable but brief.
+        let bounds = CalibrationEngine.readingLoadBounds(for: script)
+        for (index, count) in counts.enumerated() {
+            #expect(bounds.contains(count), "\(script.rawValue)[\(index)] = \(count), bounds \(bounds)")
+        }
+
+        // No repeats — a repeated passage would be re-read, not read.
+        #expect(Set(passages.map(\.plainText)).count == passages.count)
+    }
+
+    @Test("The reading language selects its own corpus")
+    func scriptFollowsReadingLanguage() {
+        #expect(CalibrationScript.forReadingLanguage(.korean) == .korean)
+        #expect(CalibrationScript.forReadingLanguage(.japanese) == .japanese)
+        #expect(CalibrationScript.forReadingLanguage(.chineseSimplified) == .chineseSimplified)
+        #expect(CalibrationScript.forReadingLanguage(.english) == .latin)
+    }
+
+    @Test("Rendering keeps the heading, the paragraph break, and the emphasis")
+    func structureSurvivesRendering() throws {
+        let passage = CalibrationCorpus.passages(for: .korean)[0]
+        let typography = ReaderTypography(
+            font: .system, fontSize: 17, lineHeightMultiple: 1.7, letterSpacingEM: 0
+        )
+        let rendered = CalibrationEngine.attributed(passage, typography: typography)
+        let text = rendered.string
+
+        // Emphasis markers are resolved, never shown.
+        #expect(!text.contains("**"))
+        #expect(text.hasPrefix(passage.heading))
+        // Heading line, gap line, paragraph, gap line, paragraph.
+        #expect(text.filter(\.isNewline).count >= 3)
+
+        // The heading really is larger, and a body run really is emphasized —
+        // the texture a flat passage was missing.
+        var sizes: Set<CGFloat> = []
+        var emphasizedBodyRuns = 0
+        let full = NSRange(location: 0, length: rendered.length)
+        rendered.enumerateAttribute(.font, in: full) { value, range, _ in
+            #if canImport(AppKit)
+            guard let font = value as? NSFont else { return }
+            let isBold = font.fontDescriptor.symbolicTraits.contains(.bold)
+            #else
+            guard let font = value as? UIFont else { return }
+            let isBold = font.fontDescriptor.symbolicTraits.contains(.traitBold)
+            #endif
+            sizes.insert(font.pointSize)
+            if isBold, range.location > passage.heading.utf16.count { emphasizedBodyRuns += 1 }
+        }
+        #expect(sizes.contains(typography.bodySize))
+        #expect(sizes.contains(typography.headingSize(3)))
+        #expect(emphasizedBodyRuns >= 1)
+    }
+
+    // MARK: - Fitting to the device
+
+    @Test("A passage that fits the viewport is shown exactly as written")
+    func fittedPassageKeepsWholeText() throws {
+        let passage = CalibrationCorpus.passages(for: .korean)[0]
+        let typography = ReaderTypography(
+            font: .system, fontSize: 17, lineHeightMultiple: 1.7, letterSpacingEM: 0
+        )
+        let fitted = try #require(CalibrationEngine.fittedPassage(
+            passage, typography: typography, width: 345, height: 900,
+            targetCharacters: CalibrationEngine.countableCharacters(in: passage)
+        ))
+        #expect(fitted == passage)
+    }
+
+    @Test("A cramped viewport trims whole sentences and keeps the structure")
+    func fittedPassageTrimsAtSentenceBoundary() throws {
+        let passage = CalibrationCorpus.passages(for: .korean)[0]
+        let typography = ReaderTypography(
+            font: .system, fontSize: 24, lineHeightMultiple: 1.7, letterSpacingEM: 0
+        )
+        let fitted = try #require(CalibrationEngine.fittedPassage(
+            passage, typography: typography, width: 300, height: 230, targetCharacters: 60
+        ))
+
+        #expect(CalibrationEngine.countableCharacters(in: fitted)
+                    < CalibrationEngine.countableCharacters(in: passage))
+        // The heading survives: structure is the last thing to go.
+        #expect(fitted.heading == passage.heading)
+        #expect(!fitted.paragraphs.isEmpty)
+        // Every kept paragraph still ends on a complete sentence — never a
+        // fragment, which is what "cut off" felt like.
+        let terminators: Set<Character> = [".", "!", "?", "…", "。", "！", "？"]
+        for paragraph in fitted.paragraphs {
+            let clean = paragraph.replacingOccurrences(of: "**", with: "")
+            #expect(terminators.contains(try #require(clean.last)))
+        }
+        // And it really fits the space it was given.
+        let height = CalibrationEngine.measuredHeight(fitted, typography: typography, width: 300)
+        #expect(height <= 230 * CalibrationEngine.fitSafetyFactor)
+    }
+
+    @Test("Fitted passages never overflow, at any rung, on a small phone")
+    func noRungOverflowsACrampedDevice() throws {
+        // iPhone SE-class text area. Every rung must be fully visible: a trial
+        // that needs scrolling puts motor time inside the reading measurement.
+        let width: CGFloat = 327
+        let height: CGFloat = 420
+        for script in CalibrationScript.allCases {
+            let target = CalibrationEngine.sessionCharacterTarget(
+                script: script, largestSize: CGFloat(CalibrationEngine.sizeLadder[0]),
+                design: .system, width: width, height: height
+            )
+            for size in CalibrationEngine.sizeLadder {
+                let typography = ReaderTypography(
+                    font: .system, fontSize: CGFloat(size),
+                    lineHeightMultiple: 1.7, letterSpacingEM: 0
+                )
+                for passage in CalibrationCorpus.passages(for: script).prefix(6) {
+                    let fitted = try #require(
+                        CalibrationEngine.fittedPassage(
+                            passage, typography: typography, width: width,
+                            height: height, targetCharacters: target
+                        ),
+                        "\(script.rawValue) \(size)pt produced nothing"
+                    )
+                    let measured = CalibrationEngine.measuredHeight(
+                        fitted, typography: typography, width: width
+                    )
+                    #expect(
+                        measured <= height,
+                        "\(script.rawValue) \(size)pt: \(Int(measured))pt > \(Int(height))pt"
+                    )
+                }
+            }
         }
     }
 
-    @Test("URLs, markup, digits, and unterminated text are ineligible")
-    func eligibilityRejectsNoise() {
-        let base = String(repeating: "읽기와 산책은 서로 닮은 데가 많다고 느낀다. ", count: 6)
-        #expect(CalibrationEngine.isEligible(base + "끝났다.", script: .korean))
-        #expect(!CalibrationEngine.isEligible(base + "자세한 내용은 http://example.com 참고.", script: .korean))
-        #expect(!CalibrationEngine.isEligible(base + "<em>강조</em>였다.", script: .korean))
-        #expect(!CalibrationEngine.isEligible(base + "끝나지 않은 문장", script: .korean))
-        #expect(!CalibrationEngine.isEligible("짧다.", script: .korean))
+    @Test("The session's character target is set by the tightest rung")
+    func characterTargetFitsLargestRung() {
+        let bounds = CalibrationEngine.readingLoadBounds(for: .korean)
+        // A cramped screen must come down from the ceiling…
+        let cramped = CalibrationEngine.sessionCharacterTarget(
+            script: .korean, largestSize: 24, design: .system, width: 280, height: 170
+        )
+        #expect(bounds.contains(cramped))
+        // …and a roomy one should not trim at all.
+        let roomy = CalibrationEngine.sessionCharacterTarget(
+            script: .korean, largestSize: 24, design: .system, width: 380, height: 1200
+        )
+        #expect(roomy >= cramped)
+        // A roomy screen must trim nothing: the target has to clear the
+        // longest passage in the corpus, or the matched load breaks.
+        let longest = CalibrationCorpus.passages(for: .korean)
+            .map { CalibrationEngine.countableCharacters(in: $0) }.max() ?? 0
+        #expect(roomy >= longest)
+        #expect(bounds.contains(roomy))
+    }
+
+    @Test("Measured height grows with type size and shrinks with width")
+    func measurementResponds() {
+        let passage = CalibrationCorpus.passages(for: .latin)[0]
+        func height(size: CGFloat, width: CGFloat) -> CGFloat {
+            CalibrationEngine.measuredHeight(
+                passage,
+                typography: ReaderTypography(
+                    font: .system, fontSize: size, lineHeightMultiple: 1.7, letterSpacingEM: 0
+                ),
+                width: width
+            )
+        }
+        #expect(height(size: 24, width: 345) > height(size: 12, width: 345))
+        #expect(height(size: 17, width: 250) > height(size: 17, width: 345))
     }
 
     @Test("Probes pick real middle-content words and true negatives")
     func probeGeneration() throws {
-        let paragraph = CalibrationCorpus.korean[0]
+        let corpus = CalibrationCorpus.passages(for: .korean).map(\.plainText)
+        let paragraph = corpus[0]
         let positive = try #require(CalibrationEngine.probe(
-            for: paragraph, negativePool: [], wantPresent: true, seed: 7
+            for: paragraph, script: .korean, negativePool: [], wantPresent: true, seed: 7
         ))
         #expect(positive.isPresent)
         #expect(paragraph.contains(positive.word))
 
         let negative = try #require(CalibrationEngine.probe(
-            for: paragraph, negativePool: [CalibrationCorpus.korean[1]], wantPresent: false, seed: 7
+            for: paragraph, script: .korean, negativePool: [corpus[1]], wantPresent: false, seed: 7
         ))
         #expect(!negative.isPresent)
         #expect(!paragraph.contains(negative.word))

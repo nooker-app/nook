@@ -38,14 +38,12 @@ final class CalibrationSession {
     private(set) var stage: Stage = .intro
     /// 0…1 across the whole measured session; never regresses.
     private(set) var progress: Double = 0
-    private(set) var currentParagraph: CalibrationParagraph?
+    private(set) var currentPassage: CalibrationPassage?
     /// Typography the current trial paragraph must render with.
     private(set) var trialTypography = ReaderTypography.platformDefault
     private(set) var currentProbe: CalibrationProbe?
     private(set) var isWarmup = false
     private(set) var result: CalibrationResult?
-    /// True when the corpus had to fall back to bundled samples.
-    private(set) var usesBundledCorpus = false
     /// The font the user picked on S1 (defaults to their current setting).
     var chosenFont: ReaderFont
 
@@ -55,9 +53,20 @@ final class CalibrationSession {
     private let currentLineHeight: Double
     private let currentSpacing: Double
     private let script: CalibrationScript
-    private var paragraphs: [CalibrationParagraph]
-    private var usedParagraphIDs: Set<String> = []
+    /// The session's standardized passages, shuffled once. Every passage in a
+    /// language carries the same reading load, so which one a condition draws
+    /// cannot bias it.
+    private var passages: [CalibrationPassage]
+    private var usedPassageIDs: Set<String> = []
     let sourceTitles: [String]
+
+    /// The text area a trial paragraph gets, reported by the view. Passages are
+    /// fitted to this so nothing ever scrolls mid-measurement.
+    private(set) var viewport: CGSize = .zero
+    /// Countable characters every trial in this session shows — fixed by the
+    /// tightest rung so no condition is systematically shorter (see
+    /// `CalibrationEngine.sessionCharacterTarget`).
+    private var characterTarget = 0
 
     // MARK: - Trial bookkeeping
 
@@ -84,62 +93,44 @@ final class CalibrationSession {
 
     // MARK: - Init
 
-    init(store: ReaderStore, font: ReaderFont, size: Int, lineHeight: Double, spacing: Double) {
+    init(font: ReaderFont, size: Int, lineHeight: Double, spacing: Double) {
         chosenFont = font
         currentSize = size
         currentLineHeight = lineHeight
         currentSpacing = spacing
         provisionalSize = size
 
-        // Gather eligible paragraphs from the user's real feeds: recent first,
-        // unread preferred, at most two per article, ineligible prose dropped.
-        let feedTitleByID = Dictionary(store.feeds.map { ($0.id, $0.displayTitle) }, uniquingKeysWith: { first, _ in first })
-        let cutoff = Date().addingTimeInterval(-90 * 24 * 3600)
-        let candidates = store.libraryArticles
-            .filter { $0.publishedAt > cutoff }
-            .sorted { (!$0.isRead && $1.isRead) || (($0.isRead == $1.isRead) && $0.publishedAt > $1.publishedAt) }
-
-        var korean: [CalibrationParagraph] = []
-        var latin: [CalibrationParagraph] = []
-        for article in candidates {
-            var taken = 0
-            for (index, paragraph) in article.bodyParagraphs.enumerated() {
-                guard taken < 2 else { break }
-                let script = CalibrationEngine.script(of: paragraph)
-                guard CalibrationEngine.isEligible(paragraph, script: script) else { continue }
-                let item = CalibrationParagraph(
-                    id: "\(article.id)#\(index)",
-                    text: paragraph,
-                    sourceTitle: feedTitleByID[article.feedID] ?? article.title,
-                    articleID: article.id
-                )
-                if script == .korean { korean.append(item) } else { latin.append(item) }
-                taken += 1
-            }
-            if korean.count >= 24 || latin.count >= 24 { break }
-        }
-
-        // One session = one script: whichever the feeds supply more of.
-        let needed = 18
-        let resolvedScript: CalibrationScript
-        let resolvedParagraphs: [CalibrationParagraph]
-        let bundled: Bool
-        if korean.count >= needed || latin.count >= needed {
-            resolvedScript = korean.count >= latin.count ? .korean : .latin
-            resolvedParagraphs = (resolvedScript == .korean ? korean : latin).shuffled()
-            bundled = false
-        } else {
-            resolvedScript = Locale.current.language.languageCode?.identifier == "ko" ? .korean : .latin
-            resolvedParagraphs = CalibrationCorpus.paragraphs(for: resolvedScript).shuffled()
-            bundled = true
-        }
+        // Standardized, length-matched material for the reading language.
+        // Deliberately not the user's own articles: with one trial per size
+        // rung, a passage's topic or vocabulary difficulty would land straight
+        // on that condition's score, and it would differ for every reader.
+        let resolvedScript = CalibrationScript.forReadingLanguage(AppLanguage.current)
         script = resolvedScript
-        paragraphs = resolvedParagraphs
-        usesBundledCorpus = bundled
-        sourceTitles = Array(Set(resolvedParagraphs.map(\.sourceTitle))).sorted()
+        passages = CalibrationCorpus.passages(for: resolvedScript).shuffled()
+        sourceTitles = []
     }
 
     // MARK: - Flow control
+
+    /// The view reports the measured text area. The session's per-trial
+    /// character load is derived from it once, at the tightest rung.
+    func setViewport(_ size: CGSize) {
+        guard size.width > 1, size.height > 1 else { return }
+        guard abs(size.width - viewport.width) > 1 || abs(size.height - viewport.height) > 1 else { return }
+        viewport = size
+        recomputeCharacterTarget()
+    }
+
+    private func recomputeCharacterTarget() {
+        let ladder = usesAccessibilityLadder ? CalibrationEngine.accessibilitySizeLadder : CalibrationEngine.sizeLadder
+        characterTarget = CalibrationEngine.sessionCharacterTarget(
+            script: script,
+            largestSize: CGFloat(ladder[0]),
+            design: chosenFont,
+            width: viewport.width,
+            height: viewport.height
+        )
+    }
 
     func begin() {
         stage = .font
@@ -150,6 +141,7 @@ final class CalibrationSession {
     }
 
     func confirmFont() {
+        recomputeCharacterTarget()
         // Build the measured plan: warmup, 5 size trials, 6 spacing trials.
         let ladder = usesAccessibilityLadder ? CalibrationEngine.accessibilitySizeLadder : CalibrationEngine.sizeLadder
         plan = [.warmup]
@@ -169,15 +161,15 @@ final class CalibrationSession {
         startNextTrial()
     }
 
-    /// The user finished reading the current trial paragraph.
+    /// The user finished reading the current trial passage.
     func finishTrial() {
-        guard let start = trialStart, let paragraph = currentParagraph else { return }
+        guard let start = trialStart, let passage = currentPassage else { return }
         let seconds = Date().timeIntervalSince(start)
         guard seconds >= 1.0 else { return }   // debounce double-taps
 
         let phase = currentPhase
         let condition = currentCondition
-        let characters = CalibrationEngine.countableCharacters(in: paragraph.text)
+        let characters = CalibrationEngine.countableCharacters(in: passage)
         let cps = seconds > 0 ? Double(characters) / seconds : 0
         let plausible = CalibrationEngine.isPlausibleTrial(seconds: seconds, cps: cps, script: script)
 
@@ -185,7 +177,7 @@ final class CalibrationSession {
             phase: phase,
             position: positionInPhase,
             condition: condition,
-            paragraphID: paragraph.id,
+            paragraphID: passage.id,
             countableCharacters: characters,
             seconds: seconds,
             isValid: plausible
@@ -201,7 +193,7 @@ final class CalibrationSession {
             trials.append(trial)
             lastTrialForProbe = trial
             if probeAfterSteps.contains(planIndex), (probesTaken[phase] ?? 0) < 2,
-               let probe = makeProbe(for: paragraph) {
+               let probe = makeProbe(for: passage) {
                 probesTaken[phase, default: 0] += 1
                 currentProbe = probe
                 stage = .probe
@@ -412,13 +404,14 @@ final class CalibrationSession {
 
     private func startNextTrial() {
         guard planIndex < plan.count else { return }
-        guard let paragraph = nextParagraph() else {
+        let typography = typography(for: plan[planIndex])
+        guard let passage = nextPassage(for: typography) else {
             // Out of material: analyze what exists rather than stalling.
             analyze()
             return
         }
-        currentParagraph = paragraph
-        trialTypography = typography(for: plan[planIndex])
+        currentPassage = passage
+        trialTypography = typography
         isWarmup = currentPhase == .warmup
         trialStart = Date()
         stage = .trial
@@ -427,9 +420,9 @@ final class CalibrationSession {
     private func requeueCurrentCondition() {
         let phase = currentPhase
         let used = replacements[phase, default: 0]
-        if used < 2, let paragraph = nextParagraph() {
+        if used < 2, let passage = nextPassage(for: trialTypography) {
             replacements[phase] = used + 1
-            currentParagraph = paragraph
+            currentPassage = passage
             trialStart = Date()
             stage = .trial
         } else {
@@ -439,18 +432,33 @@ final class CalibrationSession {
         }
     }
 
-    private func nextParagraph() -> CalibrationParagraph? {
-        guard let next = paragraphs.first(where: { !usedParagraphIDs.contains($0.id) }) else { return nil }
-        usedParagraphIDs.insert(next.id)
-        return next
+    /// Assembles the next trial's passage, fitted to this device and this
+    /// trial's type size so it is fully visible without scrolling — scrolling
+    /// would put motor time inside the reading measurement, and a clipped
+    /// paragraph breaks concentration.
+    private func nextPassage(for typography: ReaderTypography) -> CalibrationPassage? {
+        if characterTarget == 0 { recomputeCharacterTarget() }
+        for passage in passages where !usedPassageIDs.contains(passage.id) {
+            guard let fitted = CalibrationEngine.fittedPassage(
+                passage,
+                typography: typography,
+                width: viewport.width,
+                height: viewport.height,
+                targetCharacters: characterTarget
+            ) else { continue }
+            usedPassageIDs.insert(passage.id)
+            return fitted
+        }
+        return nil
     }
 
-    private func makeProbe(for paragraph: CalibrationParagraph) -> CalibrationProbe? {
+    private func makeProbe(for passage: CalibrationPassage) -> CalibrationProbe? {
         seed &+= 1
         let wantPresent = (probesTaken[currentPhase] ?? 0) == 0
-        let pool = paragraphs.filter { $0.id != paragraph.id }.prefix(4).map(\.text)
+        let pool = passages.filter { $0.id != passage.id }.prefix(4).map(\.plainText)
         return CalibrationEngine.probe(
-            for: paragraph.text, negativePool: Array(pool), wantPresent: wantPresent, seed: seed
+            for: passage.plainText, script: script, negativePool: Array(pool),
+            wantPresent: wantPresent, seed: seed
         )
     }
 
@@ -537,9 +545,25 @@ final class CalibrationSession {
         )
     }
 
-    /// A paragraph not used in any trial, for the result preview card.
-    var previewParagraph: CalibrationParagraph? {
-        paragraphs.first { !usedParagraphIDs.contains($0.id) } ?? paragraphs.first
+    /// A passage not used in any trial, for the font-choice and result preview
+    /// cards — fitted to the viewport at the given typography so those screens
+    /// never show clipped text either.
+    func previewPassage(for typography: ReaderTypography) -> CalibrationPassage? {
+        let candidates = passages.filter { !usedPassageIDs.contains($0.id) } + passages
+        guard let first = candidates.first else { return nil }
+        if characterTarget == 0 { recomputeCharacterTarget() }
+        for passage in candidates {
+            if let fitted = CalibrationEngine.fittedPassage(
+                passage,
+                typography: typography,
+                width: viewport.width,
+                height: viewport.height,
+                targetCharacters: characterTarget
+            ) {
+                return fitted
+            }
+        }
+        return first
     }
 }
 

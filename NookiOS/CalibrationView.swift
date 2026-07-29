@@ -2,12 +2,12 @@ import NookKit
 import SwiftUI
 
 /// 읽기 맞춤 (Reading Fit): a ~5-minute session that measures how the user
-/// actually reads — on their own feed's paragraphs — and recommends typography.
+/// actually reads — on standardized, article-shaped passages — and recommends
+/// typography.
 /// The machinery (timers, trial counts, statistics) never shows; the user just
 /// reads and taps. See `CalibrationSession` for the state machine and
 /// `CalibrationEngine` for the decision math.
 struct CalibrationView: View {
-    @Bindable var store: ReaderStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -31,7 +31,6 @@ struct CalibrationView: View {
         .onAppear {
             if session == nil {
                 session = CalibrationSession(
-                    store: store,
                     font: readerFont,
                     size: readerFontSize,
                     lineHeight: readerLineHeight,
@@ -169,15 +168,9 @@ private struct IntroStage: View {
                 .foregroundStyle(Color.accentColor)
             Text("Reading Fit")
                 .font(.title.weight(.semibold))
-            Text("Read a few pieces from your own feeds the way you always do, and Nook will find the type size and spacing that suit your eyes — based on how you actually read.\nAbout five minutes, and quitting early still keeps what it learned.")
+            Text("Read a few short pieces the way you always do, and Nook will find the type size and spacing that suit your eyes — based on how you actually read.\nAbout five minutes, and quitting early still keeps what it learned.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            if session.usesBundledCorpus {
-                Text("Your library is still small, so Nook will use its own reading samples.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-            }
             if voiceOverEnabled {
                 Text("This measurement times visual reading, so with VoiceOver Nook offers direct choice instead.")
                     .font(.caption)
@@ -223,16 +216,15 @@ private struct FontStage: View {
             Text("A typeface is half taste. Pick whichever feels easy on your eyes.")
                 .foregroundStyle(.secondary)
 
-            if let paragraph = session.previewParagraph {
-                ScrollView {
-                    Text(paragraph.text)
-                        .font(.system(size: 18, design: session.chosenFont.fontDesign))
-                        .lineSpacing(9)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .animation(.smooth(duration: 0.2), value: session.chosenFont)
-                }
-                .frame(maxHeight: .infinity)
+            let previewTypography = ReaderTypography(
+                font: session.chosenFont, fontSize: 18, lineHeightMultiple: 1.7, letterSpacingEM: 0
+            )
+            if let passage = session.previewPassage(for: previewTypography) {
+                Text(CalibrationEngine.attributedString(passage, typography: previewTypography))
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .animation(.smooth(duration: 0.2), value: session.chosenFont)
             }
+            Spacer(minLength: 0)
 
             HStack(spacing: 10) {
                 ForEach(ReaderFont.allCases) { font in
@@ -316,23 +308,27 @@ private struct TrialStage: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if let paragraph = session.currentParagraph {
-                Text(verbatim: "〈\(paragraph.sourceTitle)〉")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                ScrollView {
-                    // The measured surface: plain Text with the trial's exact
-                    // typography — the same styling the reader itself uses.
-                    Text(paragraph.text)
-                        .font(.system(size: session.trialTypography.bodySize, design: session.trialTypography.fontDesign))
-                        .kerning(session.trialTypography.kern)
-                        .lineSpacing(session.trialTypography.lineSpacing)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .id(paragraph.id)
-                        .transition(reduceMotion ? .identity : .opacity)
+            // The measured surface. No ScrollView: the passage is fitted to
+            // this exact area (reported below), because scrolling would fold
+            // motor time into the reading measurement — and a clipped paragraph
+            // is what broke concentration before.
+            GeometryReader { proxy in
+                ZStack(alignment: .topLeading) {
+                    Color.clear
+                        .onAppear { session.setViewport(proxy.size) }
+                        .onChange(of: proxy.size) { _, size in session.setViewport(size) }
+                    if let passage = session.currentPassage {
+                        // Heading, paragraph break, and emphasis are baked into
+                        // the attributed string by the same helpers the reader
+                        // uses — so a trial looks like an article, not a wall.
+                        Text(CalibrationEngine.attributedString(passage, typography: session.trialTypography))
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .id(passage.id)
+                            .transition(reduceMotion ? .identity : .opacity)
+                    }
                 }
-                .frame(maxHeight: .infinity)
             }
+            .frame(maxHeight: .infinity)
             Button {
                 session.finishTrial()
             } label: {
@@ -343,7 +339,7 @@ private struct TrialStage: View {
             .buttonStyle(.borderedProminent)
         }
         .padding(24)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.currentParagraph?.id)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.currentPassage?.id)
     }
 }
 
@@ -464,16 +460,12 @@ private struct QuickPickStage: View {
             Text("Pick what reads best")
                 .font(.title2.weight(.semibold))
 
-            if let paragraph = session.previewParagraph {
-                ScrollView {
-                    Text(paragraph.text)
-                        .font(.system(size: preview.bodySize, design: preview.fontDesign))
-                        .lineSpacing(preview.lineSpacing)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .animation(.smooth(duration: 0.2), value: preview)
-                }
-                .frame(maxHeight: .infinity)
+            if let passage = session.previewPassage(for: preview) {
+                Text(CalibrationEngine.attributedString(passage, typography: preview))
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .animation(.smooth(duration: 0.2), value: preview)
             }
+            Spacer(minLength: 0)
 
             Picker(String(localized: "Font"), selection: $font) {
                 ForEach(ReaderFont.allCases) { Text($0.label).tag($0) }

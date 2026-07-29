@@ -1,44 +1,72 @@
 import Foundation
 
-/// The script a calibration session runs in. One session = one script: mixing
-/// Korean and Latin paragraphs across conditions would confound every
-/// comparison, and 모아쓰기 text may respond to spacing differently than Latin.
-public enum CalibrationScript: String, Codable, Sendable {
-    case korean
+/// The writing system a calibration session runs in — one per session, and the
+/// corpus is matched within it. Reading rates differ by an order of magnitude
+/// between an alphabet and a logographic script, so the plausibility bounds and
+/// the reading load must be per-script; and 모아쓰기 or Han text may respond to
+/// letter spacing differently than Latin does.
+public enum CalibrationScript: String, Codable, Sendable, CaseIterable {
     case latin
+    case korean
+    case japanese
+    case chineseSimplified
 
-    /// Plausible characters-per-second bounds for silent reading; anything
-    /// outside is a mis-tap or a distraction, not a measurement.
-    public var plausibleCPS: ClosedRange<Double> {
-        switch self {
-        case .korean: 1.5...20
-        case .latin: 4...50
+    /// The script Reading Fit should measure in, from the app's reading
+    /// language (falling back to the system locale, then Latin).
+    public static func forReadingLanguage(_ language: AppLanguage) -> CalibrationScript {
+        let code: String
+        switch language {
+        case .system: code = Locale.current.language.languageCode?.identifier ?? "en"
+        case .english: code = "en"
+        case .korean: code = "ko"
+        case .japanese: code = "ja"
+        case .chineseSimplified: code = "zh"
+        }
+        switch code {
+        case "ko": return .korean
+        case "ja": return .japanese
+        case "zh": return .chineseSimplified
+        default: return .latin
         }
     }
 
-    /// Length band for test paragraphs, in countable (non-space) characters —
-    /// roughly 15–35 seconds of natural reading.
-    public var paragraphLengthBand: ClosedRange<Int> {
+    /// Plausible characters-per-second bounds for silent reading; anything
+    /// outside is a mis-tap or a distraction, not a measurement. Alphabetic
+    /// text runs several times more characters per second than a script whose
+    /// characters carry whole morphemes.
+    public var plausibleCPS: ClosedRange<Double> {
         switch self {
-        case .korean: 80...160
-        case .latin: 180...320
+        case .latin: 4...50
+        case .korean, .japanese, .chineseSimplified: 1.5...20
         }
     }
 }
 
-/// One test paragraph, tagged with where it came from so the result screen can
-/// credit the source (and so a session never leans on one article).
-public struct CalibrationParagraph: Codable, Equatable, Sendable, Identifiable {
+/// One structured test passage: an article-shaped heading plus body paragraphs.
+///
+/// Structure is the point. A flat block of prose gives the eye nothing to latch
+/// onto, and the reading surface these settings exist for is never flat — so a
+/// trial shows a heading, a paragraph break, and one emphasized clause, exactly
+/// like the articles the reader renders. Every passage in a language carries the
+/// same structure, so it can never make one condition easier than another.
+///
+/// Emphasis is written inline as `**bold**`; `CalibrationEngine.attributed`
+/// resolves it with the reader's own font helpers.
+public struct CalibrationPassage: Equatable, Sendable, Identifiable {
     public var id: String
-    public var text: String
-    public var sourceTitle: String
-    public var articleID: String?
+    public var heading: String
+    public var paragraphs: [String]
 
-    public init(id: String, text: String, sourceTitle: String, articleID: String? = nil) {
+    public init(id: String = "", heading: String, paragraphs: [String]) {
         self.id = id
-        self.text = text
-        self.sourceTitle = sourceTitle
-        self.articleID = articleID
+        self.heading = heading
+        self.paragraphs = paragraphs
+    }
+
+    /// The passage as plain text — for probes and character counting.
+    public var plainText: String {
+        ([heading] + paragraphs.map { $0.replacingOccurrences(of: "**", with: "") })
+            .joined(separator: "\n")
     }
 }
 
