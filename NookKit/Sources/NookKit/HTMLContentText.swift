@@ -108,7 +108,12 @@ struct HTMLBlockList: View {
             let block = displayedBlock(at: index)
             let previous = index > blocks.startIndex ? displayedBlock(at: index - 1) : nil
             blockView(block)
-                .padding(.top, HTMLBlockSpacing.gap(from: previous, to: block, compact: compactSpacing))
+                .padding(.top, HTMLBlockSpacing.gap(
+                    from: previous,
+                    to: block,
+                    compact: compactSpacing,
+                    typography: typography
+                ))
         }
     }
 
@@ -180,49 +185,136 @@ indirect enum HTMLContentBlock: Equatable, Sendable {
 
 /// CSS-like collapsed margins for native article blocks. Each block describes
 /// the breathing room it wants before and after itself; adjacent margins collapse
-/// to the larger value instead of being added. This keeps the same visual rhythm
-/// whether a paragraph pair lives inside one imported fragment or is split by the
-/// parser around a heading, list, or media element.
+/// to the larger value instead of being added.
+///
+/// Every margin is a multiple of the reader's *rhythm size* rather than a fixed
+/// number of points, because a gap that reads as a section break at the default
+/// body size reads as an ordinary paragraph gap once the reader is set to 32pt.
+/// These used to be constants, so the whole vertical rhythm shrank to a third of
+/// its relative size across the supported range.
+///
+/// The rhythm size folds in line spacing as well as body size, and that is the
+/// part that matters most for readability. `lineSpacing` grows with both the body
+/// size and the line-height setting, so with fixed margins the space *between*
+/// paragraphs fell below the space between lines *inside* one at around 24pt —
+/// the boundary inverted and paragraphs ran together. Deriving every gap from
+/// `max(bodySize, lineSpacing * 2.5)` makes `paragraph >= lineSpacing * 1.5` true
+/// by construction, at every size and every line height, instead of relying on a
+/// separately tuned floor.
 enum HTMLBlockSpacing {
-    static let paragraphGap: CGFloat = 10
+    /// Margins as multiples of the rhythm size. Calibrated so that a reader with
+    /// no extra leading (line height 1.2) reproduces the points these were
+    /// previously hard-coded to; anything roomier scales up from there.
+    private enum Em {
+        static let paragraph: CGFloat = 0.6
+        static let headingBeforeMajor: CGFloat = 1.45
+        static let headingBeforeMinor: CGFloat = 1.25
+        static let headingBeforeSmall: CGFloat = 1.0
+        static let headingAfter: CGFloat = 0.45
+        static let container: CGFloat = 0.8
+        static let media: CGFloat = 0.9
+        static let rule: CGFloat = 1.25
+        /// List markers and quote indents are horizontal, but they have to keep
+        /// pace with the glyphs for the same reason the vertical gaps do.
+        static let bulletColumn: CGFloat = 0.8
+        static let numberColumn: CGFloat = 1.35
+        static let markerGutter: CGFloat = 0.45
+        static let quoteIndent: CGFloat = 0.9
+        static let quoteBar: CGFloat = 0.22
+        static let quotePadding: CGFloat = 0.11
+    }
+
+    /// The single length every margin is derived from. Never below the body size,
+    /// and never so small that a paragraph gap could fall under the line gap.
+    static func rhythmSize(_ typography: ReaderTypography) -> CGFloat {
+        max(typography.bodySize, typography.lineSpacing * 2.5)
+    }
+
+    /// The gap between two paragraphs — the reference the other margins are read
+    /// against, and the one the line gap can never overtake.
+    static func paragraphGap(_ typography: ReaderTypography) -> CGFloat {
+        Em.paragraph * rhythmSize(typography)
+    }
+
+    /// The gap between items of a list, which sits between a line break and a
+    /// paragraph break: the items belong together but are distinct.
+    static func listItemGap(_ typography: ReaderTypography) -> CGFloat {
+        paragraphGap(typography) * compactScale
+    }
+
+    static func markerColumnWidth(_ typography: ReaderTypography, ordered: Bool) -> CGFloat {
+        (ordered ? Em.numberColumn : Em.bulletColumn) * rhythmSize(typography)
+    }
+
+    static func markerGutter(_ typography: ReaderTypography) -> CGFloat {
+        Em.markerGutter * rhythmSize(typography)
+    }
+
+    static func quoteIndent(_ typography: ReaderTypography) -> CGFloat {
+        Em.quoteIndent * rhythmSize(typography)
+    }
+
+    /// Kept at a hairline minimum so the accent bar stays visible at small sizes.
+    static func quoteBarWidth(_ typography: ReaderTypography) -> CGFloat {
+        max(3, Em.quoteBar * rhythmSize(typography))
+    }
+
+    static func quoteVerticalPadding(_ typography: ReaderTypography) -> CGFloat {
+        Em.quotePadding * rhythmSize(typography)
+    }
+
+    /// List-item children keep the same proportions at a denser scale.
+    private static let compactScale: CGFloat = 0.65
 
     private struct Margins {
         let before: CGFloat
         let after: CGFloat
     }
 
-    static func gap(from previous: HTMLContentBlock?, to current: HTMLContentBlock, compact: Bool = false) -> CGFloat {
+    static func gap(
+        from previous: HTMLContentBlock?,
+        to current: HTMLContentBlock,
+        compact: Bool = false,
+        typography: ReaderTypography = .platformDefault
+    ) -> CGFloat {
         guard let previous else { return 0 }
-        let gap = max(margins(for: previous).after, margins(for: current).before)
-        return compact ? gap * 0.65 : gap
+        let collapsed = max(margins(for: previous).after, margins(for: current).before)
+        // No floor is needed on top of this: the smallest margin here is
+        // `headingAfter` at 0.45em, and since the rhythm size is never below
+        // `lineSpacing * 2.5`, even that stays above the line gap. A heading
+        // therefore keeps sitting closer to the text it introduces than
+        // paragraphs sit to each other, at every setting.
+        let gap = collapsed * rhythmSize(typography)
+        return compact ? gap * compactScale : gap
     }
 
+    /// Margins in em; resolved against the rhythm size by `gap`.
     private static func margins(for block: HTMLContentBlock) -> Margins {
         switch block {
         case .text:
-            return Margins(before: 0, after: paragraphGap)
+            return Margins(before: 0, after: Em.paragraph)
         case .mixedText(_, let headingLevel):
             if let headingLevel { return headingMargins(level: headingLevel) }
-            return Margins(before: 0, after: paragraphGap)
+            return Margins(before: 0, after: Em.paragraph)
         case .heading(let level, _):
             return headingMargins(level: level)
         case .list, .blockquote:
-            return Margins(before: 14, after: 14)
+            return Margins(before: Em.container, after: Em.container)
         case .image, .video, .audio, .embed, .codeBlock, .table:
-            return Margins(before: 16, after: 16)
+            return Margins(before: Em.media, after: Em.media)
         case .thematicBreak:
-            return Margins(before: 22, after: 22)
+            return Margins(before: Em.rule, after: Em.rule)
         }
     }
 
     private static func headingMargins(level: Int) -> Margins {
         let before: CGFloat
         switch level {
-        case 1, 2: before = 26
-        case 3: before = 22
-        default: before = 18
+        case 1, 2: before = Em.headingBeforeMajor
+        case 3: before = Em.headingBeforeMinor
+        default: before = Em.headingBeforeSmall
         }
-        return Margins(before: before, after: 8)
+        return Margins(before: before, after: Em.headingAfter)
     }
 }
 
@@ -1508,7 +1600,7 @@ private struct NativeMixedText: View {
     private var bold: Bool { headingLevel != nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: HTMLBlockSpacing.paragraphGap) {
+        VStack(alignment: .leading, spacing: HTMLBlockSpacing.paragraphGap(typography)) {
             ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
                 switch part {
                 case .html(let html):
@@ -1984,12 +2076,12 @@ private struct NativeArticleQuote: View {
 
     var body: some View {
         HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography)
-            .padding(.leading, 16)
-            .padding(.vertical, 2)
+            .padding(.leading, HTMLBlockSpacing.quoteIndent(typography))
+            .padding(.vertical, HTMLBlockSpacing.quoteVerticalPadding(typography))
             .overlay(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(Color.accentColor.opacity(0.55))
-                    .frame(width: 4)
+                    .frame(width: HTMLBlockSpacing.quoteBarWidth(typography))
             }
             .foregroundStyle(.secondary)
     }
@@ -2011,13 +2103,20 @@ private struct NativeArticleList: View {
         // final width. SwiftUI reserves the missing continuation-line space but
         // draws an ellipsis instead. Grid gives every body its final column width
         // up front, so wrapped text is measured and drawn at the same width.
-        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+        Grid(
+            alignment: .leading,
+            horizontalSpacing: HTMLBlockSpacing.markerGutter(typography),
+            verticalSpacing: HTMLBlockSpacing.listItemGap(typography)
+        ) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, blocks in
                 GridRow(alignment: .firstTextBaseline) {
                     Text(marker(index))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
-                        .frame(minWidth: ordered ? 24 : 14, alignment: .trailing)
+                        .frame(
+                            minWidth: HTMLBlockSpacing.markerColumnWidth(typography, ordered: ordered),
+                            alignment: .trailing
+                        )
                         .gridCellUnsizedAxes(.horizontal)
                     HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
                         .frame(maxWidth: .infinity, alignment: .leading)

@@ -4,18 +4,136 @@ import Testing
 
 @Suite("Native article layout")
 struct HTMLContentLayoutTests {
+    private static let paragraph = HTMLContentBlock.text("Body")
+    private static let heading = HTMLContentBlock.heading(level: 2, html: "Heading")
+    private static let minorHeading = HTMLContentBlock.heading(level: 3, html: "Heading")
+    private static let list = HTMLContentBlock.list(ordered: false, items: [[paragraph]])
+    private static let image = HTMLContentBlock.image(HTMLMedia(
+        url: URL(string: "https://example.com/a.png")!,
+        title: nil, caption: nil, posterURL: nil, aspectRatio: nil
+    ))
+
+    /// Every supported body size crossed with the line-height settings the UI
+    /// offers, so an invariant has to hold across the whole space rather than at
+    /// one convenient point.
+    private static let settings: [(size: CGFloat, lineHeight: Double)] = {
+        var combinations: [(CGFloat, Double)] = []
+        for size in stride(from: CGFloat(10), through: 40, by: 2) {
+            for lineHeight in [1.0, 1.2, 1.5, 1.7, 1.9, 2.4, 3.0] {
+                combinations.append((size, lineHeight))
+            }
+        }
+        return combinations
+    }()
+
+    private func typography(_ size: CGFloat, _ lineHeight: Double) -> ReaderTypography {
+        ReaderTypography(font: .system, fontSize: size, lineHeightMultiple: lineHeight, letterSpacingEM: 0)
+    }
+
     @Test("Adjacent block margins collapse according to document structure")
     func semanticBlockSpacing() {
-        let paragraph = HTMLContentBlock.text("Body")
-        let heading = HTMLContentBlock.heading(level: 2, html: "Heading")
-        let list = HTMLContentBlock.list(ordered: false, items: [[paragraph]])
+        // Anchored at the reader's default size with no extra leading, which is
+        // where the em scale was calibrated against the historical point values.
+        let type = typography(18, 1.2)
+        #expect(type.lineSpacing == 0)
 
-        #expect(HTMLBlockSpacing.gap(from: nil, to: paragraph) == 0)
-        #expect(HTMLBlockSpacing.gap(from: paragraph, to: paragraph) == 10)
-        #expect(HTMLBlockSpacing.gap(from: paragraph, to: heading) == 26)
-        #expect(HTMLBlockSpacing.gap(from: heading, to: paragraph) == 8)
-        #expect(HTMLBlockSpacing.gap(from: paragraph, to: list) == 14)
-        #expect(HTMLBlockSpacing.gap(from: paragraph, to: list, compact: true) == 9.1)
+        func isClose(_ value: CGFloat, _ expected: CGFloat) -> Bool {
+            abs(value - expected) < 0.01
+        }
+
+        #expect(HTMLBlockSpacing.gap(from: nil, to: Self.paragraph, typography: type) == 0)
+        #expect(isClose(HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.paragraph, typography: type), 10.8))
+        #expect(isClose(HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.heading, typography: type), 26.1))
+        #expect(isClose(HTMLBlockSpacing.gap(from: Self.heading, to: Self.paragraph, typography: type), 8.1))
+        #expect(isClose(HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.list, typography: type), 14.4))
+        #expect(isClose(
+            HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.list, compact: true, typography: type),
+            9.36
+        ))
+    }
+
+    @Test("Paragraphs always separate more than the lines inside them")
+    func paragraphNeverInvertsAgainstLineGap() {
+        // The defect this guards: every gap used to be a fixed number of points
+        // while `lineSpacing` scaled with the body size, so above ~24pt the space
+        // between paragraphs fell *below* the space between lines and paragraph
+        // boundaries disappeared.
+        for (size, lineHeight) in Self.settings {
+            let type = typography(size, lineHeight)
+            let paragraphGap = HTMLBlockSpacing.gap(
+                from: Self.paragraph, to: Self.paragraph, typography: type
+            )
+            #expect(
+                paragraphGap >= type.lineSpacing * 1.5,
+                "\(size)pt @ \(lineHeight): paragraph gap \(paragraphGap) vs line gap \(type.lineSpacing)"
+            )
+        }
+    }
+
+    @Test("Structural gaps stay ordered and above the line gap at every setting")
+    func spacingHierarchyHolds() {
+        for (size, lineHeight) in Self.settings {
+            let type = typography(size, lineHeight)
+            let afterHeading = HTMLBlockSpacing.gap(from: Self.heading, to: Self.paragraph, typography: type)
+            let betweenParagraphs = HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.paragraph, typography: type)
+            let beforeList = HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.list, typography: type)
+            let beforeMinor = HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.minorHeading, typography: type)
+            let beforeMajor = HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.heading, typography: type)
+            let beforeImage = HTMLBlockSpacing.gap(from: Self.paragraph, to: Self.image, typography: type)
+
+            let label = "\(size)pt @ \(lineHeight)"
+            // A heading introduces the text under it, so it sits closer to that
+            // text than paragraphs sit to each other — but still never as close
+            // as two lines of one paragraph.
+            #expect(afterHeading > type.lineSpacing, "\(label): heading-after collapsed into the line gap")
+            #expect(afterHeading < betweenParagraphs, "\(label): heading detached from its body text")
+            #expect(betweenParagraphs < beforeList, "\(label): list not set apart from prose")
+            #expect(beforeList <= beforeImage, "\(label): media tighter than a list")
+            #expect(beforeImage < beforeMinor, "\(label): minor heading tighter than media")
+            #expect(beforeMinor < beforeMajor, "\(label): heading levels not distinguished")
+        }
+    }
+
+    @Test("Every gap grows with the type rather than staying a fixed size")
+    func spacingScalesWithTypography() {
+        let small = typography(12, 1.7)
+        let large = typography(36, 1.7)
+        let pairs: [(String, HTMLContentBlock)] = [
+            ("paragraph", Self.paragraph), ("heading", Self.heading),
+            ("list", Self.list), ("image", Self.image),
+        ]
+        for (name, block) in pairs {
+            let smallGap = HTMLBlockSpacing.gap(from: Self.paragraph, to: block, typography: small)
+            let largeGap = HTMLBlockSpacing.gap(from: Self.paragraph, to: block, typography: large)
+            #expect(largeGap > smallGap * 2, "\(name) gap did not scale: \(smallGap) -> \(largeGap)")
+        }
+        // Horizontal metrics have to keep pace too, or a bullet ends up crowding
+        // a 36pt glyph it comfortably cleared at 12pt.
+        #expect(
+            HTMLBlockSpacing.markerColumnWidth(large, ordered: false)
+                > HTMLBlockSpacing.markerColumnWidth(small, ordered: false) * 2
+        )
+        #expect(
+            HTMLBlockSpacing.markerColumnWidth(large, ordered: true)
+                > HTMLBlockSpacing.markerColumnWidth(large, ordered: false)
+        )
+        #expect(HTMLBlockSpacing.quoteIndent(large) > HTMLBlockSpacing.quoteIndent(small) * 2)
+        #expect(HTMLBlockSpacing.quoteBarWidth(large) > HTMLBlockSpacing.quoteBarWidth(small))
+        // The accent bar has a hairline floor so it stays visible at 10pt.
+        #expect(HTMLBlockSpacing.quoteBarWidth(typography(10, 1.0)) >= 3)
+    }
+
+    @Test("List items sit between a line break and a paragraph break")
+    func listItemGapIsBetweenLineAndParagraph() {
+        for (size, lineHeight) in Self.settings {
+            let type = typography(size, lineHeight)
+            let itemGap = HTMLBlockSpacing.listItemGap(type)
+            let paragraphGap = HTMLBlockSpacing.gap(
+                from: Self.paragraph, to: Self.paragraph, typography: type
+            )
+            #expect(itemGap < paragraphGap, "\(size)pt @ \(lineHeight): items as far apart as paragraphs")
+            #expect(itemGap > 0)
+        }
     }
 
     @Test("HTML line breaks remain softer than paragraph breaks")
