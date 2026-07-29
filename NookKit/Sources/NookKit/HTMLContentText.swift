@@ -218,6 +218,9 @@ enum HTMLBlockSpacing {
         /// pace with the glyphs for the same reason the vertical gaps do.
         static let bulletColumn: CGFloat = 0.8
         static let numberColumn: CGFloat = 1.35
+        /// Added per extra digit, so "10." and "100." get a column that fits them
+        /// without the marker having to be flexible. See `markerColumnWidth`.
+        static let numberDigit: CGFloat = 0.55
         static let markerGutter: CGFloat = 0.45
         static let quoteIndent: CGFloat = 0.9
         static let quoteBar: CGFloat = 0.22
@@ -242,8 +245,18 @@ enum HTMLBlockSpacing {
         paragraphGap(typography) * compactScale
     }
 
-    static func markerColumnWidth(_ typography: ReaderTypography, ordered: Bool) -> CGFloat {
-        (ordered ? Em.numberColumn : Em.bulletColumn) * rhythmSize(typography)
+    /// The list marker's column width. Exact rather than a minimum, because a
+    /// flexible marker column is what let a list item's body be measured at one
+    /// width and drawn at another — so it has to be wide enough for the largest
+    /// number the list will show.
+    static func markerColumnWidth(
+        _ typography: ReaderTypography,
+        ordered: Bool,
+        itemCount: Int = 1
+    ) -> CGFloat {
+        guard ordered else { return Em.bulletColumn * rhythmSize(typography) }
+        let digits = max(1, String(max(1, itemCount)).count)
+        return (Em.numberColumn + Em.numberDigit * CGFloat(digits - 1)) * rhythmSize(typography)
     }
 
     static func markerGutter(_ typography: ReaderTypography) -> CGFloat {
@@ -2176,28 +2189,34 @@ private struct NativeArticleList: View {
     let selectable: Bool
     var typography: ReaderTypography = .platformDefault
 
+    /// Exact, not a minimum. A list item's body must be measured at the width it
+    /// is drawn at, and the only way to guarantee that is to leave the layout no
+    /// width to negotiate: body width is the incoming proposal minus this and the
+    /// gutter, known on the first pass.
+    private var markerWidth: CGFloat {
+        HTMLBlockSpacing.markerColumnWidth(typography, ordered: ordered, itemCount: items.count)
+    }
+
     var body: some View {
-        // Resolve the marker and body columns before measuring row height.
-        // Nested HStacks can first measure their text at an intermediate width,
-        // then keep a one-line drawing height after the nested marker narrows the
-        // final width. SwiftUI reserves the missing continuation-line space but
-        // draws an ellipsis instead. Grid gives every body its final column width
-        // up front, so wrapped text is measured and drawn at the same width.
-        Grid(
-            alignment: .leading,
-            horizontalSpacing: HTMLBlockSpacing.markerGutter(typography),
-            verticalSpacing: HTMLBlockSpacing.listItemGap(typography)
-        ) {
+        // A flexible marker column is what made list bodies render as an ellipsis
+        // with blank space under it: measured at one width, drawn at another, with
+        // SwiftUI keeping the reserved continuation-line height and truncating the
+        // text. `Grid` with a `minWidth` marker resolved that on macOS, but not on
+        // iOS, where a row realized inside the article's `LazyVStack` during a
+        // scroll sees a proposal that does not match its final width — reproduced
+        // in the simulator on the reported article, and only after scrolling to
+        // the section. A fixed marker leaves nothing to resolve on either
+        // platform, so the two-pass measurement cannot disagree with itself.
+        VStack(alignment: .leading, spacing: HTMLBlockSpacing.listItemGap(typography)) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, blocks in
-                GridRow(alignment: .firstTextBaseline) {
+                HStack(
+                    alignment: .firstTextBaseline,
+                    spacing: HTMLBlockSpacing.markerGutter(typography)
+                ) {
                     Text(marker(index))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
-                        .frame(
-                            minWidth: HTMLBlockSpacing.markerColumnWidth(typography, ordered: ordered),
-                            alignment: .trailing
-                        )
-                        .gridCellUnsizedAxes(.horizontal)
+                        .frame(width: markerWidth, alignment: .trailing)
                     HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

@@ -123,6 +123,32 @@ struct HTMLContentLayoutTests {
         #expect(HTMLBlockSpacing.quoteBarWidth(typography(10, 1.0)) >= 3)
     }
 
+    @Test("The marker column is wide enough for the largest number it must show")
+    func markerColumnFitsEveryOrdinal() {
+        // The column is a fixed width, not a minimum — that is what keeps a list
+        // body from being measured at one width and drawn at another. So it has to
+        // fit the longest marker on its own, or a three-digit ordinal would clip.
+        let type = typography(18, 1.7)
+        let one = HTMLBlockSpacing.markerColumnWidth(type, ordered: true, itemCount: 9)
+        let two = HTMLBlockSpacing.markerColumnWidth(type, ordered: true, itemCount: 42)
+        let three = HTMLBlockSpacing.markerColumnWidth(type, ordered: true, itemCount: 100)
+        #expect(one < two)
+        #expect(two < three)
+
+        // A bullet is one glyph whatever the item count, and never wider than an
+        // ordinal's column.
+        let bullets = [1, 9, 42, 100].map {
+            HTMLBlockSpacing.markerColumnWidth(type, ordered: false, itemCount: $0)
+        }
+        #expect(Set(bullets).count == 1)
+        #expect(bullets[0] < one)
+
+        // Degenerate counts must not produce a zero or negative column.
+        for count in [0, 1] {
+            #expect(HTMLBlockSpacing.markerColumnWidth(type, ordered: true, itemCount: count) > 0)
+        }
+    }
+
     @Test("List items sit between a line break and a paragraph break")
     func listItemGapIsBetweenLineAndParagraph() {
         for (size, lineHeight) in Self.settings {
