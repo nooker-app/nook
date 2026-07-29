@@ -1277,18 +1277,6 @@ private struct ArticleListView: View {
                 List(selection: $store.selectedArticleID) {
                     ForEach(store.visibleArticles) { article in
                         ArticleRow(article: article, feed: store.feed(for: article.feedID), translationBox: titleTranslator.box(for: article.id))
-                            // A `List` inside a `NavigationSplitView` is backed by an
-                            // NSOutlineView that measures a row exactly once, when its
-                            // cell is created, and ignores every later size change —
-                            // `noteHeightOfRows`, `reloadData` and invalidating the
-                            // hosting hierarchy all leave the cached height in place
-                            // (verified against a standalone repro). Category badges
-                            // arrive seconds after the row does, so without a fresh
-                            // identity the chips render clipped by the stale row height.
-                            // Folding the badge count into the identity re-creates just
-                            // this cell, which is the one thing that does re-measure.
-                            // `tag` keeps selection keyed to the article itself.
-                            .id(ArticleRowIdentity(article: article))
                             .tag(article.id)
                             .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
                             .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
@@ -1421,19 +1409,6 @@ private struct ArticleListView: View {
     }
 }
 
-/// List identity for one article row. It carries the article's own id plus the
-/// things that change the row's height after the cell already exists, because
-/// the enclosing outline view only re-measures a cell it has to create.
-private struct ArticleRowIdentity: Hashable {
-    let id: Article.ID
-    let categoryCount: Int
-
-    init(article: Article) {
-        id = article.id
-        categoryCount = article.categories.count
-    }
-}
-
 private struct ArticleRow: View {
     var article: Article
     var feed: Feed?
@@ -1502,10 +1477,15 @@ private struct ArticleRow: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
 
+                    // `reservesSpace` because this outline-backed list never
+                    // re-measures a live row: the badge line's height must be
+                    // owned by the row from its very first layout. Gated on the
+                    // user having categories at all so unused stays free.
                     CategoryBadgesBlock(
                         ReaderStore.shared.categories(forArticle: article),
                         topPadding: 5,
-                        animatesReveal: !ReaderStore.shared.isBulkCategorizing
+                        animatesReveal: !ReaderStore.shared.isBulkCategorizing,
+                        reservesSpace: ReaderStore.shared.hasCategories
                     )
                 }
             }
@@ -1517,10 +1497,11 @@ private struct ArticleRow: View {
         // Observe the per-title revision at the row root. macOS native lists can
         // otherwise keep the height measured when a freshly inserted article had
         // no translation block, even though the child view later grows correctly.
+        // (Categories no longer feed this: their line's height is reserved up
+        // front, so a badge arriving never changes the row height.)
         .synchronizeNativeListRowHeight(
             progress: rowRevealProgress,
             layoutRevision: translationBox.layoutRevision
-                ^ article.categories.hashValue
         )
     }
 

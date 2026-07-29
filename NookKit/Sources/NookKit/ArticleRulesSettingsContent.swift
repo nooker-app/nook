@@ -385,46 +385,68 @@ public struct CategoryBadges: View {
 /// keyword rules land with the merge and the AI classifier answers seconds later,
 /// while the app is in the foreground and the row is already on screen.
 ///
-/// On macOS the row must therefore be given a **new list identity** when the
-/// badges appear — see `ArticleRowIdentity` in `ContentView` — because a `List`
-/// inside a `NavigationSplitView` measures a row once, when its cell is created,
-/// and never again. That is also why the chips do not animate their height here:
-/// the cell's own fitting size does grow, but the enclosing `NSOutlineView`
-/// ignores it, so an animated height would just play out behind a clipped row.
-/// The transition below runs on the insertion that the identity change causes.
+/// On macOS that late arrival must not change the row's height. A `List` inside
+/// a `NavigationSplitView` measures a row once, when its cell is created, and
+/// never again — every AppKit invalidation hook leaves the cached height in
+/// place — so pass `reservesSpace: true` there: while the article has no
+/// categories, an invisible chip holds the badge line's height, and the chips
+/// later fade into space the row has owned since its first layout. (Re-creating
+/// the cell with a fresh `.id` re-measured it, but a re-identified cell breaks
+/// the list's swipe-action rendering from then on — buttons come up blank.)
+/// iOS self-sizes rows correctly, so it omits the placeholder and simply grows.
 ///
 /// `topPadding` is the gap this block would otherwise get from its parent's
 /// `VStack` spacing. It is carried inside the block and the block is placed in a
-/// zero-spacing group instead, so a row without categories adds no gap at all.
+/// zero-spacing group instead, so a collapsed block adds no gap at all.
 public struct CategoryBadgesBlock: View {
     private let categories: [ArticleCategory]
     private let topPadding: CGFloat
     private let animatesReveal: Bool
+    private let reservesSpace: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Pass `animatesReveal: false` when many rows are tagged at once (a bulk
     /// classification pass), so a batch lands as one quiet update instead of
-    /// dozens of simultaneous transitions.
+    /// dozens of simultaneous transitions. Pass `reservesSpace: true` when the
+    /// enclosing list cannot re-measure a live row (macOS); gate it on the user
+    /// having any categories at all, so the feature stays free when unused.
     public init(
         _ categories: [ArticleCategory],
         topPadding: CGFloat,
-        animatesReveal: Bool = true
+        animatesReveal: Bool = true,
+        reservesSpace: Bool = false
     ) {
         self.categories = categories
         self.topPadding = topPadding
         self.animatesReveal = animatesReveal
+        self.reservesSpace = reservesSpace
     }
 
     public var body: some View {
-        if !categories.isEmpty {
+        let animation: Animation? =
+            animatesReveal && !reduceMotion ? .smooth(duration: 0.28) : nil
+        if reservesSpace {
+            ZStack(alignment: .leading) {
+                // Invisible chip with the real chips' metrics: the row is laid
+                // out at its final height before any category exists.
+                Text(verbatim: "\u{200B}")
+                    .font(.caption2.weight(.medium))
+                    .padding(.vertical, 2)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+                if !categories.isEmpty {
+                    CategoryBadges(categories)
+                        .transition(.opacity)
+                }
+            }
+            .padding(.top, topPadding)
+            .animation(animation, value: categories)
+        } else if !categories.isEmpty {
             CategoryBadges(categories)
                 .padding(.top, topPadding)
                 .transition(.opacity.combined(with: .move(edge: .top)))
-                .animation(
-                    animatesReveal && !reduceMotion ? .smooth(duration: 0.28) : nil,
-                    value: categories
-                )
+                .animation(animation, value: categories)
         }
     }
 }
