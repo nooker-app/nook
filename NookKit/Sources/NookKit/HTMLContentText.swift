@@ -1704,18 +1704,23 @@ enum StreamingMarkdownFormatter {
     private struct Renderer {
         let baseSize: CGFloat
         let baseBold: Bool
+        let blockSeparator: String
         var design: Font.Design = .default
         var output = NSMutableAttributedString()
 
         mutating func render(document: Document) {
             for (index, block) in Array(document.children).enumerated() {
-                if index > 0 { append("\n", style: Style()) }
+                if index > 0 { append(blockSeparator, style: Style()) }
                 renderBlock(block)
             }
         }
 
         mutating func renderBlock(_ block: Markup) {
             switch block {
+            case let heading as Heading:
+                var style = Style()
+                style.bold = true
+                renderInline(Array(heading.children), style: &style)
             case let list as UnorderedList:
                 renderList(Array(list.listItems), ordered: false)
             case let list as OrderedList:
@@ -1932,9 +1937,15 @@ enum StreamingMarkdownFormatter {
         _ markdown: String,
         baseSize: CGFloat,
         baseBold: Bool = false,
-        design: Font.Design = .default
+        design: Font.Design = .default,
+        blockSeparator: String = "\n"
     ) -> AttributedString {
-        var renderer = Renderer(baseSize: baseSize, baseBold: baseBold, design: design)
+        var renderer = Renderer(
+            baseSize: baseSize,
+            baseBold: baseBold,
+            blockSeparator: blockSeparator,
+            design: design
+        )
         renderer.render(document: Document(parsing: markdown))
         #if canImport(AppKit)
         return (try? AttributedString(renderer.output, including: \.appKit))

@@ -2155,7 +2155,10 @@ private struct ReaderDetailView: View {
                         )
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     } else {
-                        ArticleSummaryActionButton(isLoading: summaryController.isLoading) {
+                        ArticleSummaryActionButton(
+                            isLoading: summaryController.isLoading,
+                            issue: summaryController.issue
+                        ) {
                             requestSummary(for: article)
                         }
                     }
@@ -2250,7 +2253,10 @@ private struct ReaderDetailView: View {
                 if !summariesEnabled { summaryController.reset() }
                 return
             }
-            guard let markdown = summaryMarkdown(for: article) else { return }
+            guard let markdown = summaryMarkdown(for: article) else {
+                summaryController.beginLoading()
+                return
+            }
             await summaryController.load(
                 ArticleSummaryRequest(
                     title: article.title,
@@ -2322,6 +2328,7 @@ private struct ReaderDetailView: View {
 
     private func requestSummary(for article: Article) {
         summaryController.reset()
+        summaryController.beginLoading()
         summaryArticleID = article.id
         summaryRequestedArticleID = article.id
         summaryGenerationID += 1

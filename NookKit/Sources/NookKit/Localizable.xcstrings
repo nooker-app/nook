@@ -136,6 +136,28 @@
         }
       }
     },
+    "No reliable summary could be generated. The article may already be concise or may not contain enough readable content." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信頼できる要約を生成できませんでした。記事がすでに簡潔であるか、読み取れる内容が不足している可能性があります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "신뢰할 수 있는 요약을 만들지 못했습니다. 글이 이미 충분히 짧거나 읽을 수 있는 내용이 부족할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法生成可靠的摘要。文章可能已经足够简短，或缺少足够的可读内容。"
+          }
+        }
+      }
+    },
     "Enable AI summaries" : {
       "localizations" : {
         "ja" : {
@@ -308,6 +330,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "原文会保留在下方以便对照。"
+          }
+        }
+      }
+    },
+    "The selected AI provider is unavailable. Check Apple Intelligence availability or the Gemini API key in Settings." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択した AI プロバイダーを利用できません。Apple Intelligence の利用状況、または設定の Gemini API キーを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 AI 제공자를 사용할 수 없습니다. Apple Intelligence 사용 가능 여부 또는 설정의 Gemini API 키를 확인해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选 AI 提供商不可用。请检查 Apple Intelligence 的可用性或设置中的 Gemini API 密钥。"
           }
         }
       }

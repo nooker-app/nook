@@ -34,7 +34,8 @@ struct ArticleSummaryTests {
         let expert = ArticleSummarizer.systemPrompt(style: .expert, language: "Korean")
 
         #expect(concise.contains("TL;DR"))
-        #expect(detailed.contains("Key points"))
+        #expect(detailed.contains("standalone bullet points"))
+        #expect(detailed.contains("Do not add a TL;DR paragraph"))
         #expect(expert.contains("Core analysis"))
         #expect(Set([concise, detailed, expert]).count == 3)
         #expect(expert.contains("distinguish it from article facts"))
@@ -56,6 +57,47 @@ struct ArticleSummaryTests {
         #expect(!ArticleSummarizer.isSummarizable("Already summarized."))
         #expect(!ArticleSummarizer.isSummarizable(String(repeating: "- / <> \n", count: 100)))
         #expect(ArticleSummarizer.isSummarizable(String(repeating: "meaningful article text ", count: 30)))
+    }
+
+    @Test("Unsummarizable input reports a visible no-summary outcome")
+    func preflightExplainsUnsummarizableInput() {
+        let request = ArticleSummaryRequest(
+            title: "Short",
+            markdown: "This article is already a one-line summary.",
+            style: .detailed,
+            provider: .appleIntelligence,
+            outputLanguage: "English"
+        )
+        #expect(ArticleSummarizer.preflightIssue(for: request) == .noReliableSummary)
+    }
+
+    @Test("Summary Markdown keeps paragraphs and list items visually separate")
+    @MainActor
+    func summaryMarkdownSpacing() {
+        let rendered = StreamingMarkdownFormatter.attributed(
+            "Opening paragraph.\n\n- First fact\n- Second fact",
+            baseSize: 17,
+            blockSeparator: "\n\n"
+        )
+        #expect(String(rendered.characters) == "Opening paragraph.\n\n• First fact\n• Second fact")
+    }
+
+    @Test("Detailed summaries contain only normalized factual list items")
+    func detailedDigestDropsPreambleAndHeading() {
+        let digest = ArticleSummarizer.detailedDigest(from: """
+            Here is a summary.
+
+            ## Key points
+            • **Runtime**: The project uses Swift 6.
+            - **Tests**: The suite contains 800 programs.
+            * **Safety**: AddressSanitizer runs over the full corpus.
+            """)
+
+        #expect(digest == """
+            - **Runtime**: The project uses Swift 6.
+            - **Tests**: The suite contains 800 programs.
+            - **Safety**: AddressSanitizer runs over the full corpus.
+            """)
     }
 
     @Test("Model refusal and implausible output stay hidden")

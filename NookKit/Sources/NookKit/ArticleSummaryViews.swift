@@ -70,7 +70,7 @@ public struct ArticleSummaryCard: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
@@ -84,6 +84,9 @@ public struct ArticleSummaryCard: View {
                     Text(style.label)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.quaternary, in: Capsule())
                     Spacer()
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
@@ -95,9 +98,13 @@ public struct ArticleSummaryCard: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                Text(attributedSummary)
+                Divider()
+
+                Text(renderedSummary)
                     .textSelection(.enabled)
+                    .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .transition(.opacity.combined(with: .move(edge: .top)))
 
                 Text("The original article remains below for comparison.", bundle: .module)
@@ -105,48 +112,88 @@ public struct ArticleSummaryCard: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(16)
-        .background(.tint.opacity(0.075), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.tint.opacity(0.2), lineWidth: 1)
-        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
 
-    private var attributedSummary: AttributedString {
-        (try? AttributedString(
-            markdown: summary,
-            options: .init(interpretedSyntax: .full)
-        )) ?? AttributedString(summary)
+    private var renderedSummary: AttributedString {
+        StreamingMarkdownFormatter.attributed(
+            summary,
+            baseSize: summaryBodySize,
+            blockSeparator: "\n\n"
+        )
+    }
+
+    private var summaryBodySize: CGFloat {
+        #if os(macOS)
+        15
+        #else
+        17
+        #endif
     }
 }
 
 public struct ArticleSummaryActionButton: View {
     public let isLoading: Bool
+    public let issue: ArticleSummaryIssue?
     public let action: () -> Void
 
-    public init(isLoading: Bool, action: @escaping () -> Void) {
+    public init(
+        isLoading: Bool,
+        issue: ArticleSummaryIssue? = nil,
+        action: @escaping () -> Void
+    ) {
         self.isLoading = isLoading
+        self.issue = issue
         self.action = action
     }
 
     public var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                if isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Image(systemName: "apple.intelligence")
+        VStack(alignment: .leading, spacing: 10) {
+            if let issue {
+                Label {
+                    Text(verbatim: message(for: issue))
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: issue == .providerUnavailable
+                        ? "exclamationmark.triangle"
+                        : "info.circle")
                 }
-                Text(isLoading ? "Summarizing…" : "Summarize", bundle: .module)
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
+
+            Button(action: action) {
+                HStack(spacing: 8) {
+                    if isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: issue == nil ? "apple.intelligence" : "arrow.clockwise")
+                    }
+                    buttonTitle
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isLoading)
+            .accessibilityLabel(buttonTitle)
         }
-        .buttonStyle(.bordered)
-        .disabled(isLoading)
-        .accessibilityLabel(
-            Text(isLoading ? "Summarizing…" : "Summarize", bundle: .module)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var buttonTitle: Text {
+        if isLoading { return Text("Summarizing…", bundle: .module) }
+        if issue != nil { return Text("Try Again", bundle: .module) }
+        return Text("Summarize", bundle: .module)
+    }
+
+    private func message(for issue: ArticleSummaryIssue) -> String {
+        switch issue {
+        case .noReliableSummary:
+            String(localized: "No reliable summary could be generated. The article may already be concise or may not contain enough readable content.", bundle: .module)
+        case .providerUnavailable:
+            String(localized: "The selected AI provider is unavailable. Check Apple Intelligence availability or the Gemini API key in Settings.", bundle: .module)
+        }
     }
 }

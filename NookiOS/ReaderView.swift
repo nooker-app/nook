@@ -153,6 +153,7 @@ struct ReaderDetailView: View {
     @State private var summaryRequestedArticleID: String?
     @State private var summaryArticleID: String?
     @State private var summaryGenerationID = 0
+    @State private var summaryScrollRequestID = 0
 
     /// The language to translate into: the app's chosen language, or the system
     /// language when set to "System".
@@ -295,24 +296,31 @@ struct ReaderDetailView: View {
 
     private func reader(_ article: Article) -> some View {
         GeometryReader { proxy in
-            ScrollView {
+            ScrollViewReader { scrollProxy in
+                ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header(article)
 
-                    if summariesEnabled {
-                        if let summary = summaryController.summary {
-                            ArticleSummaryCard(
-                                summary: summary,
-                                style: summaryController.style,
-                                provider: summaryController.provider
-                            )
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                        } else {
-                            ArticleSummaryActionButton(isLoading: summaryController.isLoading) {
-                                requestSummary(for: article)
+                    Group {
+                        if summariesEnabled {
+                            if let summary = summaryController.summary {
+                                ArticleSummaryCard(
+                                    summary: summary,
+                                    style: summaryController.style,
+                                    provider: summaryController.provider
+                                )
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            } else {
+                                ArticleSummaryActionButton(
+                                    isLoading: summaryController.isLoading,
+                                    issue: summaryController.issue
+                                ) {
+                                    requestSummary(for: article)
+                                }
                             }
                         }
                     }
+                    .id(summaryAnchorID(for: article))
 
                     Divider()
 
@@ -451,6 +459,12 @@ struct ReaderDetailView: View {
                     withAnimation(.easeInOut(duration: 0.25)) { chromeHidden = target }
                 }
             }
+                .onChange(of: summaryScrollRequestID) { _, _ in
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        scrollProxy.scrollTo(summaryAnchorID(for: article), anchor: .top)
+                    }
+                }
+            }
         }
         // System inline title: correct width, truncation, and position (centered in
         // the real space between the back button and trailing group) — no custom
@@ -567,7 +581,10 @@ struct ReaderDetailView: View {
                 if !summariesEnabled { summaryController.reset() }
                 return
             }
-            guard let markdown = summaryMarkdown(for: article) else { return }
+            guard let markdown = summaryMarkdown(for: article) else {
+                summaryController.beginLoading()
+                return
+            }
             await summaryController.load(
                 ArticleSummaryRequest(
                     title: article.title,
@@ -678,6 +695,7 @@ struct ReaderDetailView: View {
 
     private func requestSummary(for article: Article) {
         summaryController.reset()
+        summaryController.beginLoading()
         summaryArticleID = article.id
         summaryRequestedArticleID = article.id
         summaryGenerationID += 1
@@ -905,9 +923,11 @@ struct ReaderDetailView: View {
         HStack(spacing: 2) {
             if side == .left {
                 readerOpenButton(article)
+                readerSummaryButton(article)
                 readerTranslateButton(article)
             } else {
                 readerTranslateButton(article)
+                readerSummaryButton(article)
                 readerOpenButton(article)
             }
         }
@@ -964,6 +984,41 @@ struct ReaderDetailView: View {
         }
         .reportGlobalFrame(OriginalButtonFrameKey.self)
         .help("Open Reader / Original")
+    }
+
+    @ViewBuilder
+    private func readerSummaryButton(_ article: Article) -> some View {
+        if summariesEnabled {
+            Button {
+                if summaryController.summary != nil {
+                    summaryScrollRequestID += 1
+                } else {
+                    requestSummary(for: article)
+                }
+            } label: {
+                Group {
+                    if summaryController.isLoading {
+                        ProgressView().controlSize(.small)
+                    } else if summaryController.issue != nil {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 20))
+                    } else {
+                        Image(systemName: summaryController.summary == nil
+                            ? "apple.intelligence"
+                            : "checkmark.circle.fill")
+                            .font(.system(size: 20))
+                    }
+                }
+                .frame(width: 52, height: 48)
+            }
+            .disabled(summaryController.isLoading)
+            .accessibilityLabel(summaryController.isLoading ? "Summarizing…" : "Summarize")
+            .help(summaryController.isLoading ? "Summarizing…" : "Summarize")
+        }
+    }
+
+    private func summaryAnchorID(for article: Article) -> String {
+        "article-summary-\(article.id)"
     }
 
     private func readerShareButton(_ article: Article) -> some View {

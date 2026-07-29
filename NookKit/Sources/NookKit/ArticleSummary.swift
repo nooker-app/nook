@@ -30,10 +30,12 @@ public enum ArticleSummaryStyle: String, CaseIterable, Identifiable, Sendable, C
             """
         case .detailed:
             """
-            Write a GeekNews-style summary. Begin with a short TL;DR paragraph, \
-            then add a `## Key points` heading and 3–7 concise bullet points that \
-            capture the article's main arguments, evidence, implementation details, \
-            and consequences. Aim for 180–350 words.
+            Write a GeekNews-style factual digest as 5–10 standalone bullet points \
+            only. Each bullet must communicate one concrete fact, claim, result, \
+            implementation detail, or stated consequence from the article. Start \
+            each bullet with a short bold topic label. Preserve important numbers \
+            and qualifications. Do not add a TL;DR paragraph, heading, background \
+            knowledge, opinion, inference, or repeated conclusion. Aim for 180–350 words.
             """
         case .expert:
             """
@@ -99,7 +101,7 @@ public struct ArticleSummaryRequest: Sendable {
 }
 
 public enum ArticleSummarizer {
-    static let promptVersion = 1
+    static let promptVersion = 2
     static let minimumSourceCharacters = 500
     static let maximumGeminiCharacters = 300_000
     static let maximumAppleCharacters = 120_000
@@ -118,6 +120,15 @@ public enum ArticleSummarizer {
             #endif
             return false
         }
+    }
+
+    static func preflightIssue(for request: ArticleSummaryRequest) -> ArticleSummaryIssue? {
+        let source = normalizedSource(request.markdown)
+        guard isSummarizable(source),
+              source.count <= maximumSourceCharacters(for: request.provider)
+        else { return .noReliableSummary }
+        guard isAvailable(for: request.provider) else { return .providerUnavailable }
+        return nil
     }
 
     /// Returns nil for unavailable models, malformed/very short content, model
@@ -160,7 +171,9 @@ public enum ArticleSummarizer {
         - Preserve important names, numbers, qualifications, and uncertainty.
         - Do not invent facts or claim that the article says something it does not.
         - For expert background knowledge, explicitly distinguish it from article facts.
-        - Use clean Markdown only. Do not add a title, preamble, source list, or closing.
+        - Use clean Markdown only. Put every paragraph and every bullet on its own \
+          line, with a blank line between sections.
+        - Do not add a title, preamble, source list, or closing.
         - If the input is nonsensical, mostly navigation/boilerplate, or already too \
           compressed to summarize responsibly, return exactly `NO_SUMMARY`.
         """
@@ -203,6 +216,10 @@ public enum ArticleSummarizer {
             value.removeLast(3)
             value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        if style == .detailed {
+            guard let digest = detailedDigest(from: value) else { return nil }
+            value = digest
+        }
         guard !value.isEmpty,
               value.caseInsensitiveCompare("NO_SUMMARY") != .orderedSame,
               value.count >= 60,
@@ -211,6 +228,26 @@ public enum ArticleSummarizer {
               !NaturalTranslator.looksRunaway(value)
         else { return nil }
         return value
+    }
+
+    /// Normalizes model-specific bullets into one strict Markdown list and drops
+    /// accidental preambles/headings so detailed summaries remain a factual digest.
+    static func detailedDigest(from output: String) -> String? {
+        var items: [String] = []
+        for rawLine in output.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            let prefixes = ["- ", "* ", "• "]
+            if let prefix = prefixes.first(where: { line.hasPrefix($0) }) {
+                let item = String(line.dropFirst(prefix.count))
+                    .trimmingCharacters(in: .whitespaces)
+                if !item.isEmpty { items.append(item) }
+            } else if !line.hasPrefix("#"), !items.isEmpty {
+                items[items.count - 1] += " \(line)"
+            }
+        }
+        guard (3...12).contains(items.count) else { return nil }
+        return items.map { "- \($0)" }.joined(separator: "\n")
     }
 
     private static func maximumOutputCharacters(for style: ArticleSummaryStyle) -> Int {
@@ -421,16 +458,28 @@ actor ArticleSummaryCache {
     }
 }
 
+public enum ArticleSummaryIssue: Sendable, Equatable {
+    case noReliableSummary
+    case providerUnavailable
+}
+
 @MainActor
 @Observable
 public final class ArticleSummaryController {
     public private(set) var summary: String?
     public private(set) var isLoading = false
+    public private(set) var issue: ArticleSummaryIssue?
     public private(set) var style: ArticleSummaryStyle = .concise
     public private(set) var provider: TranslationProvider = .appleIntelligence
     private var requestKey: String?
 
     public init() {}
+
+    public func beginLoading() {
+        summary = nil
+        issue = nil
+        isLoading = true
+    }
 
     public func load(_ request: ArticleSummaryRequest) async {
         let key = [
@@ -443,19 +492,27 @@ public final class ArticleSummaryController {
         guard key != requestKey else { return }
         requestKey = key
         summary = nil
+        issue = nil
         isLoading = true
         style = request.style
         provider = request.provider
-        let result = await ArticleSummarizer.summarize(request)
+        let preflightIssue = ArticleSummarizer.preflightIssue(for: request)
+        let result = preflightIssue == .noReliableSummary
+            ? nil
+            : await ArticleSummarizer.summarize(request)
         guard requestKey == key else { return }
         isLoading = false
         guard !Task.isCancelled else { return }
         summary = result
+        if result == nil {
+            issue = preflightIssue ?? .noReliableSummary
+        }
     }
 
     public func reset() {
         requestKey = nil
         summary = nil
+        issue = nil
         isLoading = false
     }
 }
