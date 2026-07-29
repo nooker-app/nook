@@ -41,6 +41,9 @@ public final class ReplicaStore: @unchecked Sendable {
                 CREATE TABLE IF NOT EXISTS date_resolutions (
                     article_id TEXT PRIMARY KEY, resolved_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS classification_attempts (
+                    article_id TEXT PRIMARY KEY, attempted_at REAL NOT NULL
+                );
             """)
         }
     }
@@ -252,6 +255,36 @@ public final class ReplicaStore: @unchecked Sendable {
                     let now = Date().timeIntervalSince1970
                     for id in articleIDs {
                         try run(db, "INSERT OR IGNORE INTO date_resolutions(article_id,resolved_at) VALUES(?,?)", [.text(id), .double(now)])
+                    }
+                }
+            }
+        }
+    }
+
+    /// Of `articleIDs`, those the category sweep has not yet auto-classified on
+    /// this device — so keyword/AI classification is paid for at most once per
+    /// article per device, even when it legitimately declines to tag anything.
+    public func articleIDsNeedingClassification(_ articleIDs: [Article.ID]) throws -> [Article.ID] {
+        guard !articleIDs.isEmpty else { return [] }
+        return try lock.withLock {
+            try withDatabase { db in
+                try articleIDs.filter { id in
+                    try scalar(db, "SELECT 1 FROM classification_attempts WHERE article_id=?", id) == nil
+                }
+            }
+        }
+    }
+
+    /// Marks these articles' auto-classification as attempted (whether or not any
+    /// category was assigned), so the sweep never retries them.
+    public func markClassificationAttempted(_ articleIDs: [Article.ID]) throws {
+        guard !articleIDs.isEmpty else { return }
+        try lock.withLock {
+            try withDatabase { db in
+                try transaction(db) {
+                    let now = Date().timeIntervalSince1970
+                    for id in articleIDs {
+                        try run(db, "INSERT OR IGNORE INTO classification_attempts(article_id,attempted_at) VALUES(?,?)", [.text(id), .double(now)])
                     }
                 }
             }

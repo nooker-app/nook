@@ -218,6 +218,9 @@ public final class ReaderStore {
     /// calls. Only used when AI categorization is enabled.
     private var aiCategorizeQueue: [Article.ID] = []
     private var aiCategorizeRunning = false
+    /// Guards the post-merge classification sweep (one at a time; merges landing
+    /// while it runs are picked up by the next merge's sweep).
+    private var classificationSweepRunning = false
     /// Ids of articles hidden by the enabled filters. Excluded from every normal
     /// list and from all unread/badge counts (a filtered article is never treated
     /// as unread); surfaced only under the `.filtered` source. Recomputed whenever
@@ -1721,8 +1724,9 @@ public final class ReaderStore {
         var updated = articles
         var changed = false
         for index in updated.indices where updated[index].categories.contains(id) {
+            let previous = updated[index].categories
             updated[index].categories.removeAll { $0 == id }
-            recordArticleCategories(updated[index].id, updated[index].categories)
+            recordArticleCategories(updated[index].id, from: previous, to: updated[index].categories)
             changed = true
         }
         if changed { articles = updated }   // single didSet → one recompute
@@ -1764,8 +1768,9 @@ public final class ReaderStore {
         var seen = Set<String>()
         let cleaned = ids.filter { valid.contains($0) && seen.insert($0).inserted }
         guard articles[index].categories != cleaned else { return }
+        let previous = articles[index].categories
         articles[index].categories = cleaned
-        recordArticleCategories(articleID, cleaned)
+        recordArticleCategories(articleID, from: previous, to: cleaned)
         scheduleShardSave()
     }
 
@@ -1781,7 +1786,7 @@ public final class ReaderStore {
 
     /// Keyword-only auto categories for a new article, capped at 3.
     private func keywordAutoCategories(for article: Article) -> [String] {
-        Array(keywordCategoryIDs(title: article.title, summary: article.summary).prefix(3))
+        Array(keywordCategoryIDs(title: article.title, summary: article.summary).prefix(ArticleCategory.maxPerArticle))
     }
 
     /// Enqueues an article for background AI categorization (no-op unless AI is
@@ -1808,7 +1813,7 @@ public final class ReaderStore {
     /// (keyword) categories, capped at 3. AI never removes; if it finds none,
     /// nothing is added.
     private func classifyAndAssign(_ article: Article, provider: TranslationProvider) async {
-        guard article.categories.count < 3, !categories.isEmpty else { return }
+        guard article.categories.count < ArticleCategory.maxPerArticle, !categories.isEmpty else { return }
         let names = await NaturalTranslator.classify(
             title: article.title, summary: article.summary,
             into: categories.map(\.name), provider: provider
@@ -1818,10 +1823,88 @@ public final class ReaderStore {
         // Re-read the current assignment (it may have changed while awaiting).
         guard let current = articles.first(where: { $0.id == article.id })?.categories else { return }
         var combined = current
-        for cid in names.compactMap({ idByName[$0.lowercased()] }) where !combined.contains(cid) && combined.count < 3 {
+        for cid in names.compactMap({ idByName[$0.lowercased()] }) where !combined.contains(cid) && combined.count < ArticleCategory.maxPerArticle {
             combined.append(cid)
         }
         if combined != current { setArticleCategories(articleID: article.id, combined) }
+    }
+
+    // MARK: - Classification backlog sweep
+
+    /// Max articles the sweep picks up per merge. Bounds the AI spend and the
+    /// main-actor work per sync; the per-device receipts make consecutive
+    /// sweeps advance through the backlog instead of retrying the same slice.
+    /// `nonisolated` so the off-main selection task can read it.
+    private nonisolated static let classificationSweepBatch = 64
+
+    /// Tags articles that arrived *already fetched* from another device. The
+    /// network-arrival path classifies new articles as they land, but an
+    /// article synced in via the shared baseline skips that path entirely — if
+    /// the device that fetched it never classified it (AI off there, app not
+    /// yet updated), it stays untagged everywhere. Runs after each merge:
+    /// keyword rules apply immediately in one batched write, AI classification
+    /// feeds the existing one-at-a-time queue, and a per-device receipt marks
+    /// each article attempted so a sweep never re-pays for an article that
+    /// classification already declined to tag.
+    private func scheduleClassificationSweep() {
+        guard !classificationSweepRunning,
+              !isPreparingLocalReset,
+              !isBulkCategorizing,
+              hasCategories,
+              replicaStore != nil else { return }
+        // Nothing could possibly tag right now (no AI, no keyword rules): skip
+        // WITHOUT writing receipts, so enabling either later still sees the
+        // whole backlog.
+        guard isAICategorizationActive || categories.contains(where: { !$0.keywords.isEmpty }) else { return }
+        classificationSweepRunning = true
+        Task { [weak self] in
+            await self?.sweepClassificationBacklog()
+            self?.classificationSweepRunning = false
+        }
+    }
+
+    private func sweepClassificationBacklog() async {
+        guard let replicaStore else { return }
+        // Hidden (filtered) articles never surface in the lists, so tagging
+        // them would spend AI calls on content the user asked not to see.
+        let candidates = articles.filter { $0.categories.isEmpty && !filteredArticleIDs.contains($0.id) }
+        guard !candidates.isEmpty else { return }
+
+        // Receipt filtering and newest-first selection are O(backlog) — off-main.
+        let batchIDs = await Task.detached(priority: .utility) { () -> [Article.ID] in
+            let needing = Set((try? replicaStore.articleIDsNeedingClassification(candidates.map(\.id))) ?? [])
+            guard !needing.isEmpty else { return [] }
+            return candidates
+                .filter { needing.contains($0.id) }
+                .sorted { $0.publishedAt > $1.publishedAt }   // recent stories first
+                .prefix(Self.classificationSweepBatch)
+                .map(\.id)
+        }.value
+        guard !batchIDs.isEmpty, !isPreparingLocalReset, !isBulkCategorizing else { return }
+
+        // Keyword rules first (cheap, local): one batched articles write.
+        var updated = articles
+        let indexByID = Dictionary(updated.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var keywordChanged = false
+        for id in batchIDs {
+            guard let index = indexByID[id], updated[index].categories.isEmpty else { continue }
+            let cats = keywordAutoCategories(for: updated[index])
+            guard !cats.isEmpty else { continue }
+            updated[index].categories = cats
+            recordArticleCategories(id, from: [], to: cats)
+            keywordChanged = true
+        }
+        if keywordChanged {
+            articles = updated          // one didSet → one recompute for the batch
+            scheduleShardSave()
+        }
+
+        // AI fills in what keywords didn't (serial queue; no-op when AI is off).
+        for id in batchIDs {
+            guard let index = indexByID[id], updated[index].categories.isEmpty else { continue }
+            enqueueAICategorization(id)
+        }
+        try? replicaStore.markClassificationAttempted(batchIDs)
     }
 
     // MARK: - Migration (classify existing articles)
@@ -1865,8 +1948,15 @@ public final class ReaderStore {
             var updated = articles
             let indexByID = Dictionary(updated.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
             for (id, cats) in pending {
-                if let index = indexByID[id] { updated[index].categories = cats }
-                recordArticleCategories(id, cats)
+                if let index = indexByID[id] {
+                    let previous = updated[index].categories
+                    updated[index].categories = cats
+                    recordArticleCategories(id, from: previous, to: cats)
+                } else {
+                    // The article left the library mid-pass; record additively so
+                    // the assignment still syncs if it resurfaces.
+                    recordArticleCategories(id, from: [], to: cats)
+                }
             }
             articles = updated          // one didSet → one recompute for the batch
             scheduleShardSave()
@@ -1877,12 +1967,12 @@ public final class ReaderStore {
             if Task.isCancelled { break }
             if let article = articles.first(where: { $0.id == id }) {
                 var combined = keywordAutoCategories(for: article)   // keyword first (priority)
-                if combined.count < 3 {
+                if combined.count < ArticleCategory.maxPerArticle {
                     let names = await NaturalTranslator.classify(
                         title: article.title, summary: article.summary,
                         into: categories.map(\.name), provider: provider
                     )
-                    for cid in names.compactMap({ idByName[$0.lowercased()] }) where !combined.contains(cid) && combined.count < 3 {
+                    for cid in names.compactMap({ idByName[$0.lowercased()] }) where !combined.contains(cid) && combined.count < ArticleCategory.maxPerArticle {
                         combined.append(cid)
                     }
                 }
@@ -3746,7 +3836,7 @@ public final class ReaderStore {
             var wroteCategories = false
             for id in newlyArrivedIDs {
                 if let cats = existingArticlesByID[id]?.categories, !cats.isEmpty {
-                    recordArticleCategories(id, cats)
+                    recordArticleCategories(id, from: [], to: cats)
                     wroteCategories = true
                 }
                 enqueueAICategorization(id)
@@ -3935,6 +4025,10 @@ public final class ReaderStore {
         loadCachedFavicons()
 
         if didRepair { scheduleSave() }
+
+        // Articles that arrived through this merge (fetched by another device)
+        // may still be untagged — pick them up now that they're in the library.
+        scheduleClassificationSweep()
     }
 
     private func loadCachedFavicons() {
@@ -4179,8 +4273,20 @@ public final class ReaderStore {
         ownShard.setFilterTombstone(id, true, hlc: nextHLC())
     }
 
-    private func recordArticleCategories(_ id: Article.ID, _ value: [String]) {
-        ownShard.setArticleCategories(id, value, hlc: nextHLC())
+    /// Stamps a category-assignment change into this device's shard. The truth
+    /// for merging is the per-category membership registers — only the ids that
+    /// actually changed get a register, so two devices tagging the same article
+    /// concurrently union instead of clobbering, and a removal still syncs. The
+    /// whole-list register is written too, as the base for shards from builds
+    /// that predate membership registers.
+    private func recordArticleCategories(_ id: Article.ID, from previous: [String], to next: [String]) {
+        ownShard.setArticleCategories(id, next, hlc: nextHLC())
+        for added in next where !previous.contains(added) {
+            ownShard.setArticleCategoryMembership(id, category: added, present: true, hlc: nextHLC())
+        }
+        for removed in previous where !next.contains(removed) {
+            ownShard.setArticleCategoryMembership(id, category: removed, present: false, hlc: nextHLC())
+        }
     }
 
     private func recordCategoryDefinition(_ category: ArticleCategory) {

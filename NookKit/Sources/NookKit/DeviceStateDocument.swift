@@ -30,31 +30,55 @@ public struct DeviceStateDocument: Codable, Sendable, Equatable {
         public var tombstone: LWWRegister<Bool>?
         /// Category ids assigned to this article (keyword / AI / manual). Whole-
         /// list LWW: an assignment change replaces the set, resolved by HLC.
+        /// Superseded by `categoryMembership` for conflict resolution — kept
+        /// written (and honored as the base) so shards from older builds merge.
         public var categories: LWWRegister<[String]>?
+        /// Per-category assignment registers: `true` = assigned, `false` =
+        /// removed. Two devices that classify the same article concurrently
+        /// (macOS says "IT", iOS says "Tech") *merge* into the union instead of
+        /// the whole-list register's winner-takes-all, while an explicit removal
+        /// still beats a stale assignment by HLC. The union is capped back to
+        /// `ArticleCategory.maxPerArticle` at materialize, deterministically, so
+        /// every device converges on the same set.
+        public var categoryMembership: [String: LWWRegister<Bool>]?
 
         public init(
             isRead: LWWRegister<Bool>? = nil,
             isStarred: LWWRegister<Bool>? = nil,
             seen: LWWRegister<Bool>? = nil,
             tombstone: LWWRegister<Bool>? = nil,
-            categories: LWWRegister<[String]>? = nil
+            categories: LWWRegister<[String]>? = nil,
+            categoryMembership: [String: LWWRegister<Bool>]? = nil
         ) {
             self.isRead = isRead
             self.isStarred = isStarred
             self.seen = seen
             self.tombstone = tombstone
             self.categories = categories
+            self.categoryMembership = categoryMembership
         }
 
-        var isEmpty: Bool { isRead == nil && isStarred == nil && seen == nil && tombstone == nil && categories == nil }
+        var isEmpty: Bool {
+            isRead == nil && isStarred == nil && seen == nil && tombstone == nil
+                && categories == nil && categoryMembership == nil
+        }
 
         func merged(with other: ArticleState) -> ArticleState {
-            ArticleState(
+            var membership = categoryMembership
+            if let theirs = other.categoryMembership {
+                var mine = membership ?? [:]
+                for (categoryID, register) in theirs {
+                    mine[categoryID] = mergeRegisters(mine[categoryID], register)
+                }
+                membership = mine
+            }
+            return ArticleState(
                 isRead: mergeRegisters(isRead, other.isRead),
                 isStarred: mergeRegisters(isStarred, other.isStarred),
                 seen: mergeRegisters(seen, other.seen),
                 tombstone: mergeRegisters(tombstone, other.tombstone),
-                categories: mergeRegisters(categories, other.categories)
+                categories: mergeRegisters(categories, other.categories),
+                categoryMembership: membership
             )
         }
     }
@@ -278,6 +302,19 @@ extension DeviceStateDocument {
         articleState[id] = state
     }
 
+    public mutating func setArticleCategoryMembership(
+        _ id: Article.ID,
+        category categoryID: String,
+        present: Bool,
+        hlc: HLC
+    ) {
+        var state = articleState[id] ?? ArticleState()
+        var membership = state.categoryMembership ?? [:]
+        membership[categoryID] = LWWRegister(value: present, hlc: hlc)
+        state.categoryMembership = membership
+        articleState[id] = state
+    }
+
     public mutating func setFeedCategory(_ id: Feed.ID, _ value: String, hlc: HLC) {
         var state = feedState[id] ?? FeedState()
         state.category = LWWRegister(value: value, hlc: hlc)
@@ -345,7 +382,9 @@ extension DeviceStateDocument {
             fold(state.isRead?.hlc)
             fold(state.isStarred?.hlc)
             fold(state.seen?.hlc)
+            fold(state.tombstone?.hlc)
             fold(state.categories?.hlc)
+            for register in (state.categoryMembership ?? [:]).values { fold(register.hlc) }
         }
         for state in feedState.values {
             fold(state.category?.hlc)
@@ -400,6 +439,35 @@ extension DeviceStateDocument {
         return (articles, feeds, folders, filters, categories)
     }
 
+    /// One article's effective category assignment, from three layers:
+    ///
+    /// 1. **Base**: the newest whole-list register if any shard wrote one (all
+    ///    writers still record it), else the content baseline's list.
+    /// 2. **Membership deltas**: per-category registers overlay the base —
+    ///    `true` adds, `false` removes. Concurrent tagging on two devices
+    ///    therefore *unions* (each device's additions are separate registers),
+    ///    while an explicit removal beats a stale assignment by HLC.
+    /// 3. **Normalization**: ids without a live definition are dropped (a
+    ///    category deletion cleans dangling assignments everywhere), the result
+    ///    is ordered by the definitions' (order, id), and capped at
+    ///    `ArticleCategory.maxPerArticle` — all deterministic, so devices
+    ///    converge on the same set without coordinating.
+    private nonisolated static func resolvedCategories(
+        baseline: [String],
+        state: ArticleState?,
+        categoryOrder: [String: Int]
+    ) -> [String] {
+        var present = Set(state?.categories?.value ?? baseline)
+        for (categoryID, register) in state?.categoryMembership ?? [:] {
+            if register.value { present.insert(categoryID) } else { present.remove(categoryID) }
+        }
+        let ordered = present
+            .compactMap { id in categoryOrder[id].map { (order: $0, id: id) } }
+            .sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+            .prefix(ArticleCategory.maxPerArticle)
+        return ordered.map(\.id)
+    }
+
     /// Produces the effective library the app should show: the regenerable
     /// content `base` (feeds, article bodies) with merged user state applied on
     /// top. Deleted feeds and their articles are dropped; read/starred/folder/
@@ -412,6 +480,20 @@ extension DeviceStateDocument {
         shards: [DeviceStateDocument]
     ) -> ReaderLibrary {
         let merged = mergedState(from: shards)
+
+        // Live category definitions, hoisted above the article pass: resolving
+        // an article's assignments needs the definition order (for the
+        // deterministic cap) and drops ids whose definition is tombstoned or
+        // unknown, so a category deletion cleans dangling assignments on every
+        // device — not only the one that deleted it.
+        let categories = merged.categories
+            .compactMap { _, state -> ArticleCategory? in
+                guard state.tombstone?.value != true else { return nil }
+                return state.value?.value
+            }
+            .sorted { ($0.order, $0.id) < ($1.order, $1.id) }
+        var categoryOrder: [String: Int] = [:]
+        for (index, category) in categories.enumerated() { categoryOrder[category.id] = index }
 
         // Feed membership: baseline ∪ shard-seeded, minus tombstoned. Resolve each
         // candidate id to a Feed with its state applied.
@@ -518,7 +600,9 @@ extension DeviceStateDocument {
             if state?.tombstone?.value == true { continue }
             if let isRead = state?.isRead?.value { article.isRead = isRead }
             if let isStarred = state?.isStarred?.value { article.isStarred = isStarred }
-            if let categories = state?.categories?.value { article.categories = categories }
+            article.categories = resolvedCategories(
+                baseline: article.categories, state: state, categoryOrder: categoryOrder
+            )
             let idx = articles.count
             articles.append(article)
             liveIndexByURL[article.url.feedIdentityKey, default: []].append(idx)
@@ -542,13 +626,17 @@ extension DeviceStateDocument {
                 if mergedState.tombstone?.value == true { removedIndices.insert(idx); continue }
                 if let isRead = mergedState.isRead?.value { articles[idx].isRead = isRead }
                 if let isStarred = mergedState.isStarred?.value { articles[idx].isStarred = isStarred }
-                if let categories = mergedState.categories?.value { articles[idx].categories = categories }
+                articles[idx].categories = resolvedCategories(
+                    baseline: articles[idx].categories, state: mergedState, categoryOrder: categoryOrder
+                )
             } else if matches.isEmpty {
                 if state?.tombstone?.value == true { continue }
                 var kept = article
                 if let isRead = state?.isRead?.value { kept.isRead = isRead }
                 if let isStarred = state?.isStarred?.value { kept.isStarred = isStarred }
-                if let categories = state?.categories?.value { kept.categories = categories }
+                kept.categories = resolvedCategories(
+                    baseline: kept.categories, state: state, categoryOrder: categoryOrder
+                )
                 articles.append(kept)
             }
         }
@@ -567,14 +655,6 @@ extension DeviceStateDocument {
         // being unordered.
         let filters = merged.filters
             .compactMap { _, state -> ArticleFilter? in
-                guard state.tombstone?.value != true else { return nil }
-                return state.value?.value
-            }
-            .sorted { ($0.order, $0.id) < ($1.order, $1.id) }
-
-        // Categories: same per-item build as filters.
-        let categories = merged.categories
-            .compactMap { _, state -> ArticleCategory? in
                 guard state.tombstone?.value != true else { return nil }
                 return state.value?.value
             }

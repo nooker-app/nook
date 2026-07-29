@@ -150,6 +150,11 @@ public extension ArticleFilter.MatchTarget {
 /// keywords is tagged with this category automatically (the keyword path, which
 /// takes priority over AI classification).
 public struct ArticleCategory: Codable, Sendable, Equatable, Identifiable {
+    /// Upper bound on categories assigned to one article. Enforced by every
+    /// classifier and, deterministically, by the sync merge — so a cross-device
+    /// union of concurrent assignments is capped back to the same set everywhere.
+    public static let maxPerArticle = 3
+
     public var id: String
     public var name: String
     /// Badge color as a hex string (e.g. "#FF9500"). A palette default is chosen

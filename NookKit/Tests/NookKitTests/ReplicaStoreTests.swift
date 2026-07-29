@@ -94,6 +94,22 @@ struct ReplicaStoreTests {
         #expect(try replica.reserveNotifications(for: [fresh]).isEmpty)
     }
 
+    @Test("Classification receipts gate the sweep to one attempt per article per device")
+    func classificationReceiptsAreOncePerDevice() throws {
+        let (_, replica, root, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        #expect(try replica.articleIDsNeedingClassification(["a", "b", "c"]) == ["a", "b", "c"])
+
+        try replica.markClassificationAttempted(["a", "c"])
+        #expect(try replica.articleIDsNeedingClassification(["a", "b", "c"]) == ["b"])
+
+        // Marking again is idempotent, and the receipt survives independently of
+        // whether the attempt actually assigned anything.
+        try replica.markClassificationAttempted(["a"])
+        #expect(try replica.articleIDsNeedingClassification(["a", "b", "c"]) == ["b"])
+    }
+
     @Test("An article held through quiet hours stays queued until it is delivered")
     func reservedButUndeliveredStaysPending() throws {
         let (storage, replica, root, _) = try fixture()
