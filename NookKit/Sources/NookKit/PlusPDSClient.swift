@@ -131,7 +131,7 @@ public struct PlusPDSClient: Sendable {
         ]
         guard let url = components.url else { throw PlusPDSError.badRequest }
 
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await reach { try await session.data(from: url) }
         try check(response, data)
         return try JSONDecoder().decode(ATRecordPage<Value>.self, from: data).records
     }
@@ -150,7 +150,7 @@ public struct PlusPDSClient: Sendable {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body ?? [:])
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await reach { try await session.data(for: request) }
         try check(response, data)
         if data.isEmpty, let empty = "{}".data(using: .utf8) {
             // Some methods answer 200 with no body. Decoding nothing fails, so
@@ -158,6 +158,17 @@ public struct PlusPDSClient: Sendable {
             return try JSONDecoder().decode(Response.self, from: empty)
         }
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    /// Runs a request, naming a failure to reach the host as such.
+    private func reach(
+        _ send: () async throws -> (Data, URLResponse)
+    ) async throws -> (Data, URLResponse) {
+        do {
+            return try await send()
+        } catch let error as URLError {
+            throw PlusPDSError.transport(error)
+        }
     }
 
     /// Whether the host rejected the credentials as opposed to failing.
@@ -197,6 +208,10 @@ public struct PlusPDSClient: Sendable {
 /// Failures reaching a PDS.
 public enum PlusPDSError: Error, LocalizedError, Sendable {
     case badRequest
+    /// The host could not be reached at all. Carried rather than left as a bare
+    /// URLError so a caller can tell "no such host" — a build pointed at a
+    /// deployment that does not exist — from a network that is merely down.
+    case transport(any Error)
     /// The handle belongs to a server other than the one Nook talks to.
     case foreignHandle(host: String)
     case upstream(status: Int, kind: String?)
@@ -205,6 +220,8 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
         switch self {
         case .badRequest:
             return String(localized: "Could not build the request.", bundle: .module)
+        case .transport:
+            return String(localized: "Could not reach the server that stores your posts.", bundle: .module)
         case .foreignHandle:
             return String(
                 localized: "That handle belongs to a different server. Nook can only sign in to accounts on its own server.",

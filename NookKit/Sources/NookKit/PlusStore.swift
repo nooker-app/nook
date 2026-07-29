@@ -130,6 +130,20 @@ public final class PlusStore {
         if failureField != nil { failureField = nil }
     }
 
+    /// Switches deployments: persists the choice, rebuilds the clients, and
+    /// forgets the session.
+    ///
+    /// One call rather than three, and it goes through the store so the change is
+    /// observed. Reading the choice back from `UserDefaults` is not: SwiftUI does
+    /// not watch it, so the screen kept showing the old server and the button
+    /// that made the change looked like it had done nothing.
+    public func select(_ environment: PlusEnvironment) {
+        guard environment != self.environment else { return }
+        PlusEnvironment.select(environment)
+        use(environment)
+        signOut()
+    }
+
     /// Reloads the client pair after the environment changes.
     public func use(_ environment: PlusEnvironment) {
         self.environment = environment
@@ -276,10 +290,24 @@ public final class PlusStore {
     /// Succeeds whether or not the address has an account: the host does not say,
     /// and neither does this, because answering would let anyone test addresses.
     public func requestPasswordReset(email: String) async {
-        await perform {
-            try await self.pds.requestPasswordReset(email: email)
-            self.passwordResetRequested = true
+        isWorking = true
+        failure = nil
+        do {
+            try await pds.requestPasswordReset(email: email)
+            passwordResetRequested = true
+        } catch PlusPDSError.upstream(let status, _) where status >= 500 {
+            // The host answers 500 when it cannot send the mail, which says
+            // nothing about why. The reachable causes are all on the sending
+            // side, so the message points there rather than at the address the
+            // user just typed correctly.
+            failure = String(
+                localized: "The server could not send the email. It may not be able to send to this address yet — ask whoever runs the server.",
+                bundle: .module
+            )
+        } catch {
+            failure = message(for: error)
         }
+        isWorking = false
     }
 
     /// Sets a new password from the emailed code, then signs in with it.
@@ -431,13 +459,38 @@ public final class PlusStore {
                 return String(localized: "The service could not complete that request.", bundle: .module)
             case .rejected(let reason, _):
                 return PlusStore.message(for: reason)
-            case .transport:
-                return String(localized: "Could not reach the service.", bundle: .module)
+            case .transport(let cause):
+                return unreachableMessage(cause)
             }
         }
         if let pdsError = error as? PlusPDSError {
+            if case .transport(let cause) = pdsError {
+                return unreachableMessage(cause)
+            }
             return pdsError.errorDescription ?? String(localized: "Something went wrong.", bundle: .module)
         }
-        return error.localizedDescription
+        return unreachableMessage(error)
+    }
+
+    /// What to say when the service could not be reached.
+    ///
+    /// A host that does not resolve is not the same failure as a network that is
+    /// down, and the difference matters: the first one is almost always a build
+    /// pointed at a deployment that does not exist, and the raw
+    /// "could not find a server with the specified hostname" gives the user
+    /// nothing to act on. Naming the deployment turns it into a one-tap fix.
+    private func unreachableMessage(_ error: any Error) -> String {
+        let url = error as? URLError
+        if url?.code == .cannotFindHost || url?.code == .dnsLookupFailed {
+            return String(
+                localized:
+                    "The \(environment.name) server is not reachable — no such host as \(environment.pdsHost). Check the server in Developer settings.",
+                bundle: .module
+            )
+        }
+        if url?.code == .notConnectedToInternet || url?.code == .networkConnectionLost {
+            return String(localized: "No network connection.", bundle: .module)
+        }
+        return String(localized: "Could not reach the service.", bundle: .module)
     }
 }

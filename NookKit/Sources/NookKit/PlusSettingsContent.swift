@@ -29,7 +29,14 @@ public struct PlusSettingsContent: View {
             } else {
                 notSetUp
             }
-            developerSection
+            // Debug only. Which deployment a build talks to is not a user
+            // setting: picking wrong creates an account whose handle belongs to
+            // a different service, and a release build has exactly one correct
+            // answer. Compiled out rather than hidden, so a release binary does
+            // not carry the switch at all.
+            #if DEBUG
+                developerSection
+            #endif
         }
         // The host clears row backgrounds per Section for its own screens, but
         // it cannot reach Sections this package creates. Applied to the
@@ -225,33 +232,57 @@ public struct PlusSettingsContent: View {
     /// Which server to talk to. Not a user setting: picking the wrong one
     /// creates an account whose handle belongs to a different service. It is
     /// disclosed, labelled, and explained rather than exposed as a bare field.
-    private var developerSection: some View {
-        Section {
-            DisclosureGroup(isExpanded: $showingDeveloper) {
-                Picker(selection: $selected) {
-                    ForEach(PlusEnvironment.all, id: \.handleDomain) { environment in
-                        Text(verbatim: environment.name).tag(environment)
-                    }
+    #if DEBUG
+        private var developerSection: some View {
+            Section {
+                // Outside the disclosure, because which deployment a build talks
+                // to is the difference between the feature working and every call
+                // failing to resolve a host — and it was invisible until someone
+                // thought to open a section marked "Developer".
+                LabeledContent {
+                    Text(verbatim: store.currentEnvironment.name)
+                        .foregroundStyle(
+                            store.currentEnvironment == .production
+                                ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                 } label: {
                     Text("Server", bundle: .module)
                 }
-                Text(verbatim: selected.apiBaseURL.absoluteString)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-
-                Button {
-                    PlusEnvironment.select(selected)
-                    store.use(selected)
-                    store.signOut()
-                } label: {
-                    Text("Use This Server", bundle: .module)
+                if store.currentEnvironment == .production {
+                    Text("The production server is not running yet, so publishing cannot work on this setting. Choose the test server below.", bundle: .module)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
-                .disabled(selected == PlusEnvironment.current)
-            } label: {
-                Text("Developer", bundle: .module)
+
+                DisclosureGroup(isExpanded: $showingDeveloper) {
+                    Picker(selection: $selected) {
+                        ForEach(PlusEnvironment.all, id: \.handleDomain) { environment in
+                            Text(verbatim: environment.name).tag(environment)
+                        }
+                    } label: {
+                        Text("Switch to", bundle: .module)
+                    }
+                    Text(verbatim: selected.apiBaseURL.absoluteString)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        store.select(selected)
+                    } label: {
+                        Text("Use This Server", bundle: .module)
+                    }
+                    // Compared against the store, not UserDefaults: the static
+                    // read is not observed, so this stayed enabled after a switch
+                    // and the row above kept naming the old server.
+                    .disabled(selected == store.currentEnvironment)
+                } label: {
+                    Text("Developer", bundle: .module)
+                }
+            } footer: {
+                Text("Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out.", bundle: .module)
             }
-        } footer: {
-            Text("Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out.", bundle: .module)
+            // Keeps the picker on whatever is actually in use, including after a
+            // switch made somewhere else.
+            .onChange(of: store.currentEnvironment) { _, current in selected = current }
         }
-    }
+    #endif
 }
