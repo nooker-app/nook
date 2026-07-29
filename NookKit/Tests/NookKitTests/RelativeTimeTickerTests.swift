@@ -16,6 +16,28 @@ struct RelativeTimeTickerTests {
         #expect(ticker.now > before)
     }
 
+    @Test("The label string is a pure function of the heartbeat")
+    func stringFollowsTheHeartbeat() {
+        let published = Date(timeIntervalSince1970: 1_000_000)
+        let locale = Locale(identifier: "ko_KR")
+
+        // Three minutes after publication…
+        let early = RelativeTimeText.string(
+            for: published, relativeTo: published.addingTimeInterval(180),
+            presentation: .named, locale: locale
+        )
+        // …and ten minutes after: the heartbeat value must drive the output,
+        // or the optimizer regression this guards against (a discarded read
+        // losing the subscription) could return unnoticed.
+        let late = RelativeTimeText.string(
+            for: published, relativeTo: published.addingTimeInterval(600),
+            presentation: .named, locale: locale
+        )
+
+        #expect(early == "3분 전")
+        #expect(late == "10분 전")
+    }
+
     @Test("A clock-change notification resnaps the heartbeat")
     func clockChangeResnaps() async throws {
         let ticker = RelativeTimeTicker.shared

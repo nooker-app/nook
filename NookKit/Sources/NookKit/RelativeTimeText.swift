@@ -73,15 +73,21 @@ public final class RelativeTimeTicker {
 
 /// A relative timestamp ("5 minutes ago") that keeps itself current.
 ///
-/// `Text(date, format: .relative(…))` computes its string once, at body
-/// evaluation, and never refreshes on its own. Reading the shared ticker makes
-/// this leaf view re-evaluate on every heartbeat — each minute, and immediately
-/// on activation/wake — re-formatting against the then-current time. Font,
-/// foreground style, and locale are inherited from the environment, so it reads
-/// identically to the plain `Text` it wraps.
+/// The string is computed *from* `RelativeTimeTicker.shared.now`, so this leaf
+/// view re-evaluates on every heartbeat — each minute, and immediately on
+/// activation/wake — and the label can never freeze. The heartbeat must flow
+/// into the output as a value: an earlier version subscribed with a discarded
+/// read (`let _ = ticker.now`) above a self-formatting `Text`, and the
+/// optimizer eliminated the read in release builds, silently unsubscribing the
+/// view — rows then showed the age computed at their last render until the
+/// cell happened to be recreated. Font, foreground style, and locale are
+/// inherited from the environment, so it reads like the plain `Text` it
+/// replaces.
 public struct RelativeTimeText: View {
     private let date: Date
     private let presentation: Date.RelativeFormatStyle.Presentation
+
+    @Environment(\.locale) private var locale
 
     public init(_ date: Date, presentation: Date.RelativeFormatStyle.Presentation = .named) {
         self.date = date
@@ -89,9 +95,49 @@ public struct RelativeTimeText: View {
     }
 
     public var body: some View {
-        // The read is the subscription; the format style itself always uses
-        // the current time, so the value needs no further threading.
-        let _ = RelativeTimeTicker.shared.now
-        Text(date, format: .relative(presentation: presentation))
+        Text(
+            Self.string(
+                for: date,
+                relativeTo: RelativeTimeTicker.shared.now,
+                presentation: presentation,
+                locale: locale
+            )
+        )
     }
+
+    /// `RelativeDateTimeFormatter` rather than `Date.RelativeFormatStyle`
+    /// because only the formatter accepts an explicit reference date — the
+    /// format style always formats against its own "now", which cannot carry
+    /// the ticker dependency. Output matches the style's for all presentations
+    /// (formatter truncates partial units where the style rounds; both read
+    /// naturally). Formatters are expensive to create, so they are cached per
+    /// (presentation, locale).
+    @MainActor
+    static func string(
+        for date: Date,
+        relativeTo now: Date,
+        presentation: Date.RelativeFormatStyle.Presentation,
+        locale: Locale
+    ) -> String {
+        let key = FormatterKey(named: presentation == .named, localeID: locale.identifier)
+        let formatter: RelativeDateTimeFormatter
+        if let cached = formatters[key] {
+            formatter = cached
+        } else {
+            let fresh = RelativeDateTimeFormatter()
+            fresh.dateTimeStyle = key.named ? .named : .numeric
+            fresh.locale = locale
+            formatters[key] = fresh
+            formatter = fresh
+        }
+        return formatter.localizedString(for: date, relativeTo: now)
+    }
+
+    private struct FormatterKey: Hashable {
+        let named: Bool
+        let localeID: String
+    }
+
+    @MainActor
+    private static var formatters: [FormatterKey: RelativeDateTimeFormatter] = [:]
 }
