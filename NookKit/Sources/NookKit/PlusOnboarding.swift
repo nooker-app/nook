@@ -124,6 +124,9 @@ public struct PlusOnboardingView: View {
     /// The handle, held in state because the username field it feeds has to be a
     /// real editable text field for the system to read it.
     @State private var handleForCredential = ""
+    /// Confirms the copy landed. Reset when the password changes, so the tick
+    /// cannot claim a value that is no longer in the field.
+    @State private var copiedPassword = false
 
     enum Availability: Equatable {
         case unknown
@@ -450,6 +453,7 @@ public struct PlusOnboardingView: View {
                 "Protects your repository. Nook stores it nowhere: it goes straight to the host that keeps your posts."
             )
             passwordField(text: $password, label: Text("Password", bundle: .module))
+                .onChange(of: password) { _, _ in copiedPassword = false }
             passwordField(text: $confirmPassword, label: Text("Repeat password", bundle: .module))
 
             if !password.isEmpty && password.count < 8 {
@@ -462,7 +466,7 @@ public struct PlusOnboardingView: View {
                     .foregroundStyle(.orange)
             }
 
-            Text("Save it somewhere safe. It is the only way back into your repository, and Nook cannot reset it for you.", bundle: .module)
+            Text("Save it somewhere safe — copy it into your password manager now. It is the only way back into your repository, and Nook cannot reset it for you.", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -577,7 +581,36 @@ public struct PlusOnboardingView: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
+
+            if purpose == .create {
+                // The system offers to save a password only for an app whose
+                // domain association it has verified, which a build signed by a
+                // personal team cannot have. Copying is then the only way to get
+                // the password into a password manager, and it is the one thing
+                // standing between the user and an unrecoverable account.
+                Button {
+                    copy(text.wrappedValue)
+                } label: {
+                    Image(systemName: copiedPassword ? "checkmark" : "doc.on.doc")
+                        .accessibilityLabel(Text("Copy password", bundle: .module))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(copiedPassword ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                .disabled(text.wrappedValue.isEmpty)
+            }
         }
+    }
+
+    /// Puts the password on the clipboard so it can go into a password manager.
+    private func copy(_ value: String) {
+        guard !value.isEmpty else { return }
+        #if canImport(UIKit)
+            UIPasteboard.general.string = value
+        #else
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+        #endif
+        copiedPassword = true
     }
 
     private var working: some View {

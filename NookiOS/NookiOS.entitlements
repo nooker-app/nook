@@ -4,13 +4,27 @@
 <dict>
 	<!-- Claims the domains Nook Plus issues handles under, which is what lets
 	     the system offer to save a newly created account password and fill it
-	     back in later. Without this the system refuses outright: there is no
+	     back in later. Without it the system refuses outright: there is no
 	     partial mode, and nothing is saved under any name.
 
+	     Applied to the Release configuration only. Associated Domains is not
+	     available to a personal (free) development team at all — Xcode refuses
+	     to create a profile with it — so carrying this in Debug would block
+	     everyday on-device development for no gain. Release is where the
+	     capability can exist, once the project is signed by a team enrolled in
+	     the Apple Developer Program.
+
+	     Consequences worth knowing while that is still true: a Debug build gets
+	     no save offer and no strong-password suggestion, so the password has to
+	     be kept by the user; the setup screen says so, and offers to copy it.
+
 	     Both deployments are listed because the developer section can point a
-	     build at staging, and a credential saved for one must not be offered
-	     for the other. `?mode=developer` on staging bypasses Apple's CDN so a
-	     change to the association file takes effect immediately. -->
+	     build at staging, and a credential saved for one must not be offered for
+	     the other. `?mode=developer` makes the device fetch the association file
+	     directly instead of through Apple's CDN, which also requires
+	     Settings > Developer > Associated Domains Development on the device. It
+	     is therefore inert in a Release build and must be removed before any
+	     public release. -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:nooker.app</string>
