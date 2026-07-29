@@ -1120,13 +1120,15 @@ private extension View {
 /// reader who never opens this screen gets the same app they always had.
 private struct PlusSettingsScreen: View {
     var body: some View {
-        List {
-            PlusSettingsContent()
+        // The rows come from NookKit; the wrapper owns the store and the setup
+        // sheets, so they hang off the List rather than off a row inside it.
+        PlusSettingsScreenContent { rows in
+            List { rows }
+                // Same chrome as every sibling screen. This was the one
+                // destination without it, so the whole Plus area rendered on the
+                // cool system background and looked like a different app.
+                .warmListBackground()
         }
-        // Same chrome as every sibling screen. This was the one destination
-        // without it, so the whole Plus area rendered on the cool system
-        // background and looked like a different app.
-        .warmListBackground()
         .navigationTitle(Text("Publishing"))
         .navigationBarTitleDisplayMode(.inline)
     }

@@ -1,18 +1,26 @@
 import NookPlusProtocol
 import SwiftUI
 
-/// Nook Plus settings, shared by macOS and iOS.
+/// The Nook Plus settings rows, shared by macOS and iOS.
+///
+/// Rows only: presentation state, sheets, and the store live on
+/// ``PlusSettingsScreenContent``, because a sheet attached inside a `List` row
+/// is dismissed when the row is re-laid-out.
 ///
 /// Someone who has never published anything should be able to read this screen
 /// top to bottom and know what to do. Setup runs as a guided flow rather than a
 /// form, and anything only a developer needs — which server to talk to — is
 /// behind a disclosure that says so.
 public struct PlusSettingsContent: View {
-    @State private var store = PlusStore()
-    @State private var showingSetup = false
-    @State private var showingSignIn = false
+    @Bindable var store: PlusStore
+    let onSetUp: () -> Void
+    let onSignIn: () -> Void
 
-    public init() {}
+    init(store: PlusStore, onSetUp: @escaping () -> Void, onSignIn: @escaping () -> Void) {
+        self.store = store
+        self.onSetUp = onSetUp
+        self.onSignIn = onSignIn
+    }
 
     public var body: some View {
         Group {
@@ -31,30 +39,7 @@ public struct PlusSettingsContent: View {
         .tint(PlusTheme.accent)
         .task {
             if store.isSignedIn { await store.loadContent() }
-            openSetupIfInvited()
         }
-        .onChange(of: PlusInviteInbox.shared.pendingCode) { _, code in
-            if code != nil { openSetupIfInvited() }
-        }
-        // The store outlives both sheets, so a failure left by one described
-        // something the user was no longer doing when the other opened.
-        .sheet(isPresented: $showingSetup, onDismiss: store.clearFailure) {
-            PlusOnboardingView(store: store) { showingSetup = false }
-                .task { store.clearFailure() }
-        }
-        .sheet(isPresented: $showingSignIn, onDismiss: store.clearFailure) {
-            PlusSignInView(store: store) { showingSignIn = false }
-                .task { store.clearFailure() }
-        }
-    }
-
-    /// Opens setup when an invitation link is waiting.
-    ///
-    /// Ignored for someone already signed in: a forwarded link must not offer to
-    /// replace an account that already exists.
-    private func openSetupIfInvited() {
-        guard !store.isSignedIn, PlusInviteInbox.shared.pendingCode != nil else { return }
-        showingSetup = true
     }
 
     // MARK: - Not set up
@@ -79,12 +64,12 @@ public struct PlusSettingsContent: View {
 
             Section {
                 Button {
-                    showingSetup = true
+                    onSetUp()
                 } label: {
                     Label { Text("Set Up Publishing", bundle: .module) } icon: { Image(systemName: "sparkles") }
                 }
                 Button {
-                    showingSignIn = true
+                    onSignIn()
                 } label: {
                     Label { Text("I Already Have an Account", bundle: .module) } icon: { Image(systemName: "person.crop.circle") }
                 }

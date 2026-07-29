@@ -2990,7 +2990,7 @@ struct ReaderSettingsView: View {
         case .feeds: settingsForm { FeedsSettingsSections() }
         case .organize: settingsForm { ArticleRulesSettingsSections(); FiltersSettingsSections() }
         case .offline: settingsForm { OfflineSettingsSections() }
-        case .plus: settingsForm { PlusSettingsContent() }
+        case .plus: PlusSettingsScreenContent { rows in settingsForm { rows } }
         case .experimental: settingsForm { ExperimentalSettingsSections() }
         case .about: AboutSettingsPane()
         }

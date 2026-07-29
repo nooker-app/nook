@@ -119,10 +119,15 @@ public final class PlusStore {
 
     /// Clears the last failure, for a screen where the user has changed
     /// something and the old message no longer describes anything.
+    ///
+    /// Writes nothing when there is nothing to clear. Observation fires on write
+    /// rather than on change, so an unconditional assignment invalidates every
+    /// observer — which, called while a sheet was being presented, dismissed it
+    /// on the spot.
     public func clearFailure() {
-        failure = nil
-        signupNeedsSignIn = false
-        failureField = nil
+        if failure != nil { failure = nil }
+        if signupNeedsSignIn { signupNeedsSignIn = false }
+        if failureField != nil { failureField = nil }
     }
 
     /// Reloads the client pair after the environment changes.
