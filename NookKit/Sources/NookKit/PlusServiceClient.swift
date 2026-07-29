@@ -35,6 +35,10 @@ struct PlusAuthenticationMiddleware: ClientMiddleware {
 public enum PlusServiceError: Error, Sendable {
     /// Not signed in, or the session is no longer valid. Refresh, then retry.
     case sessionInvalid
+    /// The service named a cause the user has to act on. Carried separately
+    /// from `problem` because this is the case a screen can phrase precisely
+    /// and point at the right field, rather than relaying English prose.
+    case rejected(ProblemReason, status: Int)
     /// The record changed since it was read. Re-read, reconcile, then retry —
     /// never resend without the condition, which would discard the other
     /// change.
@@ -257,6 +261,12 @@ extension PlusServiceError {
     /// Maps a problem document to the case a caller should act on.
     public static func from(_ problem: Components.Schemas.Problem) -> PlusServiceError {
         let type = ProblemType(unchecked: problem._type)
+        // A named cause wins over the type: it is the more specific of the two,
+        // and an unrecognised value reads as absent so an older build against a
+        // newer service still falls back sensibly.
+        if let reason = ProblemReason(unchecked: problem.reason?.rawValue) {
+            return .rejected(reason, status: problem.status)
+        }
         switch type {
         case .invalidSession:
             return .sessionInvalid

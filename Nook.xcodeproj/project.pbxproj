@@ -919,6 +919,7 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				ONLY_ACTIVE_ARCH = YES;
+				CODE_SIGN_ENTITLEMENTS = NookiOS/NookiOS.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tim.nook.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -955,6 +956,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
+				CODE_SIGN_ENTITLEMENTS = NookiOS/NookiOS.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tim.nook.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

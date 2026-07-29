@@ -50,6 +50,35 @@ public struct PlusOnboardingView: View {
             }
         }
 
+        /// The illustration for this step. The app's own first-run tour leads
+        /// each page with a wordless image, and a form of bare fields is exactly
+        /// what made the earlier version of this screen unreadable to someone
+        /// who had never heard of a handle.
+        var symbol: String {
+            switch self {
+            case .intro: "sparkles"
+            case .invitation: "ticket"
+            case .address: "at"
+            case .credentials: "lock.shield"
+            case .working: "gearshape.2"
+            case .signIn: "person.crop.circle"
+            case .done: "checkmark.seal.fill"
+            }
+        }
+
+        /// One line saying what this step is for, read before the fields.
+        var summary: LocalizedStringKey {
+            switch self {
+            case .intro: "A quick tour of what publishing with Nook means."
+            case .invitation: "Publishing is invitation-only for now."
+            case .address: "Choose the name people will find you by."
+            case .credentials: "Set the password that protects your writing."
+            case .working: "Creating your account. This takes a few seconds."
+            case .signIn: "This account already exists, so just sign in."
+            case .done: "Everything is ready."
+            }
+        }
+
         var progressLabel: String {
             switch self {
             case .intro: String(localized: "Welcome", bundle: .module)
@@ -116,6 +145,7 @@ public struct PlusOnboardingView: View {
         private var iOSBody: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    hero
                     content
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -124,7 +154,8 @@ public struct PlusOnboardingView: View {
                 .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(PlusTheme.canvas.ignoresSafeArea())
+            .tint(PlusTheme.accent)
             .navigationTitle(Text("Set up publishing", bundle: .module))
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .top, spacing: 0) { stepIndicator }
@@ -157,6 +188,23 @@ public struct PlusOnboardingView: View {
     }
 
     #if os(iOS)
+        /// The step's symbol and its one-line purpose, sitting above the fields.
+        private var hero: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: step.symbol)
+                    .font(.system(size: 40, weight: .regular))
+                    .foregroundStyle(PlusTheme.accent)
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(height: 48)
+                    .accessibilityHidden(true)
+
+                Text(step.summary, bundle: .module)
+                    .font(.title3.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
         /// Named position rather than a bare bar: "step 2 of 4" tells the user
         /// how much is left, which a progress bar alone does not.
         private var stepIndicator: some View {
@@ -172,18 +220,26 @@ public struct PlusOnboardingView: View {
                             .monospacedDigit()
                     }
                 }
+                // Never regresses, so it reads as progress rather than as state.
                 ProgressView(value: step.completedFraction)
                     .progressViewStyle(.linear)
+                    .tint(PlusTheme.accent)
+                    .animation(.smooth(duration: 0.35), value: step.completedFraction)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
-            .background(.bar)
+            .background(PlusTheme.canvas)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(PlusTheme.hairline).frame(height: 0.5)
+            }
         }
 
         private var bottomBar: some View {
             VStack(spacing: 10) {
                 primaryButton
                     .buttonStyle(.borderedProminent)
+                    .tint(PlusTheme.accent)
+                    .fontWeight(.semibold)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
                 if step != .intro && step != .working && step != .done && step != .signIn {
@@ -194,7 +250,10 @@ public struct PlusOnboardingView: View {
             .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 8)
-            .background(.bar)
+            .background(PlusTheme.canvas)
+            .overlay(alignment: .top) {
+                Rectangle().fill(PlusTheme.hairline).frame(height: 0.5)
+            }
         }
     #endif
 
@@ -338,6 +397,12 @@ public struct PlusOnboardingView: View {
 
     private var credentials: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // The handle appears here, not only on the previous step, because it
+            // is the username half of the credential. A password manager saves
+            // a pair, and without a username field alongside the password
+            // fields there is nothing for it to file the password under.
+            handleRow
+
             explain(
                 "Email",
                 "Used only to recover your account if you forget your password. It is never shown on your site."
@@ -373,6 +438,36 @@ public struct PlusOnboardingView: View {
         }
     }
 
+    /// The handle, shown as a real username field rather than static text.
+    ///
+    /// A password manager saves a pair, so without a `.username` field beside
+    /// the password fields there is nothing to file the password under. It is
+    /// not editable — the name was chosen and checked on the previous step — but
+    /// it has to be a laid-out text field for the system to see it at all.
+    private var handleRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("You will sign in as", bundle: .module)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            let field = TextField(text: .constant(store.fullHandle(for: label))) {
+                Text("Handle", bundle: .module)
+            }
+            .textContentType(.username)
+            .font(.callout.monospaced())
+            .disabled(true)
+
+            #if os(iOS)
+                field
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, 12)
+                    .background(PlusTheme.card, in: .rect(cornerRadius: 10))
+            #else
+                field.textFieldStyle(.roundedBorder)
+            #endif
+        }
+    }
+
     /// A password row that can be read.
     ///
     /// Two reasons it is not a bare `SecureField`. A generated password is
@@ -383,12 +478,19 @@ public struct PlusOnboardingView: View {
     /// showing real glyphs uses the label colour and does not have that problem.
     @ViewBuilder
     private func passwordField(text: Binding<String>, label: Text) -> some View {
-        let field = Group {
-            if passwordVisible {
-                TextField(text: text) { label }
-            } else {
-                SecureField(text: text) { label }
-            }
+        // Both fields stay in the hierarchy and only their visibility changes.
+        // Swapping one for the other changes view identity, which cancels an
+        // in-flight AutoFill session — and offering to generate and save the
+        // password is the whole point of typing these fields correctly.
+        let field = ZStack {
+            SecureField(text: text) { label }
+                .opacity(passwordVisible ? 0 : 1)
+                .allowsHitTesting(!passwordVisible)
+                .accessibilityHidden(passwordVisible)
+            TextField(text: text) { label }
+                .opacity(passwordVisible ? 1 : 0)
+                .allowsHitTesting(passwordVisible)
+                .accessibilityHidden(!passwordVisible)
         }
         .textContentType(.newPassword)
         .foregroundStyle(.primary)
@@ -402,7 +504,7 @@ public struct PlusOnboardingView: View {
                 field
                     .padding(.vertical, 11)
                     .padding(.horizontal, 12)
-                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 10))
+                    .background(PlusTheme.card, in: .rect(cornerRadius: 10))
             #else
                 field.textFieldStyle(.roundedBorder)
             #endif
@@ -466,6 +568,18 @@ public struct PlusOnboardingView: View {
             Label { Text("You can publish now.", bundle: .module) } icon: { Image(systemName: "checkmark.circle.fill") }
                 .foregroundStyle(.green)
                 .font(.headline)
+
+            // Setup finishing is not the goal; a first post is. Without saying
+            // what happens next, the flow ends on a screen that congratulates
+            // the user for nothing they can see yet.
+            VStack(alignment: .leading, spacing: 8) {
+                nextStep(1, "Write a post", "Give it a title, a short web address, and your text.")
+                nextStep(2, "Publish it", "It is written to your own repository first, then to your site.")
+                nextStep(3, "Share the link", "Your site has an RSS feed, so anyone can follow it in any reader.")
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground)
 
             if let session = store.session {
                 LabeledContent { Text(verbatim: session.handle) } label: { Text("Handle", bundle: .module) }
@@ -624,6 +738,33 @@ public struct PlusOnboardingView: View {
         }
     }
 
+    /// A numbered next step for the finish screen.
+    @ViewBuilder
+    private func nextStep(_ number: Int, _ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(number, format: .number)
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(PlusTheme.accent.opacity(0.15)))
+                .foregroundStyle(PlusTheme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title, bundle: .module).font(.callout.weight(.medium))
+                Text(detail, bundle: .module).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cardBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        #if os(iOS)
+            shape.fill(PlusTheme.card)
+        #else
+            shape.fill(.quaternary.opacity(0.25))
+        #endif
+    }
+
     @ViewBuilder
     private func explain(_ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
         let block = VStack(alignment: .leading, spacing: 3) {
@@ -634,7 +775,7 @@ public struct PlusOnboardingView: View {
             block
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
+                .background(cardBackground)
         #else
             block
         #endif

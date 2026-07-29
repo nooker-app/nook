@@ -1,5 +1,6 @@
 import Foundation
 import NookPlusProtocol
+import NookPlusServiceAPI
 import Observation
 
 /// Where the Plus service lives. Held in `UserDefaults` so a build can be
@@ -99,17 +100,29 @@ public final class PlusStore {
 
     public init(environment: PlusEnvironment = .current) {
         self.environment = environment
-        self.pds = PlusPDSClient(host: environment.pdsHost)
+        self.pds = PlusPDSClient(host: environment.pdsHost, issuedDomains: [environment.handleDomain])
         self.service = PlusServiceClient(baseURL: environment.apiBaseURL)
         self.session = PlusCredential.current
     }
 
     public var isSignedIn: Bool { session != nil }
 
+    /// The deployment in use. Read by screens that need to show what a name will
+    /// become; they must not read `PlusEnvironment.current` themselves, or a
+    /// developer switch would leave the two disagreeing.
+    public var currentEnvironment: PlusEnvironment { environment }
+
+    /// Clears the last failure, for a screen where the user has changed
+    /// something and the old message no longer describes anything.
+    public func clearFailure() {
+        failure = nil
+        signupNeedsSignIn = false
+    }
+
     /// Reloads the client pair after the environment changes.
     public func use(_ environment: PlusEnvironment) {
         self.environment = environment
-        self.pds = PlusPDSClient(host: environment.pdsHost)
+        self.pds = PlusPDSClient(host: environment.pdsHost, issuedDomains: [environment.handleDomain])
         self.service = PlusServiceClient(baseURL: environment.apiBaseURL)
     }
 
@@ -198,16 +211,11 @@ public final class PlusStore {
             handleResolutionPending = !(result.handleResolves ?? true)
             signupKey = nil
             await loadContent()
-        } catch PlusServiceError.sessionInvalid {
-            // On a signup there is no session to have expired. The service uses
-            // this to say the account exists but this password does not open
-            // it, which happens whenever a retry carries a password different
-            // from the one that created the account.
+        } catch PlusServiceError.rejected(.accountPasswordMismatch, _) {
+            // Not a failure to fix by retrying: the account exists and only the
+            // password is wrong, so the flow moves to signing in.
             signupNeedsSignIn = true
-            failure = String(
-                localized: "An account with this name already exists. Sign in with the password you chose when you created it.",
-                bundle: .module
-            )
+            failure = PlusStore.message(for: .accountPasswordMismatch)
         } catch {
             failure = message(for: error)
         }
@@ -298,6 +306,36 @@ public final class PlusStore {
         isWorking = false
     }
 
+    /// The user-facing sentence for a named cause.
+    ///
+    /// Written here rather than taken from the response so it is translated and
+    /// says what to do next. The service's own `detail` is English prose meant
+    /// for a log.
+    static func message(for reason: ProblemReason) -> String {
+        switch reason {
+        case .emailAlreadyUsed:
+            String(localized: "Another account already uses this email address. Use a different one.", bundle: .module)
+        case .emailInvalid:
+            String(localized: "That email address was not accepted. Check it for typos.", bundle: .module)
+        case .passwordTooWeak:
+            String(localized: "That password is too weak. Use a longer one.", bundle: .module)
+        case .handleTaken:
+            String(localized: "That name is already taken. Choose another.", bundle: .module)
+        case .handleInvalid:
+            String(localized: "That name cannot be used. Use lowercase letters, numbers, and hyphens.", bundle: .module)
+        case .invitationNotFound:
+            String(localized: "That invitation was not recognised.", bundle: .module)
+        case .invitationExpired:
+            String(localized: "That invitation has expired. Ask for a new one.", bundle: .module)
+        case .invitationExhausted:
+            String(localized: "That invitation has already been used up. Ask for a new one.", bundle: .module)
+        case .accountPasswordMismatch:
+            String(localized: "An account with this name already exists. Sign in with the password you chose when you created it.", bundle: .module)
+        case .repositoryHostRejected:
+            String(localized: "The server that stores your posts refused these details. Try a different email address or password.", bundle: .module)
+        }
+    }
+
     private func message(for error: any Error) -> String {
         if let plus = error as? PlusServiceError {
             switch plus {
@@ -311,6 +349,8 @@ public final class PlusStore {
                 return String(localized: "This article changed elsewhere. Reload before saving again.", bundle: .module)
             case .problem(_, _, let detail):
                 return detail ?? String(localized: "The service could not complete that request.", bundle: .module)
+            case .rejected(let reason, _):
+                return PlusStore.message(for: reason)
             case .transport:
                 return String(localized: "Could not reach the service.", bundle: .module)
             }

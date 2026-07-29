@@ -8,10 +8,14 @@ import NookPlusProtocol
 /// mutations take the service fast path.
 public struct PlusPDSClient: Sendable {
     private let host: String
+    /// Handle domains this host issues accounts under. Used only to tell a
+    /// foreign handle from a mistyped password.
+    private let issuedDomains: [String]
     private let session: URLSession
 
-    public init(host: String, session: URLSession = .shared) {
+    public init(host: String, issuedDomains: [String] = [], session: URLSession = .shared) {
         self.host = host
+        self.issuedDomains = issuedDomains.map { $0.lowercased() }
         self.session = session
     }
 
@@ -19,6 +23,11 @@ public struct PlusPDSClient: Sendable {
     ///
     /// The password goes to the PDS and is not retained: the returned session
     /// is what gets stored.
+    ///
+    /// The host is fixed by configuration, not derived from the identifier, so a
+    /// handle belonging to some other server cannot work here. That is reported
+    /// as such rather than as a wrong password — the earlier wording sent people
+    /// to check a password that was never the problem.
     public func signIn(identifier: String, password: String) async throws -> PlusSession {
         struct Response: Decodable {
             let did: String
@@ -26,10 +35,21 @@ public struct PlusPDSClient: Sendable {
             let accessJwt: String
             let refreshJwt: String
         }
-        let response: Response = try await post(
-            "com.atproto.server.createSession",
-            body: ["identifier": identifier, "password": password]
-        )
+        let response: Response
+        do {
+            response = try await post(
+                "com.atproto.server.createSession",
+                body: ["identifier": identifier, "password": password]
+            )
+        } catch PlusPDSError.upstream(let status, let kind) where isRejected(status: status, kind: kind) {
+            // A handle this host does not have an account for looks exactly like
+            // a wrong password from here, so the distinguishable case — a handle
+            // that plainly belongs elsewhere — is named.
+            if belongsElsewhere(identifier) {
+                throw PlusPDSError.foreignHandle(host: host)
+            }
+            throw PlusPDSError.upstream(status: status, kind: kind)
+        }
         return PlusSession(
             did: response.did,
             handle: response.handle,
@@ -110,6 +130,26 @@ public struct PlusPDSClient: Sendable {
         return try JSONDecoder().decode(Response.self, from: data)
     }
 
+    /// Whether the host rejected the credentials as opposed to failing.
+    private func isRejected(status: Int, kind: String?) -> Bool {
+        status == 401 || kind == "AuthenticationRequired" || kind == "InvalidPassword"
+    }
+
+    /// Whether an identifier is a handle that clearly belongs to another server.
+    ///
+    /// Deliberately narrow: it only claims foreignness for a handle whose domain
+    /// this host could not have issued. A bare name, a DID, or a handle under
+    /// this host's own domain stays a credentials problem, because that is what
+    /// it most likely is.
+    private func belongsElsewhere(_ identifier: String) -> Bool {
+        guard !identifier.hasPrefix("did:"), identifier.contains(".") else { return false }
+        let lowered = identifier.lowercased()
+        for domain in issuedDomains where lowered.hasSuffix("." + domain) {
+            return false
+        }
+        return true
+    }
+
     private func check(_ response: URLResponse, _ data: Data) throws {
         guard let http = response as? HTTPURLResponse else { return }
         guard (200..<300).contains(http.statusCode) else {
@@ -127,12 +167,19 @@ public struct PlusPDSClient: Sendable {
 /// Failures reaching a PDS.
 public enum PlusPDSError: Error, LocalizedError, Sendable {
     case badRequest
+    /// The handle belongs to a server other than the one Nook talks to.
+    case foreignHandle(host: String)
     case upstream(status: Int, kind: String?)
 
     public var errorDescription: String? {
         switch self {
         case .badRequest:
             return String(localized: "Could not build the request.", bundle: .module)
+        case .foreignHandle:
+            return String(
+                localized: "That handle belongs to a different server. Nook can only sign in to accounts on its own server.",
+                bundle: .module
+            )
         case .upstream(let status, let kind):
             if status == 401 || kind == "AuthenticationRequired" || kind == "InvalidPassword" {
                 return String(localized: "That handle and password did not match.", bundle: .module)

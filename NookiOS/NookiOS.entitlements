@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Claims the domains Nook Plus issues handles under, which is what lets
+	     the system offer to save a newly created account password and fill it
+	     back in later. Without this the system refuses outright: there is no
+	     partial mode, and nothing is saved under any name.
+
+	     Both deployments are listed because the developer section can point a
+	     build at staging, and a credential saved for one must not be offered
+	     for the other. `?mode=developer` on staging bypasses Apple's CDN so a
+	     change to the association file takes effect immediately. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:nooker.app</string>
+		<string>webcredentials:staging.nooker.app?mode=developer</string>
+	</array>
+</dict>
+</plist>

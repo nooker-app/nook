@@ -23,6 +23,12 @@ public struct PlusSettingsContent: View {
             }
             developerSection
         }
+        // The host clears row backgrounds per Section for its own screens, but
+        // it cannot reach Sections this package creates. Applied to the
+        // container so every row inside inherits it, leaving the warm page
+        // colour visible instead of grey cards.
+        .listRowBackground(Color.clear)
+        .tint(PlusTheme.accent)
         .task {
             if store.isSignedIn { await store.loadContent() }
             openSetupIfInvited()
@@ -256,62 +262,5 @@ public struct PlusSettingsContent: View {
         } footer: {
             Text("Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out.", bundle: .module)
         }
-    }
-}
-
-/// Signing in to an account that already exists.
-struct PlusSignInView: View {
-    @Bindable var store: PlusStore
-    let onFinished: () -> Void
-
-    @State private var handle = ""
-    @State private var password = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Sign in", bundle: .module).font(.title2.weight(.semibold))
-                Text("Use the handle and password you chose when you set up publishing.", bundle: .module)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                TextField(text: $handle, prompt: Text(verbatim: "yourname.\(PlusEnvironment.current.handleDomain)")) { Text("Handle", bundle: .module) }
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                    #endif
-                SecureField(text: $password) { Text("Password", bundle: .module) }
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            if let failure = store.failure {
-                Label(failure, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-                    .font(.callout)
-            }
-
-            Spacer(minLength: 0)
-
-            HStack {
-                Button { onFinished() } label: { Text("Cancel", bundle: .module) }
-                Spacer()
-                Button {
-                    Task {
-                        await store.signIn(handle: handle, password: password)
-                        password = ""
-                        if store.isSignedIn { onFinished() }
-                    }
-                } label: {
-                    Text("Sign In", bundle: .module)
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(handle.isEmpty || password.isEmpty || store.isWorking)
-            }
-        }
-        .padding(24)
-        .frame(minWidth: 360, minHeight: 280)
     }
 }

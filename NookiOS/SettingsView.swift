@@ -1123,7 +1123,11 @@ private struct PlusSettingsScreen: View {
         List {
             PlusSettingsContent()
         }
+        // Same chrome as every sibling screen. This was the one destination
+        // without it, so the whole Plus area rendered on the cool system
+        // background and looked like a different app.
+        .warmListBackground()
         .navigationTitle(Text("Publishing"))
-        .warmRows()
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
