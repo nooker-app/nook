@@ -270,6 +270,8 @@ struct RootView: View {
     ///   managed Saved Links feed.
     private func handleIncomingURL(_ url: URL) {
         guard url.scheme == "nook" else { return }
+        // An invitation link carries a code for Plus setup.
+        if PlusInviteInbox.shared.accept(url) { return }
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let shared = components.queryItems?.first(where: { $0.name == "url" })?.value,
               !shared.isEmpty else { return }

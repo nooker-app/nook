@@ -37,6 +37,9 @@ public struct PlusOnboardingView: View {
     }
 
     @State private var step: Step = .intro
+    /// True when the code came from a link, which changes what the invitation
+    /// step says if it has to be shown after all.
+    @State private var arrivedByLink = false
     @State private var invitationCode = ""
     @State private var invitationChecked = false
     @State private var label = ""
@@ -64,6 +67,22 @@ public struct PlusOnboardingView: View {
         }
         .padding(24)
         .frame(minWidth: 380, minHeight: 460)
+        .task { await useInviteLinkIfPresent() }
+    }
+
+    /// Consumes a code that arrived by link, checks it, and moves straight to
+    /// choosing a name.
+    ///
+    /// The check still happens: the link saves typing, not verification. An
+    /// expired or spent code has to fail here rather than three steps later,
+    /// after the user has picked a name and a password.
+    private func useInviteLinkIfPresent() async {
+        guard invitationCode.isEmpty, let code = PlusInviteInbox.shared.take() else { return }
+        invitationCode = code
+        arrivedByLink = true
+        await store.checkInvitation(code)
+        invitationChecked = true
+        step = store.invitationAccepted ? .address : .invitation
     }
 
     private var header: some View {
@@ -121,7 +140,17 @@ public struct PlusOnboardingView: View {
                     .textInputAutocapitalization(.characters)
                 #endif
 
-            if invitationChecked {
+            if arrivedByLink && !store.invitationAccepted {
+                Label {
+                    Text("The invitation in that link cannot be used. It may have been used already or expired.", bundle: .module)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                }
+                .foregroundStyle(.orange)
+                .font(.callout)
+            }
+
+            if invitationChecked && !arrivedByLink {
                 if store.invitationAccepted {
                     Label { Text("This code works.", bundle: .module) } icon: { Image(systemName: "checkmark.circle.fill") }
                         .foregroundStyle(.green)

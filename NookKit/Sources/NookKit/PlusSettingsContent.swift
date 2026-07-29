@@ -25,6 +25,10 @@ public struct PlusSettingsContent: View {
         }
         .task {
             if store.isSignedIn { await store.loadContent() }
+            openSetupIfInvited()
+        }
+        .onChange(of: PlusInviteInbox.shared.pendingCode) { _, code in
+            if code != nil { openSetupIfInvited() }
         }
         .sheet(isPresented: $showingSetup) {
             PlusOnboardingView(store: store) { showingSetup = false }
@@ -32,6 +36,15 @@ public struct PlusSettingsContent: View {
         .sheet(isPresented: $showingSignIn) {
             PlusSignInView(store: store) { showingSignIn = false }
         }
+    }
+
+    /// Opens setup when an invitation link is waiting.
+    ///
+    /// Ignored for someone already signed in: a forwarded link must not offer to
+    /// replace an account that already exists.
+    private func openSetupIfInvited() {
+        guard !store.isSignedIn, PlusInviteInbox.shared.pendingCode != nil else { return }
+        showingSetup = true
     }
 
     // MARK: - Not set up

@@ -229,6 +229,10 @@ struct ContentView: View {
             sidebarVisible = (newValue == .all)
         }
         .onOpenURL { url in
+            // An invitation link carries a code for Plus setup. Checked first
+            // because it is the only route that must not be mistaken for a
+            // widget deep link.
+            if PlusInviteInbox.shared.accept(url) { return }
             if let raw = WidgetShared.smartSourceRaw(from: url), let source = SmartSource(rawValue: raw) {
                 store.selectSmartSource(source)
             }
