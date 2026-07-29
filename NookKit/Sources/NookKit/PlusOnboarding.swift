@@ -388,7 +388,10 @@ public struct PlusOnboardingView: View {
                 #endif
                 .onChange(of: label) { _, _ in availability = .unknown }
 
-            if !label.isEmpty {
+            // Shown only for a name that could actually work. Previewing a
+            // handle and a site address for a name the service will reject is
+            // the strongest possible signal that it is fine.
+            if PlusHandleRules.isUsable(label) {
                 VStack(alignment: .leading, spacing: 6) {
                     LabeledContent {
                         Text(store.fullHandle(for: label))
@@ -410,9 +413,15 @@ public struct PlusOnboardingView: View {
 
             switch availability {
             case .unknown:
-                Text("Lowercase letters, numbers, and hyphens. At least three characters.", bundle: .module)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let problem = PlusHandleRules.problem(with: label), !label.isEmpty {
+                    Label { Text(verbatim: problem.message) } icon: { Image(systemName: "exclamationmark.triangle") }
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                } else {
+                    Text("Lowercase English letters, numbers, and hyphens. At least three characters.", bundle: .module)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             case .checking:
                 ProgressView().controlSize(.small)
             case .available:
@@ -735,7 +744,10 @@ public struct PlusOnboardingView: View {
                 }
             }
             .keyboardShortcut(.defaultAction)
-            .disabled(label.isEmpty || store.isWorking)
+            // A name the rules already reject cannot be submitted: the service
+            // would refuse it, and the round trip teaches the user nothing the
+            // message beside the field has not already said.
+            .disabled(!PlusHandleRules.isUsable(label) || store.isWorking)
         case .credentials:
             Button { Task { await createAccount() } } label: { Text("Create Account", bundle: .module) }
                 .keyboardShortcut(.defaultAction)
@@ -777,6 +789,7 @@ public struct PlusOnboardingView: View {
             step = .credentials
             return
         }
+        guard PlusHandleRules.isUsable(label) else { return }
         let checking = label
         availability = .checking
         let result = await store.checkHandle(label: checking)

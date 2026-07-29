@@ -268,6 +268,39 @@ public final class PlusStore {
         return "\(environment.publicBaseURL)/@\(slug)"
     }
 
+    /// Whether a reset code has been requested, so the UI can ask for it.
+    public private(set) var passwordResetRequested = false
+
+    /// Asks the repository host to email a reset code.
+    ///
+    /// Succeeds whether or not the address has an account: the host does not say,
+    /// and neither does this, because answering would let anyone test addresses.
+    public func requestPasswordReset(email: String) async {
+        await perform {
+            try await self.pds.requestPasswordReset(email: email)
+            self.passwordResetRequested = true
+        }
+    }
+
+    /// Sets a new password from the emailed code, then signs in with it.
+    ///
+    /// Signing in straight after is the point: the user came here locked out, and
+    /// a screen that says "password changed" and then asks them to log in again
+    /// has stopped one step short.
+    public func resetPassword(identifier: String, token: String, newPassword: String) async {
+        await perform {
+            try await self.pds.resetPassword(token: token, newPassword: newPassword)
+            self.passwordResetRequested = false
+            let session = try await self.pds.signIn(
+                identifier: identifier.trimmingCharacters(in: .whitespacesAndNewlines),
+                password: newPassword
+            )
+            _ = PlusCredential.store(session)
+            self.session = session
+            await self.loadContent()
+        }
+    }
+
     public func signIn(handle: String, password: String) async {
         await perform {
             let session = try await self.pds.signIn(

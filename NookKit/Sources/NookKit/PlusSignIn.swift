@@ -84,8 +84,39 @@ struct PlusSignInView: View {
     @State private var kind: PlusAccountKind = .nook
     @State private var name = ""
     @State private var password = ""
-    @State private var typingFullHandle = false
+    @State private var mode: Mode = .name
     @State private var fullHandle = ""
+    @State private var email = ""
+    @State private var resetToken = ""
+    @State private var newPassword = ""
+    @State private var resetting = false
+
+    /// How the account is being named.
+    ///
+    /// Email exists because it is the one thing a person always still has when
+    /// they have forgotten everything else — and the repository host accepts it
+    /// in place of a handle, so no lookup is needed to make it work.
+    enum Mode: Hashable, CaseIterable {
+        case name
+        case email
+        case fullHandle
+
+        var title: LocalizedStringKey {
+            switch self {
+            case .name: "Name"
+            case .email: "Email"
+            case .fullHandle: "Full handle"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .name: "at"
+            case .email: "envelope"
+            case .fullHandle: "text.cursor"
+            }
+        }
+    }
 
     var body: some View {
         content
@@ -109,7 +140,7 @@ struct PlusSignInView: View {
                         Button { onFinished() } label: { Text("Cancel", bundle: .module) }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { Task { await signIn() } } label: { Text("Sign In", bundle: .module) }
+                        Button { Task { await submit() } } label: { submitLabel }
                             .disabled(!canSubmit)
                     }
                 }
@@ -121,7 +152,7 @@ struct PlusSignInView: View {
                 HStack {
                     Button { onFinished() } label: { Text("Cancel", bundle: .module) }
                     Spacer()
-                    Button { Task { await signIn() } } label: { Text("Sign In", bundle: .module) }
+                    Button { Task { await submit() } } label: { submitLabel }
                         .keyboardShortcut(.defaultAction)
                         .disabled(!canSubmit)
                 }
@@ -133,13 +164,15 @@ struct PlusSignInView: View {
 
     @ViewBuilder
     private var form: some View {
-        if typingFullHandle {
-            fullHandleForm
+        if resetting {
+            resetForm
         } else {
             kindChooser
             if kind.isSupported {
-                nameField
+                modePicker
+                identifierField
                 passwordField
+                forgotButton
             } else {
                 unsupportedNote
             }
@@ -150,16 +183,138 @@ struct PlusSignInView: View {
                 .foregroundStyle(.red)
                 .font(.callout)
         }
+    }
 
+    /// Picking how to be identified, rather than making the user work out which
+    /// of three shapes the single field wants.
+    private var modePicker: some View {
+        Picker(selection: $mode) {
+            ForEach(Mode.allCases, id: \.self) { candidate in
+                Label {
+                    Text(candidate.title, bundle: .module)
+                } icon: {
+                    Image(systemName: candidate.symbol)
+                }
+                .tag(candidate)
+            }
+        } label: {
+            Text("Sign in with", bundle: .module)
+        }
+        .pickerStyle(.segmented)
+        .onChange(of: mode) { _, _ in store.clearFailure() }
+    }
+
+    @ViewBuilder
+    private var identifierField: some View {
+        switch mode {
+        case .name: nameField
+        case .email: emailField
+        case .fullHandle: fullHandleField
+        }
+    }
+
+    private var emailField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField(text: $email, prompt: Text(verbatim: "you@example.com")) {
+                Text("Email", bundle: .module)
+            }
+            .textContentType(.username)
+            .autocorrectionDisabled()
+            #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.emailAddress)
+            #endif
+            .fieldChrome()
+
+            Text("The address you gave when you set up publishing. Use this if you cannot remember your name.", bundle: .module)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var fullHandleField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField(text: $fullHandle, prompt: Text(verbatim: "yourname.\(store.currentEnvironment.handleDomain)")) {
+                Text("Handle", bundle: .module)
+            }
+            .textContentType(.username)
+            .autocorrectionDisabled()
+            #if os(iOS)
+                .textInputAutocapitalization(.never)
+            #endif
+            .fieldChrome()
+
+            Text("Only accounts on Nook's own server can sign in at the moment.", bundle: .module)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var forgotButton: some View {
         Button {
-            typingFullHandle.toggle()
+            resetting = true
             store.clearFailure()
         } label: {
-            if typingFullHandle {
-                Text("Choose an account type instead", bundle: .module)
-            } else {
-                Text("I know my full handle", bundle: .module)
+            Text("Forgot your password?", bundle: .module)
+        }
+        .font(.footnote)
+    }
+
+    /// Requesting a code, then using it. One screen rather than two, because the
+    /// user has to leave for their mail app in the middle either way, and coming
+    /// back to the same screen is less to explain.
+    @ViewBuilder
+    private var resetForm: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Reset your password", bundle: .module)
+                .font(.subheadline.weight(.semibold))
+            Text("Your posts live on a server that holds your password, so the reset code comes from there by email. Nook never sees it.", bundle: .module)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        TextField(text: $email, prompt: Text(verbatim: "you@example.com")) {
+            Text("Email", bundle: .module)
+        }
+        .textContentType(.username)
+        .autocorrectionDisabled()
+        #if os(iOS)
+            .textInputAutocapitalization(.never)
+            .keyboardType(.emailAddress)
+        #endif
+        .fieldChrome()
+
+        if store.passwordResetRequested {
+            Text("Check your email for a code, then set a new password here.", bundle: .module)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField(text: $resetToken, prompt: Text(verbatim: "XXXXX-XXXXX")) {
+                Text("Reset code", bundle: .module)
             }
+            .autocorrectionDisabled()
+            .font(.callout.monospaced())
+            #if os(iOS)
+                .textInputAutocapitalization(.characters)
+            #endif
+            .fieldChrome()
+
+            SecureField(text: $newPassword) { Text("New password", bundle: .module) }
+                .textContentType(.newPassword)
+                .fieldChrome()
+
+            if !newPassword.isEmpty && newPassword.count < 8 {
+                Text("At least 8 characters.", bundle: .module)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+
+        Button {
+            resetting = false
+            store.clearFailure()
+        } label: {
+            Text("Back to signing in", bundle: .module)
         }
         .font(.footnote)
     }
@@ -256,28 +411,6 @@ struct PlusSignInView: View {
             .fieldChrome()
     }
 
-    private var fullHandleForm: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Your full handle", bundle: .module)
-                .font(.subheadline.weight(.semibold))
-            TextField(text: $fullHandle, prompt: Text(verbatim: "yourname.\(store.currentEnvironment.handleDomain)")) {
-                Text("Handle", bundle: .module)
-            }
-            .textContentType(.username)
-            .autocorrectionDisabled()
-            #if os(iOS)
-                .textInputAutocapitalization(.never)
-            #endif
-            .fieldChrome()
-
-            passwordField
-
-            Text("Only accounts on Nook's own server can sign in at the moment.", bundle: .module)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     private var unsupportedNote: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(kind.detail, bundle: .module)
@@ -291,27 +424,78 @@ struct PlusSignInView: View {
         .background(rowBackground(selected: false))
     }
 
-    private var submittedHandle: String {
-        if typingFullHandle {
+    /// What gets sent as the identifier.
+    ///
+    /// The repository host accepts a handle, a DID, or an email address here, so
+    /// picking email needs no lookup and no extra endpoint — the address is the
+    /// identifier.
+    private var identifier: String {
+        switch mode {
+        case .email:
+            return email.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .fullHandle:
             return fullHandle.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .name:
+            guard let suffix = kind.handleSuffix(store.currentEnvironment) else { return "" }
+            let clean = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return clean.isEmpty ? "" : "\(clean).\(suffix)"
         }
-        guard let suffix = kind.handleSuffix(store.currentEnvironment) else { return "" }
-        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return clean.isEmpty ? "" : "\(clean).\(suffix)"
     }
 
     private var canSubmit: Bool {
-        !submittedHandle.isEmpty && !password.isEmpty && !store.isWorking
-            && (typingFullHandle || kind.isSupported)
+        guard !store.isWorking else { return false }
+        if resetting {
+            guard !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            if !store.passwordResetRequested { return true }
+            return !resetToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && newPassword.count >= 8
+        }
+        return !identifier.isEmpty && !password.isEmpty && kind.isSupported
+    }
+
+    /// What the primary button does, which depends on where the user is.
+    @ViewBuilder
+    private var submitLabel: some View {
+        if !resetting {
+            Text("Sign In", bundle: .module)
+        } else if store.passwordResetRequested {
+            Text("Set New Password", bundle: .module)
+        } else {
+            Text("Email Me a Code", bundle: .module)
+        }
+    }
+
+    private func submit() async {
+        if resetting {
+            await reset()
+        } else {
+            await signIn()
+        }
     }
 
     private func signIn() async {
-        await store.signIn(handle: submittedHandle, password: password)
+        await store.signIn(handle: identifier, password: password)
         // Cleared only on success. A network failure or a handle belonging to
         // another server is not a reason to make the user type it again.
         if store.isSignedIn {
             password = ""
             onFinished()
+        }
+    }
+
+    private func reset() async {
+        if store.passwordResetRequested {
+            // The email is the identifier, so the new password can be used to
+            // sign in immediately rather than sending the user round again.
+            await store.resetPassword(
+                identifier: email, token: resetToken, newPassword: newPassword)
+            if store.isSignedIn {
+                newPassword = ""
+                resetToken = ""
+                onFinished()
+            }
+        } else {
+            await store.requestPasswordReset(email: email)
         }
     }
 }

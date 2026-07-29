@@ -696,6 +696,28 @@
         }
       }
     },
+    "At least 3 characters." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3文字以上にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3자 이상이어야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少 3 个字符。"
+          }
+        }
+      }
+    },
     "At least 8 characters." : {
       "localizations" : {
         "en" : {
@@ -720,6 +742,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "至少 8 个字符。"
+          }
+        }
+      }
+    },
+    "At most 18 characters." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "18文字以内にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "18자 이하여야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多 18 个字符。"
           }
         }
       }
@@ -858,6 +902,28 @@
         }
       }
     },
+    "Back to signing in" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サインインに戻る"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인으로 돌아가기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回登录"
+          }
+        }
+      }
+    },
     "Bluesky account" : {
       "localizations" : {
         "ja" : {
@@ -948,6 +1014,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消"
+          }
+        }
+      }
+    },
+    "Cannot contain two hyphens in a row." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハイフンを連続して使えません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "하이픈을 연속으로 쓸 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不能连续使用两个连字符。"
+          }
+        }
+      }
+    },
+    "Cannot start or end with a hyphen." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ハイフンで始めたり終えたりできません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "하이픈으로 시작하거나 끝날 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不能以连字符开头或结尾。"
           }
         }
       }
@@ -1148,7 +1258,52 @@
         }
       }
     },
+    "Check your email for a code, then set a new password here." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールで届いたコードを確認し、ここで新しいパスワードを設定してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이메일로 받은 코드를 확인한 뒤, 여기서 새 비밀번호를 설정하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看邮件中的验证码，然后在此设置新密码。"
+          }
+        }
+      }
+    },
+    "Choose a name." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名前を決めてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름을 정하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择一个名称。"
+          }
+        }
+      }
+    },
     "Choose an account type instead" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -2098,6 +2253,28 @@
         }
       }
     },
+    "Email Me a Code" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コードをメールで送る"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 메일로 받기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "给我发送验证码"
+          }
+        }
+      }
+    },
     "Enable AI summaries" : {
       "localizations" : {
         "ja" : {
@@ -2412,6 +2589,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "过滤器通过你的文件夹同步，因此同一批文章会在每台设备上都被隐藏。"
+          }
+        }
+      }
+    },
+    "Forgot your password?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスワードをお忘れですか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비밀번호를 잊으셨나요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忘记密码？"
+          }
+        }
+      }
+    },
+    "Full handle" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フルハンドル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전체 핸들"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完整 handle"
           }
         }
       }
@@ -2885,6 +3106,7 @@
       }
     },
     "I know my full handle" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -3218,7 +3440,30 @@
         }
       }
     },
+    "Lowercase English letters, numbers, and hyphens. At least three characters." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "英小文字・数字・ハイフン。3文字以上。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "영문 소문자, 숫자, 하이픈. 3자 이상."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小写英文字母、数字和连字符。至少三个字符。"
+          }
+        }
+      }
+    },
     "Lowercase letters, numbers, and hyphens. At least three characters." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3486,6 +3731,28 @@
         }
       }
     },
+    "Needs at least one letter." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "英字を1文字以上入れてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글자가 최소 하나는 있어야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少需要一个字母。"
+          }
+        }
+      }
+    },
     "Never" : {
       "localizations" : {
         "en" : {
@@ -3510,6 +3777,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从不"
+          }
+        }
+      }
+    },
+    "New password" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいパスワード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 비밀번호"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新密码"
           }
         }
       }
@@ -4917,6 +5206,50 @@
         }
       }
     },
+    "Reset code" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再設定コード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재설정 코드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重设码"
+          }
+        }
+      }
+    },
+    "Reset your password" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスワードを再設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비밀번호 재설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重设密码"
+          }
+        }
+      }
+    },
     "Save" : {
       "localizations" : {
         "en" : {
@@ -5170,6 +5503,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "服务器"
+          }
+        }
+      }
+    },
+    "Set New Password" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいパスワードを設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 비밀번호 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置新密码"
           }
         }
       }
@@ -5454,6 +5809,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录"
+          }
+        }
+      }
+    },
+    "Sign in with" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サインイン方法"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인 방법"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录方式"
           }
         }
       }
@@ -6270,6 +6647,28 @@
         }
       }
     },
+    "That reset code is not usable. Request a new one." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その再設定コードは使えません。新しいコードを取得してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 재설정 코드는 사용할 수 없습니다. 새 코드를 요청하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该重设码不可用。请重新获取。"
+          }
+        }
+      }
+    },
     "The account was created on an earlier attempt, so there is nothing left to set up. Sign in with the password you chose then." : {
       "localizations" : {
         "ja" : {
@@ -6288,6 +6687,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "账户在先前的尝试中已创建，无需再设置。请使用当时设置的密码登录。"
+          }
+        }
+      }
+    },
+    "The address you gave when you set up publishing. Use this if you cannot remember your name." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "発行を設定したときに入力したアドレスです。名前を思い出せないときはこちらを使ってください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발행을 설정할 때 입력한 주소입니다. 이름이 기억나지 않으면 이걸 사용하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在设置发布时填写的地址。如果记不住名称，就用它登录。"
           }
         }
       }
@@ -7302,6 +7723,28 @@
         }
       }
     },
+    "Use lowercase English letters, numbers, and hyphens. A handle is a web address, so it cannot contain Korean, Japanese, Chinese, or accented letters." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "英小文字・数字・ハイフンを使ってください。ハンドルはウェブアドレスなので、日本語・韓国語・中国語やアクセント付きの文字は使えません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "영문 소문자, 숫자, 하이픈을 사용하세요. 핸들은 웹 주소이기 때문에 한글·일본어·한자나 악센트 문자는 쓸 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请使用小写英文字母、数字和连字符。handle 是网址的一部分，因此不能包含中文、日文、韩文或带重音的字母。"
+          }
+        }
+      }
+    },
     "Use lowercase letters, numbers, and hyphens, at least three characters." : {
       "localizations" : {
         "en" : {
@@ -7912,6 +8355,7 @@
       }
     },
     "Your full handle" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -8137,6 +8581,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的文章保存在属于你自己的个人仓库中，而不是 Nook 的数据库里。即使 Nook 消失，你的文章依然存在。"
+          }
+        }
+      }
+    },
+    "Your posts live on a server that holds your password, so the reset code comes from there by email. Nook never sees it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "投稿はパスワードを保持しているサーバー上にあるため、再設定コードはそこからメールで届きます。Nook はコードを見ません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글은 비밀번호를 보관하는 서버에 있으므로, 재설정 코드는 그 서버가 이메일로 보냅니다. Nook은 코드를 볼 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的文章存放在保存密码的服务器上，重设码由该服务器通过邮件发送。Nook 看不到它。"
           }
         }
       }

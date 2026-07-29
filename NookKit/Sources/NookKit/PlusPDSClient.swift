@@ -79,6 +79,31 @@ public struct PlusPDSClient: Sendable {
         )
     }
 
+    /// Asks the host to email a password-reset code.
+    ///
+    /// The host owns this, not Nook's service: the password only ever goes to the
+    /// host, so only it can change one. Reports nothing about whether the address
+    /// belongs to an account — answering that would let anyone test addresses.
+    public func requestPasswordReset(email: String) async throws {
+        struct Empty: Decodable {}
+        let _: Empty = try await post(
+            "com.atproto.server.requestPasswordReset",
+            body: ["email": email.trimmingCharacters(in: .whitespacesAndNewlines)]
+        )
+    }
+
+    /// Sets a new password using the code from that email.
+    public func resetPassword(token: String, newPassword: String) async throws {
+        struct Empty: Decodable {}
+        let _: Empty = try await post(
+            "com.atproto.server.resetPassword",
+            body: [
+                "token": token.trimmingCharacters(in: .whitespacesAndNewlines),
+                "password": newPassword,
+            ]
+        )
+    }
+
     /// Lists a repository's publications, newest first.
     public func publications(did: String) async throws -> [ATRecord<PublicationRecord>] {
         try await list(did: did, collection: PublicationRecord.typeNSID)
@@ -127,6 +152,11 @@ public struct PlusPDSClient: Sendable {
 
         let (data, response) = try await session.data(for: request)
         try check(response, data)
+        if data.isEmpty, let empty = "{}".data(using: .utf8) {
+            // Some methods answer 200 with no body. Decoding nothing fails, so
+            // an empty object stands in for "it worked and said nothing".
+            return try JSONDecoder().decode(Response.self, from: empty)
+        }
         return try JSONDecoder().decode(Response.self, from: data)
     }
 
@@ -186,6 +216,10 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
             }
             if kind == "AccountTakedown" {
                 return String(localized: "This account is not available.", bundle: .module)
+            }
+            if kind == "ExpiredToken" || kind == "InvalidToken" {
+                return String(
+                    localized: "That reset code is not usable. Request a new one.", bundle: .module)
             }
             return String(localized: "The server could not complete that request.", bundle: .module)
         }
