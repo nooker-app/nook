@@ -77,14 +77,53 @@ public struct PlusServiceClient: Sendable {
         )
     }
 
-    /// Whether a handle is available. Unauthenticated, so it works during
-    /// onboarding before any session exists.
-    public func isHandleAvailable(_ handle: String) async throws -> Bool {
+    /// Whether an invitation code is currently usable. Unauthenticated: it runs
+    /// before an account exists.
+    public func verifyInvitation(code: String) async throws -> Bool {
         do {
-            let response = try await client.checkHandleAvailability(
-                query: .init(handle: handle)
-            )
-            return try response.ok.body.json.available
+            return try await client.verifyInvitation(body: .json(.init(code: code)))
+                .ok.body.json.redeemable
+        } catch let error as ClientError {
+            throw PlusServiceError.transport(error)
+        }
+    }
+
+    /// Whether a handle is available, with the service's reason when it is not.
+    public func handleAvailability(handle: String) async throws
+        -> Operations.checkHandleAvailability.Output.Ok.Body.jsonPayload
+    {
+        do {
+            return try await client.checkHandleAvailability(query: .init(handle: handle))
+                .ok.body.json
+        } catch let error as ClientError {
+            throw PlusServiceError.transport(error)
+        }
+    }
+
+    /// Creates an account.
+    ///
+    /// The idempotency key is supplied by the caller so a retry resumes the same
+    /// signup. Generating one here would make every retry a new identity.
+    public func signUp(
+        idempotencyKey: String,
+        invitationCode: String,
+        handle: String,
+        displayName: String,
+        email: String,
+        password: String
+    ) async throws -> Operations.signup.Output.Created.Body.jsonPayload {
+        do {
+            return try await client.signup(
+                headers: .init(Idempotency_hyphen_Key: idempotencyKey),
+                body: .json(
+                    .init(
+                        invitationCode: invitationCode,
+                        handle: handle,
+                        displayName: displayName,
+                        email: email,
+                        password: password
+                    ))
+            ).created.body.json
         } catch let error as ClientError {
             throw PlusServiceError.transport(error)
         }

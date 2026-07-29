@@ -32,6 +32,7 @@ struct SettingsView: View {
         case feeds
         case articleRules
         case filters
+        case plus
         case offline
         case experimental
         case about
@@ -81,6 +82,9 @@ struct SettingsView: View {
                     }
                     NavigationLink(value: Destination.offline) {
                         Label("Offline", systemImage: "arrow.down.circle")
+                    }
+                    NavigationLink(value: Destination.plus) {
+                        Label("Publishing", systemImage: "square.and.pencil")
                     }
                     NavigationLink(value: Destination.experimental) {
                         Label("Experimental", systemImage: "flask")
@@ -229,6 +233,8 @@ struct SettingsView: View {
             FiltersSettingsScreen(store: store)
         case .offline:
             OfflineSettingsScreen(store: store)
+        case .plus:
+            PlusSettingsScreen()
         case .experimental:
             ExperimentalSettingsScreen()
         case .about:
@@ -1106,5 +1112,18 @@ private extension View {
     /// per section because that reliably reaches the rows.
     func warmRows() -> some View {
         listRowBackground(Color.clear)
+    }
+}
+
+
+/// Nook Plus publishing. Opt-in, and entirely outside the reading path: a
+/// reader who never opens this screen gets the same app they always had.
+private struct PlusSettingsScreen: View {
+    var body: some View {
+        List {
+            PlusSettingsContent()
+        }
+        .navigationTitle("Publishing")
+        .warmRows()
     }
 }

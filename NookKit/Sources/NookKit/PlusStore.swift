@@ -5,33 +5,65 @@ import Observation
 /// Where the Plus service lives. Held in `UserDefaults` so a build can be
 /// pointed at staging without recompiling; production values are the
 /// defaults.
-public struct PlusEnvironment: Sendable, Equatable {
+public struct PlusEnvironment: Sendable, Hashable {
     public var apiBaseURL: URL
     public var pdsHost: String
+    /// Where public sites are served, used to preview a URL before signup.
+    public var publicBaseURL: String
+    /// Suffix handles are issued under.
+    public var handleDomain: String
+    /// Shown in the developer section so it is obvious which server is in use.
+    public var name: String
 
-    public init(apiBaseURL: URL, pdsHost: String) {
+    public init(apiBaseURL: URL, pdsHost: String, publicBaseURL: String, handleDomain: String, name: String) {
         self.apiBaseURL = apiBaseURL
         self.pdsHost = pdsHost
+        self.publicBaseURL = publicBaseURL
+        self.handleDomain = handleDomain
+        self.name = name
     }
 
-    static let apiKey = "nookPlusAPIBaseURL"
-    static let pdsKey = "nookPlusPDSHost"
+    /// The real service. Nothing a user does can change this; only the
+    /// developer section can.
+    public static let production = PlusEnvironment(
+        apiBaseURL: URL(string: "https://api.nooker.app")!,
+        pdsHost: "nooker.social",
+        publicBaseURL: "https://nooker.app",
+        handleDomain: "nooker.app",
+        name: String(localized: "Production")
+    )
 
-    /// Reads the configured environment, falling back to production.
+    /// The test service. Accounts created here are throwaway.
+    public static let staging = PlusEnvironment(
+        apiBaseURL: URL(string: "https://api.staging.nooker.app")!,
+        pdsHost: "pds.staging.nooker.social",
+        publicBaseURL: "https://staging.nooker.app",
+        handleDomain: "staging.nooker.app",
+        name: String(localized: "Staging (test server)")
+    )
+
+    public static let all: [PlusEnvironment] = [production, staging]
+
+    static let selectionKey = "nookPlusEnvironment"
+
+    /// The selected environment, production unless a developer changed it.
     public static var current: PlusEnvironment {
-        let defaults = UserDefaults.standard
-        let api =
-            (defaults.string(forKey: apiKey).flatMap(URL.init(string:)))
-            ?? URL(string: "https://api.nooker.app")!
-        let pds = defaults.string(forKey: pdsKey) ?? "nooker.social"
-        return PlusEnvironment(apiBaseURL: api, pdsHost: pds)
+        let name = UserDefaults.standard.string(forKey: selectionKey)
+        return all.first { $0.handleDomain == name } ?? production
     }
 
-    /// Points this install at a different deployment.
-    public static func select(apiBaseURL: URL, pdsHost: String) {
-        UserDefaults.standard.set(apiBaseURL.absoluteString, forKey: apiKey)
-        UserDefaults.standard.set(pdsHost, forKey: pdsKey)
+    /// Switches deployments. Exposed only through the developer section: a
+    /// reader has no reason to know this exists, and picking wrong would create
+    /// an account on a server their handle does not belong to.
+    public static func select(_ environment: PlusEnvironment) {
+        UserDefaults.standard.set(environment.handleDomain, forKey: selectionKey)
     }
+}
+
+/// Result of checking whether a name can be claimed.
+public enum HandleCheck: Equatable, Sendable {
+    case available(String)
+    case unavailable(String)
 }
 
 /// Observable state for the Plus surface.
@@ -50,6 +82,11 @@ public final class PlusStore {
     public private(set) var failure: String?
     /// Set after a successful publish so the UI can confirm it.
     public private(set) var lastPublishedURL: String?
+    /// Whether the last checked invitation code was usable.
+    public private(set) var invitationAccepted = false
+    /// True when signup succeeded but the handle has not propagated yet. The
+    /// account works regardless, so this is a note rather than a failure.
+    public private(set) var handleResolutionPending = false
 
     private var environment: PlusEnvironment
     private var pds: PlusPDSClient
@@ -69,6 +106,97 @@ public final class PlusStore {
         self.environment = environment
         self.pds = PlusPDSClient(host: environment.pdsHost)
         self.service = PlusServiceClient(baseURL: environment.apiBaseURL)
+    }
+
+    /// The full handle a chosen name would produce, shown while typing so the
+    /// user can see what they are actually getting.
+    public func fullHandle(for label: String) -> String {
+        let clean = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return clean.isEmpty ? "" : "\(clean).\(environment.handleDomain)"
+    }
+
+    /// The public site URL a chosen name would produce.
+    public func publicSiteURL(for label: String) -> String {
+        let clean = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return clean.isEmpty ? "" : "\(environment.publicBaseURL)/@\(clean)"
+    }
+
+    /// Checks an invitation code before asking for anything else, so a bad code
+    /// is caught at the step where it can still be corrected.
+    public func checkInvitation(_ code: String) async {
+        invitationAccepted = false
+        await perform {
+            self.invitationAccepted = try await self.service.verifyInvitation(
+                code: code.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+    }
+
+    /// Checks whether a name can be claimed, translating the service's reason
+    /// codes into something a person can act on.
+    public func checkHandle(label: String) async -> HandleCheck {
+        let clean = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var outcome = HandleCheck.unavailable(String(localized: "Could not check that name."))
+        await perform {
+            let result = try await self.service.handleAvailability(handle: self.fullHandle(for: clean))
+            if result.available {
+                outcome = .available(result.handle)
+            } else {
+                outcome = .unavailable(Self.explain(reason: result.reason))
+            }
+        }
+        if let failure { outcome = .unavailable(failure) }
+        return outcome
+    }
+
+    private static func explain(reason: String?) -> String {
+        switch reason {
+        case "taken":
+            return String(localized: "Someone already has that name.")
+        case "reserved":
+            return String(localized: "That name is reserved.")
+        default:
+            return String(localized: "Use lowercase letters, numbers, and hyphens, at least three characters.")
+        }
+    }
+
+    /// Creates an account and signs in.
+    ///
+    /// The idempotency key is generated once per attempt and kept for retries,
+    /// so pressing "Try Again" resumes the same signup rather than starting a
+    /// second one — which would otherwise create a second identity.
+    private var signupKey: String?
+
+    public func signUp(invitationCode: String, label: String, email: String, password: String) async {
+        let key = signupKey ?? UUID().uuidString
+        signupKey = key
+
+        await perform {
+            let result = try await self.service.signUp(
+                idempotencyKey: key,
+                invitationCode: invitationCode.trimmingCharacters(in: .whitespacesAndNewlines),
+                handle: self.fullHandle(for: label),
+                displayName: label,
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                password: password
+            )
+            let session = PlusSession(
+                did: result.did,
+                handle: result.handle,
+                accessJWT: result.session.accessJwt,
+                refreshJWT: result.session.refreshJwt
+            )
+            _ = PlusCredential.store(session)
+            self.session = session
+            self.handleResolutionPending = !(result.handleResolves ?? true)
+            self.signupKey = nil
+            await self.loadContent()
+        }
+    }
+
+    /// The publication's public URL, once known.
+    public var publicationURL: String? {
+        guard let slug = publications.first?.value.slug else { return nil }
+        return "\(environment.publicBaseURL)/@\(slug)"
     }
 
     public func signIn(handle: String, password: String) async {

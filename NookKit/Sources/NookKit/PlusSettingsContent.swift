@@ -1,12 +1,16 @@
 import NookPlusProtocol
 import SwiftUI
 
-/// Nook Plus settings: sign in, publish, and review what has been published.
+/// Nook Plus settings, shared by macOS and iOS.
 ///
-/// Plus is opt-in. Nothing here runs unless the user opens this pane, and the
-/// reader works identically for someone who never does.
+/// Someone who has never published anything should be able to read this screen
+/// top to bottom and know what to do. Setup runs as a guided flow rather than a
+/// form, and anything only a developer needs — which server to talk to — is
+/// behind a disclosure that says so.
 public struct PlusSettingsContent: View {
     @State private var store = PlusStore()
+    @State private var showingSetup = false
+    @State private var showingSignIn = false
 
     public init() {}
 
@@ -15,60 +19,55 @@ public struct PlusSettingsContent: View {
             if store.isSignedIn {
                 signedIn
             } else {
-                signIn
+                notSetUp
             }
+            developerSection
         }
         .task {
             if store.isSignedIn { await store.loadContent() }
         }
+        .sheet(isPresented: $showingSetup) {
+            PlusOnboardingView(store: store) { showingSetup = false }
+        }
+        .sheet(isPresented: $showingSignIn) {
+            PlusSignInView(store: store) { showingSignIn = false }
+        }
     }
 
-    // MARK: - Signed out
+    // MARK: - Not set up
 
-    @State private var handle = ""
-    @State private var password = ""
-
-    private var signIn: some View {
+    private var notSetUp: some View {
         Group {
-            Section("Nook Plus") {
-                Text(
-                    "Publish your own writing to the web and to feeds. Your posts live in your own repository, so they stay yours."
-                )
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Publish your own writing")
+                        .font(.headline)
+                    Text(
+                        "Nook can turn your writing into a small website with an RSS feed, so anyone can follow you in Nook or any other reader. Your posts are stored in a repository that belongs to you, not inside Nook's database."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    Text("Reading feeds works exactly as before whether or not you set this up.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 2)
             }
 
-            Section("Sign in") {
-                TextField("Handle", text: $handle, prompt: Text(verbatim: "you.example.app"))
-                    .textContentType(.username)
-                    .autocorrectionDisabled()
-                SecureField("Password", text: $password)
-                    .textContentType(.password)
-
+            Section {
                 Button {
-                    Task {
-                        await store.signIn(handle: handle, password: password)
-                        // The password is not needed after this and must not
-                        // linger in view state.
-                        password = ""
-                    }
+                    showingSetup = true
                 } label: {
-                    if store.isWorking {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Text("Sign In")
-                    }
+                    Label("Set Up Publishing", systemImage: "sparkles")
                 }
-                .disabled(handle.isEmpty || password.isEmpty || store.isWorking)
-
-                if let failure = store.failure {
-                    Label(failure, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                        .font(.callout)
+                Button {
+                    showingSignIn = true
+                } label: {
+                    Label("I Already Have an Account", systemImage: "person.crop.circle")
                 }
+            } footer: {
+                Text("Setting up needs an invitation code. Publishing is limited to invited writers for now.")
             }
-
-            environmentSection
         }
     }
 
@@ -81,34 +80,43 @@ public struct PlusSettingsContent: View {
 
     private var signedIn: some View {
         Group {
-            Section("Account") {
-                LabeledContent("Handle", value: store.session?.handle ?? "")
-                if let did = store.session?.did {
-                    LabeledContent("Identifier") {
-                        Text(did)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
+            Section {
+                if let session = store.session {
+                    LabeledContent("Handle", value: session.handle)
+                }
+                if let url = store.publicationURL {
+                    LabeledContent("Your site") {
+                        Link(url, destination: URL(string: url) ?? URL(string: "https://example.com")!)
+                            .font(.callout)
                     }
                 }
-                if let publication = store.publications.first {
-                    LabeledContent("Publication", value: publication.value.name)
+                if store.handleResolutionPending {
+                    Text("Your handle is still spreading across the network. Everything works in the meantime.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                // Signing out clears this device's stored session and nothing
-                // else. Saying so prevents it reading as deletion.
                 Button("Sign Out on This Device", role: .destructive) { store.signOut() }
+            } header: {
+                Text("Your account")
+            } footer: {
+                Text("Signing out only forgets this device. Your account and your posts are untouched.")
             }
 
-            Section("New post") {
+            Section {
                 TextField("Title", text: $title)
-                TextField("Slug", text: $slug, prompt: Text(verbatim: "my-first-post"))
+                TextField("Web address", text: $slug, prompt: Text(verbatim: "my-first-post"))
                     .autocorrectionDisabled()
-                TextField("Summary (optional)", text: $summary)
+                    #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                    #endif
+                TextField("One-line summary (optional)", text: $summary)
+
                 TextEditor(text: $markdown)
-                    .font(.body.monospaced())
-                    .frame(minHeight: 140)
+                    .font(.body)
+                    .frame(minHeight: 150)
                     .overlay(alignment: .topLeading) {
                         if markdown.isEmpty {
-                            Text("Write in Markdown…")
+                            Text("Write here. **Bold**, *italic*, and [links](https://example.com) work.")
                                 .foregroundStyle(.tertiary)
                                 .padding(.top, 8)
                                 .padding(.leading, 5)
@@ -118,8 +126,7 @@ public struct PlusSettingsContent: View {
 
                 Button {
                     Task {
-                        await store.publish(
-                            title: title, slug: slug, markdown: markdown, summary: summary)
+                        await store.publish(title: title, slug: slug, markdown: markdown, summary: summary)
                         if store.failure == nil {
                             title = ""
                             slug = ""
@@ -134,31 +141,26 @@ public struct PlusSettingsContent: View {
                         Text("Publish")
                     }
                 }
-                .disabled(
-                    title.isEmpty || slug.isEmpty || markdown.isEmpty
-                        || store.publications.isEmpty || store.isWorking)
+                .disabled(!canPublish)
 
-                if store.publications.isEmpty && !store.isWorking {
-                    Text("No publication found in your repository yet.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
                 if let failure = store.failure {
                     Label(failure, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
                         .font(.callout)
                 }
                 if let url = store.lastPublishedURL {
-                    // Read from the response, never assembled locally: the
-                    // canonical form can change without the record changing.
                     Link(destination: URL(string: url) ?? URL(string: "https://example.com")!) {
-                        Label("View published post", systemImage: "safari")
+                        Label("View your post", systemImage: "safari")
                     }
                     .font(.callout)
                 }
+            } header: {
+                Text("Write a post")
+            } footer: {
+                Text("The web address becomes the last part of the link to this post. Lowercase letters, numbers, and hyphens.")
             }
 
-            Section("Published") {
+            Section {
                 if store.articles.isEmpty {
                     Text("Nothing published yet.")
                         .foregroundStyle(.secondary)
@@ -168,14 +170,19 @@ public struct PlusSettingsContent: View {
                         articleRow(record)
                     }
                 }
-                Button("Reload from My Repository") {
-                    Task { await store.loadContent() }
-                }
-                .disabled(store.isWorking)
+                Button("Reload") { Task { await store.loadContent() } }
+                    .disabled(store.isWorking)
+            } header: {
+                Text("Your posts")
+            } footer: {
+                Text("Read straight from your own repository, so this is what actually exists — not a copy Nook keeps.")
             }
-
-            environmentSection
         }
+    }
+
+    private var canPublish: Bool {
+        !title.isEmpty && !slug.isEmpty && !markdown.isEmpty
+            && !store.publications.isEmpty && !store.isWorking
     }
 
     @ViewBuilder
@@ -198,28 +205,90 @@ public struct PlusSettingsContent: View {
         }
     }
 
-    // MARK: - Deployment
+    // MARK: - Developer
 
-    @State private var apiBase = PlusEnvironment.current.apiBaseURL.absoluteString
-    @State private var pdsHost = PlusEnvironment.current.pdsHost
+    @State private var showingDeveloper = false
+    @State private var selected = PlusEnvironment.current
 
-    /// Lets a build be pointed at a non-production deployment. Exposed because
-    /// the alternative is hard-coding a host, which the project's
-    /// configuration rules forbid.
-    private var environmentSection: some View {
-        Section("Deployment") {
-            TextField("Service API", text: $apiBase)
-                .autocorrectionDisabled()
-            TextField("PDS host", text: $pdsHost)
-                .autocorrectionDisabled()
-            Button("Use This Deployment") {
-                guard let url = URL(string: apiBase), !pdsHost.isEmpty else { return }
-                PlusEnvironment.select(apiBaseURL: url, pdsHost: pdsHost)
-                store.use(PlusEnvironment(apiBaseURL: url, pdsHost: pdsHost))
+    /// Which server to talk to. Not a user setting: picking the wrong one
+    /// creates an account whose handle belongs to a different service. It is
+    /// disclosed, labelled, and explained rather than exposed as a bare field.
+    private var developerSection: some View {
+        Section {
+            DisclosureGroup("Developer", isExpanded: $showingDeveloper) {
+                Picker("Server", selection: $selected) {
+                    ForEach(PlusEnvironment.all, id: \.handleDomain) { environment in
+                        Text(environment.name).tag(environment)
+                    }
+                }
+                Text(verbatim: selected.apiBaseURL.absoluteString)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+
+                Button("Use This Server") {
+                    PlusEnvironment.select(selected)
+                    store.use(selected)
+                    store.signOut()
+                }
+                .disabled(selected == PlusEnvironment.current)
             }
-            Text("Changing this signs nothing out, but the stored session only works against the deployment that issued it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        } footer: {
+            Text("Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out.")
         }
+    }
+}
+
+/// Signing in to an account that already exists.
+struct PlusSignInView: View {
+    @Bindable var store: PlusStore
+    let onFinished: () -> Void
+
+    @State private var handle = ""
+    @State private var password = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Sign in").font(.title2.weight(.semibold))
+                Text("Use the handle and password you chose when you set up publishing.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("Handle", text: $handle, prompt: Text(verbatim: "yourname.\(PlusEnvironment.current.handleDomain)"))
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                    #endif
+                SecureField("Password", text: $password)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            if let failure = store.failure {
+                Label(failure, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .font(.callout)
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Button("Cancel") { onFinished() }
+                Spacer()
+                Button("Sign In") {
+                    Task {
+                        await store.signIn(handle: handle, password: password)
+                        password = ""
+                        if store.isSignedIn { onFinished() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(handle.isEmpty || password.isEmpty || store.isWorking)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 360, minHeight: 280)
     }
 }
