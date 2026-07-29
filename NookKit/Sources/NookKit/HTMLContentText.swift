@@ -34,12 +34,14 @@ public struct HTMLContentView: View {
     private let blocks: [HTMLContentBlock]
     private let selectable: Bool
     private var translator: NativeArticleTranslator?
+    private let typography: ReaderTypography
 
     public init(
         html: String,
         baseURL: URL? = nil,
         selectable: Bool = true,
-        translator: NativeArticleTranslator? = nil
+        translator: NativeArticleTranslator? = nil,
+        typography: ReaderTypography = .platformDefault
     ) {
         // A cache hit (warmed off-main by the store, or a revisit) skips the
         // synchronous parse entirely. On a miss we parse synchronously exactly as
@@ -54,6 +56,7 @@ public struct HTMLContentView: View {
         }
         self.selectable = selectable
         self.translator = translator
+        self.typography = typography
     }
 
     public var body: some View {
@@ -64,7 +67,8 @@ public struct HTMLContentView: View {
             selectable: selectable,
             lazy: true,
             // A completed Markdown document already contains every replacement.
-            translator: translator?.completedMarkdownBlocks() == nil ? translator : nil
+            translator: translator?.completedMarkdownBlocks() == nil ? translator : nil,
+            typography: typography
         )
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -83,6 +87,9 @@ struct HTMLBlockList: View {
     /// translation as it arrives; nested lists don't take a translator because a
     /// translated blockquote already carries its translated children.
     var translator: NativeArticleTranslator?
+    /// The resolved reader typography, threaded to every text-bearing block so
+    /// one struct decides fonts/leading/kern for the whole article.
+    var typography: ReaderTypography = .platformDefault
     /// List-item children use the same semantic spacing rules at a denser scale.
     /// Quotes retain normal article rhythm.
     var compactSpacing = false
@@ -113,21 +120,21 @@ struct HTMLBlockList: View {
     private func blockView(_ block: HTMLContentBlock) -> some View {
         switch block {
         case .text(let html):
-            HTMLContentText(html: html, selectable: selectable)
+            HTMLContentText(html: html, selectable: selectable, typography: typography)
         case .heading(let level, let html):
-            NativeArticleHeading(level: level, html: html, selectable: selectable)
+            NativeArticleHeading(level: level, html: html, selectable: selectable, typography: typography)
         case .blockquote(let inner):
-            NativeArticleQuote(blocks: inner, selectable: selectable)
+            NativeArticleQuote(blocks: inner, selectable: selectable, typography: typography)
         case .codeBlock(let code, let language):
-            NativeArticleCode(code: code, language: language, selectable: selectable)
+            NativeArticleCode(code: code, language: language, selectable: selectable, typography: typography)
         case .table(let table):
-            NativeArticleTable(table: table, selectable: selectable)
+            NativeArticleTable(table: table, selectable: selectable, typography: typography)
         case .thematicBreak:
             Divider()
         case .mixedText(let parts, let headingLevel):
-            NativeMixedText(parts: parts, selectable: selectable, headingLevel: headingLevel)
+            NativeMixedText(parts: parts, selectable: selectable, typography: typography, headingLevel: headingLevel)
         case .list(let ordered, let items):
-            NativeArticleList(ordered: ordered, items: items, selectable: selectable)
+            NativeArticleList(ordered: ordered, items: items, selectable: selectable, typography: typography)
         case .image(let media):
             NativeArticleImage(media: media)
         case .video(let media):
@@ -282,7 +289,7 @@ final class HTMLBlockCache: @unchecked Sendable {
 /// their own HTML defaults (for example 12pt after `<p>` plus a trailing newline),
 /// which then stack unpredictably with SwiftUI's outer block spacing.
 enum HTMLTextFlow {
-    private static let cacheVersion = "reader-flow-v2"
+    private static let cacheVersion = "reader-flow-v3"
     private static let paragraphBreakRegex = try! NSRegularExpression(
         pattern: #"(?:\r\n?|\n)(?:[ \t]*(?:\r\n?|\n))+"#
     )
@@ -298,8 +305,16 @@ enum HTMLTextFlow {
         )
     }
 
-    static func cacheKey(html: String, baseSize: CGFloat, bold: Bool) -> String {
-        "\(cacheVersion)-\(baseSize)-\(bold)-\(html)"
+    /// Everything that changes the *attributed string* must be in this key —
+    /// the typography token carries font design and kern. Line spacing is a
+    /// view modifier and intentionally absent.
+    static func cacheKey(
+        html: String,
+        baseSize: CGFloat,
+        bold: Bool,
+        typography: ReaderTypography = .platformDefault
+    ) -> String {
+        "\(cacheVersion)-\(baseSize)-\(bold)\(typography.attributedCacheToken)-\(html)"
     }
 
     static func normalize(_ text: NSMutableAttributedString, baseSize: CGFloat) {
@@ -320,12 +335,43 @@ enum HTMLTextFlow {
             style.minimumLineHeight = 0
             style.maximumLineHeight = 0
             style.lineHeightMultiple = 0
+            // Reader text must always wrap. A `white-space`/`text-overflow` rule
+            // surviving the importer as a truncating line-break mode makes
+            // SwiftUI's Text draw "…" mid-paragraph — and macOS then *wraps* the
+            // same text while a selection is active (the selection renderer
+            // ignores the mode), snapping back to the ellipsis on deselect.
+            style.lineBreakMode = .byWordWrapping
+            // Imported `text-align: justify` stretches inter-word gaps on any
+            // awkward-length line; the push-out strategy trades trailing space
+            // for orphan avoidance. Both read as random spacing bugs, so the
+            // reader always uses natural alignment and the plain strategy.
+            style.alignment = .natural
+            style.lineBreakStrategy = []
+            style.hyphenationFactor = 0
+            // Stray CSS margins/indents shrink the wrap width (gaps down the
+            // right edge) or stagger continuation lines. Lists and quotes are
+            // native views with their own indentation, so imported fragments
+            // never legitimately carry one.
+            style.firstLineHeadIndent = 0
+            style.headIndent = 0
+            style.tailIndent = 0
             updates.append((range, style))
         }
         for (range, style) in updates {
             text.addAttribute(.paragraphStyle, value: style, range: range)
         }
         removeTrailingParagraphMargin(in: text)
+    }
+
+    /// Applies the typography's kern to a fully-built attributed string — the
+    /// one shared tail for both import paths, so they can never disagree.
+    static func applyKern(_ text: NSMutableAttributedString, typography: ReaderTypography) {
+        guard typography.kern != 0, text.length > 0 else { return }
+        text.addAttribute(
+            .kern,
+            value: typography.kern,
+            range: NSRange(location: 0, length: text.length)
+        )
     }
 
     static func paragraphGap(for baseSize: CGFloat) -> CGFloat {
@@ -1449,6 +1495,7 @@ private struct ZoomableImageView: UIViewRepresentable {
 private struct NativeMixedText: View {
     let parts: [HTMLContentBlock.TextPart]
     let selectable: Bool
+    var typography: ReaderTypography = .platformDefault
 
     /// Non-nil when this block is a heading being translated, so the streaming
     /// pieces render at the heading's size/weight instead of looking like body
@@ -1456,7 +1503,7 @@ private struct NativeMixedText: View {
     var headingLevel: Int? = nil
 
     private var baseSize: CGFloat {
-        headingLevel.map { HTMLContentText.headingSize($0) } ?? HTMLContentText.platformBodySize
+        headingLevel.map { typography.headingSize($0) } ?? typography.bodySize
     }
     private var bold: Bool { headingLevel != nil }
 
@@ -1465,19 +1512,20 @@ private struct NativeMixedText: View {
             ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
                 switch part {
                 case .html(let html):
-                    HTMLContentText(html: html, selectable: selectable, baseSize: headingLevel.map { HTMLContentText.headingSize($0) }, bold: bold)
+                    HTMLContentText(html: html, selectable: selectable, baseSize: headingLevel.map { typography.headingSize($0) }, bold: bold, typography: typography)
                 case .streaming(let original, let text):
                     // The segment currently being translated (settles to `.html`
                     // once done): dimmed original underneath, translation typing on
                     // top, original erased as the translation streams.
-                    StreamingText(original: original, text: text, selectable: selectable, baseSize: baseSize, bold: bold)
+                    StreamingText(original: original, text: text, selectable: selectable, baseSize: baseSize, bold: bold, typography: typography)
                 case .streamingMarkdown(let original, let markdown):
                     StreamingMarkdownText(
                         original: original,
                         markdown: markdown,
                         selectable: selectable,
                         baseSize: baseSize,
-                        bold: bold
+                        bold: bold,
+                        typography: typography
                     )
                 }
             }
@@ -1497,11 +1545,14 @@ private struct StreamingText: View {
     let original: String
     let text: String
     let selectable: Bool
-    var baseSize: CGFloat = HTMLContentText.platformBodySize
+    var baseSize: CGFloat = ReaderTypography.platformBodySize
     var bold: Bool = false
+    var typography: ReaderTypography = .platformDefault
     @State private var shown = 0
 
-    private var font: Font { .system(size: baseSize, weight: bold ? .semibold : .regular) }
+    private var font: Font {
+        .system(size: baseSize, weight: bold ? .semibold : .regular, design: typography.fontDesign)
+    }
 
     // A solid block glyph as the caret. It blinks by toggling its color between
     // the text color and clear, so its width is always reserved and the text
@@ -1520,7 +1571,8 @@ private struct StreamingText: View {
                 if !original.isEmpty {
                     Text(original)
                         .font(font)
-                        .lineSpacing(4)
+                        .kerning(typography.kern)
+                        .lineSpacing(typography.lineSpacing)
                         .foregroundStyle(.secondary)
                         .opacity(originalDim * (1 - progress))
                 }
@@ -1550,7 +1602,8 @@ private struct StreamingText: View {
     private func content(visible: String, caretOn: Bool) -> some View {
         let rendered = (Text(visible) + Text(caret).foregroundColor(caretOn ? .primary : .clear))
             .font(font)
-            .lineSpacing(4)
+            .kerning(typography.kern)
+            .lineSpacing(typography.lineSpacing)
         if selectable {
             rendered.textSelection(.enabled)
         } else {
@@ -1566,8 +1619,9 @@ private struct StreamingMarkdownText: View {
     let original: String
     let markdown: String
     let selectable: Bool
-    var baseSize = HTMLContentText.platformBodySize
+    var baseSize = ReaderTypography.platformBodySize
     var bold = false
+    var typography: ReaderTypography = .platformDefault
     @State private var shown = 0
 
     private let caret = "\u{2588}"
@@ -1584,8 +1638,9 @@ private struct StreamingMarkdownText: View {
             ZStack(alignment: .topLeading) {
                 if !original.isEmpty {
                     Text(original)
-                        .font(.system(size: baseSize, weight: bold ? .semibold : .regular))
-                        .lineSpacing(4)
+                        .font(.system(size: baseSize, weight: bold ? .semibold : .regular, design: typography.fontDesign))
+                        .kerning(typography.kern)
+                        .lineSpacing(typography.lineSpacing)
                         .foregroundStyle(.secondary)
                         .opacity(originalDim * (1 - progress))
                 }
@@ -1615,10 +1670,13 @@ private struct StreamingMarkdownText: View {
         let attributed = StreamingMarkdownFormatter.attributed(
             visible,
             baseSize: baseSize,
-            baseBold: bold
+            baseBold: bold,
+            design: typography.fontDesign
         )
         let caretText = Text(caret).foregroundColor(caretOn ? .primary : .clear)
-        let rendered = Text("\(Text(attributed))\(caretText)").lineSpacing(4)
+        let rendered = Text("\(Text(attributed))\(caretText)")
+            .kerning(typography.kern)
+            .lineSpacing(typography.lineSpacing)
         if selectable {
             rendered.textSelection(.enabled)
         } else {
@@ -1646,6 +1704,7 @@ enum StreamingMarkdownFormatter {
     private struct Renderer {
         let baseSize: CGFloat
         let baseBold: Bool
+        var design: Font.Design = .default
         var output = NSMutableAttributedString()
 
         mutating func render(document: Document) {
@@ -1763,7 +1822,8 @@ enum StreamingMarkdownFormatter {
                     size: baseSize * style.scale,
                     bold: baseBold || style.bold,
                     italic: style.italic,
-                    monospaced: style.code
+                    monospaced: style.code,
+                    design: design
                 ),
             ]
             if style.underline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
@@ -1837,10 +1897,14 @@ enum StreamingMarkdownFormatter {
         typealias PlatformColor = NSColor
         static var linkColor: NSColor { .linkColor }
 
-        static func font(size: CGFloat, bold: Bool, italic: Bool, monospaced: Bool) -> NSFont {
-            var font = monospaced
-                ? NSFont.monospacedSystemFont(ofSize: size, weight: bold ? .semibold : .regular)
-                : NSFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+        static func font(size: CGFloat, bold: Bool, italic: Bool, monospaced: Bool, design: Font.Design = .default) -> NSFont {
+            var font: NSFont
+            if monospaced {
+                font = NSFont.monospacedSystemFont(ofSize: size, weight: bold ? .semibold : .regular)
+            } else {
+                font = NSFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+                font = HTMLContentText.applying(design: design, to: font, size: size)
+            }
             if italic { font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) }
             return font
         }
@@ -1848,16 +1912,17 @@ enum StreamingMarkdownFormatter {
         typealias PlatformColor = UIColor
         static var linkColor: UIColor { .link }
 
-        static func font(size: CGFloat, bold: Bool, italic: Bool, monospaced: Bool) -> UIFont {
+        static func font(size: CGFloat, bold: Bool, italic: Bool, monospaced: Bool, design: Font.Design = .default) -> UIFont {
             if monospaced {
                 return UIFont.monospacedSystemFont(ofSize: size, weight: bold ? .semibold : .regular)
             }
             var traits: UIFontDescriptor.SymbolicTraits = []
             if bold { traits.insert(.traitBold) }
             if italic { traits.insert(.traitItalic) }
-            let descriptor = UIFont.systemFont(ofSize: size).fontDescriptor
-                .withSymbolicTraits(traits)
-                ?? UIFont.systemFont(ofSize: size).fontDescriptor
+            let base = HTMLContentText.applying(
+                design: design, to: UIFont.systemFont(ofSize: size), size: size
+            )
+            let descriptor = base.fontDescriptor.withSymbolicTraits(traits) ?? base.fontDescriptor
             return UIFont(descriptor: descriptor, size: size)
         }
         #endif
@@ -1866,9 +1931,10 @@ enum StreamingMarkdownFormatter {
     static func attributed(
         _ markdown: String,
         baseSize: CGFloat,
-        baseBold: Bool = false
+        baseBold: Bool = false,
+        design: Font.Design = .default
     ) -> AttributedString {
-        var renderer = Renderer(baseSize: baseSize, baseBold: baseBold)
+        var renderer = Renderer(baseSize: baseSize, baseBold: baseBold, design: design)
         renderer.render(document: Document(parsing: markdown))
         #if canImport(AppKit)
         return (try? AttributedString(renderer.output, including: \.appKit))
@@ -1886,9 +1952,16 @@ private struct NativeArticleHeading: View {
     let level: Int
     let html: String
     let selectable: Bool
+    var typography: ReaderTypography = .platformDefault
 
     var body: some View {
-        HTMLContentText(html: html, selectable: selectable, baseSize: HTMLContentText.headingSize(level), bold: true)
+        HTMLContentText(
+            html: html,
+            selectable: selectable,
+            baseSize: typography.headingSize(level),
+            bold: true,
+            typography: typography
+        )
     }
 }
 
@@ -1896,9 +1969,10 @@ private struct NativeArticleHeading: View {
 private struct NativeArticleQuote: View {
     let blocks: [HTMLContentBlock]
     let selectable: Bool
+    var typography: ReaderTypography = .platformDefault
 
     var body: some View {
-        HTMLBlockList(blocks: blocks, selectable: selectable)
+        HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography)
             .padding(.leading, 16)
             .padding(.vertical, 2)
             .overlay(alignment: .leading) {
@@ -1917,6 +1991,7 @@ private struct NativeArticleList: View {
     let ordered: Bool
     let items: [[HTMLContentBlock]]
     let selectable: Bool
+    var typography: ReaderTypography = .platformDefault
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1926,7 +2001,7 @@ private struct NativeArticleList: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(minWidth: ordered ? 24 : 14, alignment: .trailing)
-                    HTMLBlockList(blocks: blocks, selectable: selectable, compactSpacing: true)
+                    HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -1944,6 +2019,7 @@ private struct NativeArticleCode: View {
     let code: String
     let language: String?
     let selectable: Bool
+    var typography: ReaderTypography = .platformDefault
     @State private var highlighted: AttributedString?
 
     var body: some View {
@@ -1991,7 +2067,7 @@ private struct NativeArticleCode: View {
         // colored on the first frame instead of a plain→colored flash.
         let shown = highlighted ?? SyntaxHighlightCache.shared.value(forKey: "\(language ?? "")\n\(code)")
         let rendered = Text(shown ?? AttributedString(code))
-            .font(.system(.callout, design: .monospaced))
+            .font(.system(size: typography.codeSize, design: .monospaced))
         if selectable {
             rendered.textSelection(.enabled)
         } else {
@@ -2004,6 +2080,7 @@ private struct NativeArticleCode: View {
 private struct NativeArticleTable: View {
     let table: HTMLTable
     let selectable: Bool
+    var typography: ReaderTypography = .platformDefault
 
     /// Minimum width per column before the whole table scrolls horizontally, so
     /// many-column tables stay readable instead of squeezing to slivers.
@@ -2040,7 +2117,7 @@ private struct NativeArticleTable: View {
     }
 
     private func cellView(_ html: String, isHeader: Bool) -> some View {
-        HTMLContentText(html: html, selectable: selectable, bold: isHeader)
+        HTMLContentText(html: html, selectable: selectable, bold: isHeader, typography: typography)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
@@ -2283,6 +2360,7 @@ public struct HTMLContentText: View {
     let selectable: Bool
     let baseSize: CGFloat?
     let bold: Bool
+    let typography: ReaderTypography
     /// Computed once per view construction: the key concatenates the whole HTML
     /// fragment, and recomputing it on every body evaluation (cache probes +
     /// `.task(id:)`) was O(fragment bytes) per frame while blocks import.
@@ -2290,14 +2368,21 @@ public struct HTMLContentText: View {
     private let resolvedSize: CGFloat
     @State private var attributed: AttributedString?
 
-    public init(html: String, selectable: Bool = true, baseSize: CGFloat? = nil, bold: Bool = false) {
+    public init(
+        html: String,
+        selectable: Bool = true,
+        baseSize: CGFloat? = nil,
+        bold: Bool = false,
+        typography: ReaderTypography = .platformDefault
+    ) {
         self.html = html
         self.selectable = selectable
         self.baseSize = baseSize
         self.bold = bold
-        let size = baseSize ?? Self.platformBodySize
+        self.typography = typography
+        let size = baseSize ?? typography.bodySize
         resolvedSize = size
-        renderKey = HTMLTextFlow.cacheKey(html: html, baseSize: size, bold: bold)
+        renderKey = HTMLTextFlow.cacheKey(html: html, baseSize: size, bold: bold, typography: typography)
     }
 
     public var body: some View {
@@ -2308,7 +2393,7 @@ public struct HTMLContentText: View {
         let ready = attributed ?? HTMLAttributedCache.shared.value(forKey: renderKey)
         return Group {
             if let ready {
-                let text = Text(ready).lineSpacing(4).tint(.accentColor)
+                let text = Text(ready).lineSpacing(typography.lineSpacing).tint(.accentColor)
                 if selectable {
                     text.textSelection(.enabled)
                 } else {
@@ -2318,10 +2403,12 @@ public struct HTMLContentText: View {
                 // While the importer runs, show plain text at the final size — not a
                 // spinner — so the block claims its real height immediately. This
                 // avoids the big layout jump when translation starts and a paragraph
-                // splits into segments that each re-import.
+                // splits into segments that each re-import. Font design and kern
+                // must match the import exactly or that height guarantee breaks.
                 let placeholder = Text(Self.plainText(html))
-                    .font(.system(size: resolvedSize, weight: bold ? .semibold : .regular))
-                    .lineSpacing(4)
+                    .font(.system(size: resolvedSize, weight: bold ? .semibold : .regular, design: typography.fontDesign))
+                    .kerning(typography.kern)
+                    .lineSpacing(typography.lineSpacing)
                 if selectable {
                     placeholder.textSelection(.enabled)
                 } else {
@@ -2340,7 +2427,7 @@ public struct HTMLContentText: View {
             // Falls back to plain text if the HTML importer yields nothing, so a
             // failed import shows content instead of an endless spinner. Only real
             // imports are cached (a transient failure isn't pinned).
-            if let rendered = Self.render(html, baseSize: resolvedSize, bold: bold) {
+            if let rendered = Self.render(html, baseSize: resolvedSize, bold: bold, typography: typography) {
                 HTMLAttributedCache.shared.store(rendered, forKey: renderKey)
                 attributed = rendered
             } else {
@@ -2364,13 +2451,7 @@ public struct HTMLContentText: View {
         return result
     }
 
-    static var platformBodySize: CGFloat {
-        #if canImport(AppKit)
-        NSFont.preferredFont(forTextStyle: .body).pointSize
-        #else
-        UIFont.preferredFont(forTextStyle: .body).pointSize
-        #endif
-    }
+    static var platformBodySize: CGFloat { ReaderTypography.platformBodySize }
 
     /// The point size for a heading level (h1…h6), so headings render at the same
     /// size whether via the importer (`NativeArticleHeading`) or while streaming
@@ -2378,29 +2459,7 @@ public struct HTMLContentText: View {
     /// (title/title2/title3/headline/…) rather than arbitrary multiples, so
     /// headings match native typography and scale with Dynamic Type.
     static func headingSize(_ level: Int) -> CGFloat {
-        #if canImport(AppKit)
-        let style: NSFont.TextStyle
-        switch level {
-        case 1: style = .title1
-        case 2: style = .title2
-        case 3: style = .title3
-        case 4: style = .headline
-        case 5: style = .body
-        default: style = .subheadline
-        }
-        return NSFont.preferredFont(forTextStyle: style).pointSize
-        #else
-        let style: UIFont.TextStyle
-        switch level {
-        case 1: style = .title1
-        case 2: style = .title2
-        case 3: style = .title3
-        case 4: style = .headline
-        case 5: style = .body
-        default: style = .subheadline
-        }
-        return UIFont.preferredFont(forTextStyle: style).pointSize
-        #endif
+        ReaderTypography.platformDefault.headingSize(level)
     }
 
     /// Pre-imports the reader's text blocks into `HTMLAttributedCache` on the main
@@ -2410,7 +2469,12 @@ public struct HTMLContentText: View {
     /// article switch). Keys must match `renderKey` exactly per block type, or the
     /// warm is silently wasted. Nested quote/list children are warmed lazily.
     @MainActor
-    public static func warmReaderAttributedCache(html: String, baseURL: URL?, maxBlocks: Int? = nil) async {
+    public static func warmReaderAttributedCache(
+        html: String,
+        baseURL: URL?,
+        typography: ReaderTypography = .platformDefault,
+        maxBlocks: Int? = nil
+    ) async {
         let all = HTMLBlockCache.shared.blocks(html: html, baseURL: baseURL)
             ?? HTMLContentParser.parse(html, baseURL: baseURL)
         // Bound the pre-`.ready` warm to the above-the-fold blocks so a very long
@@ -2420,14 +2484,14 @@ public struct HTMLContentText: View {
             if Task.isCancelled { return }
             switch block {
             case .text(let fragment):
-                warmAttributed(fragment, baseSize: platformBodySize, bold: false)
+                warmAttributed(fragment, baseSize: typography.bodySize, bold: false, typography: typography)
             case .heading(let level, let fragment):
-                warmAttributed(fragment, baseSize: headingSize(level), bold: true)
+                warmAttributed(fragment, baseSize: typography.headingSize(level), bold: true, typography: typography)
             case .table(let table):
                 for row in table.rows {
                     for cell in row.cells {
                         if Task.isCancelled { return }
-                        warmAttributed(cell.html, baseSize: platformBodySize, bold: cell.isHeader)
+                        warmAttributed(cell.html, baseSize: typography.bodySize, bold: cell.isHeader, typography: typography)
                     }
                 }
             default:
@@ -2440,31 +2504,41 @@ public struct HTMLContentText: View {
     /// Imports one fragment into the cache if absent, at the exact key its view
     /// will request.
     @MainActor
-    private static func warmAttributed(_ html: String, baseSize: CGFloat, bold: Bool) {
-        let key = HTMLTextFlow.cacheKey(html: html, baseSize: baseSize, bold: bold)
+    private static func warmAttributed(_ html: String, baseSize: CGFloat, bold: Bool, typography: ReaderTypography) {
+        let key = HTMLTextFlow.cacheKey(html: html, baseSize: baseSize, bold: bold, typography: typography)
         guard HTMLAttributedCache.shared.value(forKey: key) == nil else { return }
-        if let rendered = render(html, baseSize: baseSize, bold: bold) {
+        if let rendered = render(html, baseSize: baseSize, bold: bold, typography: typography) {
             HTMLAttributedCache.shared.store(rendered, forKey: key)
         }
     }
 
-    private static func render(_ html: String, baseSize: CGFloat, bold: Bool) -> AttributedString? {
+    private static func render(
+        _ html: String,
+        baseSize: CGFloat,
+        bold: Bool,
+        typography: ReaderTypography = .platformDefault
+    ) -> AttributedString? {
         let prepared = HTMLTextFlow.preparedHTML(html)
         // Whitelisted inline fragments render natively (off-main-capable, no
         // WebKit machinery). Anything the native path can't reproduce exactly
         // returns nil and takes the WebKit importer below, byte-for-byte as
         // before — exotic HTML can never regress.
         if !NativeInlineHTMLRenderer.isDisabled,
-           let native = NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold) {
+           let native = NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold, typography: typography) {
             return native
         }
-        return webKitImport(prepared, baseSize: baseSize, bold: bold)
+        return webKitImport(prepared, baseSize: baseSize, bold: bold, typography: typography)
     }
 
     /// The classic WebKit importer pipeline (main-thread-only). `prepared` is
     /// the fragment after `HTMLTextFlow.preparedHTML`. Internal so the native
     /// renderer's differential tests can compare against it directly.
-    static func webKitImport(_ prepared: String, baseSize: CGFloat, bold: Bool) -> AttributedString? {
+    static func webKitImport(
+        _ prepared: String,
+        baseSize: CGFloat,
+        bold: Bool,
+        typography: ReaderTypography = .platformDefault
+    ) -> AttributedString? {
         guard let data = prepared.data(using: .utf8) else { return nil }
         let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
             .documentType: NSAttributedString.DocumentType.html,
@@ -2488,7 +2562,7 @@ public struct HTMLContentText: View {
                 font = finalCodeFont(baseSize: baseSize, bold: isBold)
                 monoRanges.append(range)
             } else {
-                font = finalBodyFont(baseSize: baseSize, bold: isBold, italic: isItalic)
+                font = finalBodyFont(baseSize: baseSize, bold: isBold, italic: isItalic, design: typography.design)
             }
             mutable.addAttribute(.font, value: font, range: range)
         }
@@ -2498,6 +2572,7 @@ public struct HTMLContentText: View {
         for range in monoRanges {
             mutable.addAttribute(.foregroundColor, value: NSColor.systemPink, range: range)
         }
+        HTMLTextFlow.applyKern(mutable, typography: typography)
         return try? AttributedString(mutable, including: \.appKit)
         #else
         var monoRanges: [NSRange] = []
@@ -2512,7 +2587,7 @@ public struct HTMLContentText: View {
                 font = finalCodeFont(baseSize: baseSize, bold: isBold)
                 monoRanges.append(range)
             } else {
-                font = finalBodyFont(baseSize: baseSize, bold: isBold, italic: isItalic)
+                font = finalBodyFont(baseSize: baseSize, bold: isBold, italic: isItalic, design: typography.design)
             }
             mutable.addAttribute(.font, value: font, range: range)
         }
@@ -2520,6 +2595,7 @@ public struct HTMLContentText: View {
         for range in monoRanges {
             mutable.addAttribute(.foregroundColor, value: UIColor.systemPink, range: range)
         }
+        HTMLTextFlow.applyKern(mutable, typography: typography)
         return try? AttributedString(mutable, including: \.uiKit)
         #endif
     }
@@ -2527,28 +2603,52 @@ public struct HTMLContentText: View {
     /// The exact final fonts both import paths emit. Shared helpers so the
     /// native renderer can never drift from what the WebKit remap produces.
     #if canImport(AppKit)
-    nonisolated static func finalBodyFont(baseSize: CGFloat, bold: Bool, italic: Bool) -> NSFont {
+    nonisolated static func finalBodyFont(
+        baseSize: CGFloat, bold: Bool, italic: Bool, design: ReaderFont = .system
+    ) -> NSFont {
         var traits: NSFontDescriptor.SymbolicTraits = []
         if bold { traits.insert(.bold) }
         if italic { traits.insert(.italic) }
-        let descriptor = NSFont.systemFont(ofSize: baseSize).fontDescriptor.withSymbolicTraits(traits)
-        return NSFont(descriptor: descriptor, size: baseSize) ?? NSFont.systemFont(ofSize: baseSize)
+        let base = applying(design: design.fontDesign, to: NSFont.systemFont(ofSize: baseSize), size: baseSize)
+        let descriptor = base.fontDescriptor.withSymbolicTraits(traits)
+        return NSFont(descriptor: descriptor, size: baseSize) ?? base
     }
 
     nonisolated static func finalCodeFont(baseSize: CGFloat, bold: Bool) -> NSFont {
         NSFont.monospacedSystemFont(ofSize: baseSize * 0.92, weight: bold ? .semibold : .regular)
     }
+
+    /// Maps a SwiftUI font design onto a concrete platform font. `.default`
+    /// returns the input untouched, so the system face stays byte-identical to
+    /// the pre-typography renderer; a design the platform can't resolve falls
+    /// back to the input rather than an undefined face.
+    nonisolated static func applying(design: Font.Design, to font: NSFont, size: CGFloat) -> NSFont {
+        guard design != .default else { return font }
+        let systemDesign: NSFontDescriptor.SystemDesign = design == .serif ? .serif : .monospaced
+        guard let descriptor = font.fontDescriptor.withDesign(systemDesign) else { return font }
+        return NSFont(descriptor: descriptor, size: size) ?? font
+    }
     #else
-    nonisolated static func finalBodyFont(baseSize: CGFloat, bold: Bool, italic: Bool) -> UIFont {
+    nonisolated static func finalBodyFont(
+        baseSize: CGFloat, bold: Bool, italic: Bool, design: ReaderFont = .system
+    ) -> UIFont {
         var traits: UIFontDescriptor.SymbolicTraits = []
         if bold { traits.insert(.traitBold) }
         if italic { traits.insert(.traitItalic) }
-        let base = UIFont.systemFont(ofSize: baseSize)
+        let base = applying(design: design.fontDesign, to: UIFont.systemFont(ofSize: baseSize), size: baseSize)
         return UIFont(descriptor: base.fontDescriptor.withSymbolicTraits(traits) ?? base.fontDescriptor, size: baseSize)
     }
 
     nonisolated static func finalCodeFont(baseSize: CGFloat, bold: Bool) -> UIFont {
         UIFont.monospacedSystemFont(ofSize: baseSize * 0.92, weight: bold ? .semibold : .regular)
+    }
+
+    /// See the AppKit twin above.
+    nonisolated static func applying(design: Font.Design, to font: UIFont, size: CGFloat) -> UIFont {
+        guard design != .default else { return font }
+        let systemDesign: UIFontDescriptor.SystemDesign = design == .serif ? .serif : .monospaced
+        guard let descriptor = font.fontDescriptor.withDesign(systemDesign) else { return font }
+        return UIFont(descriptor: descriptor, size: size)
     }
     #endif
 

@@ -2808,7 +2808,9 @@ public final class ReaderStore {
         await warmReaderBlocks(html: html, baseURL: baseURL)
         // Only the first blocks matter for a burst-free open; the rest import
         // lazily as they scroll into view (off the entry frame).
-        await HTMLContentText.warmReaderAttributedCache(html: html, baseURL: baseURL, maxBlocks: 14)
+        await HTMLContentText.warmReaderAttributedCache(
+            html: html, baseURL: baseURL, typography: .current(), maxBlocks: 14
+        )
     }
 
     /// Parses reader HTML into native blocks off the main actor and stores them in

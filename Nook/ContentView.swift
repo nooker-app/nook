@@ -1957,6 +1957,21 @@ private struct ReaderDetailView: View {
     @AppStorage("markReadOnOpen") private var markReadOnOpen = true
     @AppStorage("markReadDelaySeconds") private var markReadDelaySeconds = 3
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
+    // Typography settings drive the native reader body (family, size, leading,
+    // kern). Observed here so a settings change restyles the open article live.
+    @AppStorage("readerFont") private var readerFont = ReaderFont.system
+    @AppStorage("readerFontSize") private var readerFontSize = 18
+    @AppStorage("readerLineHeight") private var readerLineHeight = 1.7
+    @AppStorage("readerLetterSpacing") private var readerLetterSpacing = 0.0
+
+    private var readerTypography: ReaderTypography {
+        ReaderTypography(
+            font: readerFont,
+            fontSize: CGFloat(readerFontSize),
+            lineHeightMultiple: readerLineHeight,
+            letterSpacingEM: readerLetterSpacing
+        )
+    }
 
     // Translation (Apple Intelligence). Rich (contentHTML) articles stream an
     // in-place translation preserving markup; plain-body articles fall back to a
@@ -2225,7 +2240,7 @@ private struct ReaderDetailView: View {
         if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
             switch store.readerContentState(for: article) {
             case .ready(let html):
-                HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator)
+                HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
             case .failed, .gone:
                 VStack(alignment: .leading, spacing: 16) {
                     ReaderUnavailableNotice(
@@ -2247,13 +2262,14 @@ private struct ReaderDetailView: View {
     @ViewBuilder
     private func originalArticleBody(_ article: Article) -> some View {
         if let html = article.contentHTML {
-            HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator)
+            HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
         } else if isTranslated, let translatedBody {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(Array(translatedBody.enumerated()), id: \.offset) { _, paragraph in
                     Text(paragraph)
-                        .font(.body)
-                        .lineSpacing(4)
+                        .font(.system(size: readerTypography.bodySize, design: readerTypography.fontDesign))
+                        .kerning(readerTypography.kern)
+                        .lineSpacing(readerTypography.lineSpacing)
                         .textSelection(.enabled)
                 }
             }
@@ -2261,8 +2277,9 @@ private struct ReaderDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(article.bodyParagraphs, id: \.self) { paragraph in
                     Text(paragraph)
-                        .font(.body)
-                        .lineSpacing(4)
+                        .font(.system(size: readerTypography.bodySize, design: readerTypography.fontDesign))
+                        .kerning(readerTypography.kern)
+                        .lineSpacing(readerTypography.lineSpacing)
                         .textSelection(.enabled)
                 }
             }
@@ -3187,7 +3204,7 @@ private struct ReaderSettingsSections: View {
         } header: {
             Text("Typography")
         } footer: {
-            Text("These options apply when reading in reader mode.")
+            Text("Typography applies to the built-in article reader and to reader mode in the browser.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

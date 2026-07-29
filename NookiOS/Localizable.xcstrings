@@ -6026,34 +6026,6 @@
         }
       }
     },
-    "These options apply when reading in reader mode." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "These options apply when reading in reader mode."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "これらの設定はリーダーモードでの表示に適用されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "리더 모드로 글을 볼 때 적용되는 설정입니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这些选项在阅读模式下生效。"
-          }
-        }
-      }
-    },
     "This site doesn't seem to share its posts anywhere Nook can find. You can report it — feed rules for popular sites are added by hand." : {
       "localizations" : {
         "ja" : {
@@ -6762,6 +6734,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在检查你关注网站的最新文章。"
+          }
+        }
+      }
+    },
+    "Typography applies to the built-in article reader and to reader mode in the browser." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typography applies to the built-in article reader and to reader mode in the browser."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "타이포그래피는 기본 제공 글 리더와 브라우저의 리더 모드에 적용됩니다."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイポグラフィは内蔵の記事リーダーとブラウザのリーダーモードに適用されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排版设置适用于内置文章阅读器和浏览器中的阅读模式。"
           }
         }
       }

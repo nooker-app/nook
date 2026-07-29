@@ -17,6 +17,7 @@ public struct DeferredHTMLContentView: View {
     private let placeholderParagraphs: [String]
     private let selectable: Bool
     private var translator: NativeArticleTranslator?
+    private let typography: ReaderTypography
     @State private var blocksReady: Bool
 
     public init(
@@ -24,13 +25,15 @@ public struct DeferredHTMLContentView: View {
         baseURL: URL? = nil,
         placeholderParagraphs: [String],
         selectable: Bool = true,
-        translator: NativeArticleTranslator? = nil
+        translator: NativeArticleTranslator? = nil,
+        typography: ReaderTypography = .platformDefault
     ) {
         self.html = html
         self.baseURL = baseURL
         self.placeholderParagraphs = placeholderParagraphs
         self.selectable = selectable
         self.translator = translator
+        self.typography = typography
         // Cheap dictionary probe — no parse. True for warmed/revisited articles.
         _blocksReady = State(initialValue: HTMLBlockCache.shared.blocks(html: html, baseURL: baseURL) != nil)
     }
@@ -40,13 +43,14 @@ public struct DeferredHTMLContentView: View {
         // against; never swap arrays under it. (It only becomes active from a
         // user action well after the open, when the cache is already warm.)
         if blocksReady || translator?.isActive == true {
-            HTMLContentView(html: html, baseURL: baseURL, selectable: selectable, translator: translator)
+            HTMLContentView(html: html, baseURL: baseURL, selectable: selectable, translator: translator, typography: typography)
         } else {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(placeholderParagraphs, id: \.self) { paragraph in
                     Text(paragraph)
-                        .font(.body)
-                        .lineSpacing(4)
+                        .font(.system(size: typography.bodySize, design: typography.fontDesign))
+                        .kerning(typography.kern)
+                        .lineSpacing(typography.lineSpacing)
                 }
             }
             .task {
@@ -65,7 +69,9 @@ public struct DeferredHTMLContentView: View {
                 }.value
                 // Import the first screenful's styled text while the placeholder
                 // shows, so the swap renders styled without an importer burst.
-                await HTMLContentText.warmReaderAttributedCache(html: html, baseURL: baseURL, maxBlocks: 14)
+                await HTMLContentText.warmReaderAttributedCache(
+                    html: html, baseURL: baseURL, typography: typography, maxBlocks: 14
+                )
                 _ = await grace
                 guard !Task.isCancelled else { return }
                 blocksReady = true

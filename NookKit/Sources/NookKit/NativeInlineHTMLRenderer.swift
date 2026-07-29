@@ -41,7 +41,12 @@ enum NativeInlineHTMLRenderer {
     /// `<br>` is already U+2028). Returns nil for anything outside the
     /// whitelist, malformed input, or an empty result — the caller must then
     /// use the WebKit importer.
-    static func importPrepared(_ prepared: String, baseSize: CGFloat, bold: Bool) -> AttributedString? {
+    static func importPrepared(
+        _ prepared: String,
+        baseSize: CGFloat,
+        bold: Bool,
+        typography: ReaderTypography = .platformDefault
+    ) -> AttributedString? {
         guard prepared.utf8.count <= maxFragmentBytes else { return nil }
         guard !containsStrongRTL(prepared) else { return nil }
         guard let paragraphs = tokenize(prepared), !paragraphs.isEmpty else { return nil }
@@ -49,17 +54,18 @@ enum NativeInlineHTMLRenderer {
         let mutable = NSMutableAttributedString()
         for (index, paragraph) in paragraphs.enumerated() {
             if index > 0 {
-                mutable.append(NSAttributedString(string: "\n", attributes: attributes(for: Style(), baseSize: baseSize, boldParam: bold)))
+                mutable.append(NSAttributedString(string: "\n", attributes: attributes(for: Style(), baseSize: baseSize, boldParam: bold, design: typography.design)))
             }
             for run in paragraph {
                 mutable.append(NSAttributedString(
                     string: run.text,
-                    attributes: attributes(for: run.style, baseSize: baseSize, boldParam: bold)
+                    attributes: attributes(for: run.style, baseSize: baseSize, boldParam: bold, design: typography.design)
                 ))
             }
         }
 
         HTMLTextFlow.normalize(mutable, baseSize: baseSize)
+        HTMLTextFlow.applyKern(mutable, typography: typography)
         guard mutable.length > 0 else { return nil }
         #if canImport(AppKit)
         return try? AttributedString(mutable, including: \.appKit)
@@ -74,7 +80,7 @@ enum NativeInlineHTMLRenderer {
     /// `.foregroundColor`; links add `.link` + accent color + soft underline;
     /// code uses the shared mono font and the pink tint, which wins over the
     /// link color (the tail applies pink after `styleLinks`).
-    private static func attributes(for style: Style, baseSize: CGFloat, boldParam: Bool) -> [NSAttributedString.Key: Any] {
+    private static func attributes(for style: Style, baseSize: CGFloat, boldParam: Bool, design: ReaderFont) -> [NSAttributedString.Key: Any] {
         var attrs: [NSAttributedString.Key: Any] = [:]
         let isBold = style.bold || boldParam
 
@@ -92,7 +98,7 @@ enum NativeInlineHTMLRenderer {
             attrs[.font] = HTMLContentText.finalCodeFont(baseSize: baseSize, bold: isBold)
             attrs[.foregroundColor] = codeColor
         } else {
-            attrs[.font] = HTMLContentText.finalBodyFont(baseSize: baseSize, bold: isBold, italic: style.italic)
+            attrs[.font] = HTMLContentText.finalBodyFont(baseSize: baseSize, bold: isBold, italic: style.italic, design: design)
             attrs[.foregroundColor] = plainColor
         }
         if let link = style.link {

@@ -401,7 +401,7 @@ private struct ReaderSettingsScreen: View {
             } header: {
                 Text("Typography")
             } footer: {
-                Text("These options apply when reading in reader mode.")
+                Text("Typography applies to the built-in article reader and to reader mode in the browser.")
             }
             .warmRows()
 

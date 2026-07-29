@@ -537,7 +537,9 @@ struct ReaderDetailView: View {
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled, !nativeTranslator.isActive else { return }
             if let html = renderedReaderHTML(for: article) {
-                await HTMLContentText.warmReaderAttributedCache(html: html, baseURL: article.url)
+                await HTMLContentText.warmReaderAttributedCache(
+                    html: html, baseURL: article.url, typography: readerStyle.typography
+                )
             }
         }
         // If reader-mode content finishes extracting AFTER translation was turned
@@ -631,7 +633,7 @@ struct ReaderDetailView: View {
         if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
             switch store.readerContentState(for: article) {
             case .ready(let html):
-                HTMLContentView(html: html, baseURL: article.url, selectable: false, translator: nativeTranslator)
+                HTMLContentView(html: html, baseURL: article.url, selectable: false, translator: nativeTranslator, typography: readerStyle.typography)
             case .failed, .gone:
                 VStack(alignment: .leading, spacing: 14) {
                     ReaderUnavailableNotice(
@@ -661,14 +663,16 @@ struct ReaderDetailView: View {
                 baseURL: article.url,
                 placeholderParagraphs: article.bodyParagraphs,
                 selectable: false,
-                translator: nativeTranslator
+                translator: nativeTranslator,
+                typography: readerStyle.typography
             )
         } else if isTranslated, let translatedBody {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(Array(translatedBody.enumerated()), id: \.offset) { _, paragraph in
                     Text(paragraph)
-                        .font(.body)
-                        .lineSpacing(4)
+                        .font(.system(size: readerStyle.typography.bodySize, design: readerStyle.typography.fontDesign))
+                        .kerning(readerStyle.typography.kern)
+                        .lineSpacing(readerStyle.typography.lineSpacing)
                         .textSelection(.enabled)
                 }
             }
@@ -676,8 +680,9 @@ struct ReaderDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(article.bodyParagraphs, id: \.self) { paragraph in
                     Text(paragraph)
-                        .font(.body)
-                        .lineSpacing(4)
+                        .font(.system(size: readerStyle.typography.bodySize, design: readerStyle.typography.fontDesign))
+                        .kerning(readerStyle.typography.kern)
+                        .lineSpacing(readerStyle.typography.lineSpacing)
                 }
             }
         }
