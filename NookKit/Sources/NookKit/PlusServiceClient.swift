@@ -100,6 +100,35 @@ public struct PlusServiceClient: Sendable {
         }
     }
 
+    /// Publishes an article. The service writes the PDS record and schedules
+    /// rendering; a success here means the authoritative record exists.
+    public func createArticle(
+        publication: String,
+        title: String,
+        slug: String,
+        markdown: String,
+        summary: String
+    ) async throws -> Components.Schemas.Article {
+        guard session() != nil else { throw PlusServiceError.sessionInvalid }
+        var input = Components.Schemas.ArticleInput(
+            publication: publication,
+            title: title,
+            content: markdown,
+            slug: slug
+        )
+        if !summary.isEmpty {
+            input.summary = summary
+        }
+        do {
+            return try await client.createArticle(
+                headers: .init(Idempotency_hyphen_Key: UUID().uuidString),
+                body: .json(input)
+            ).created.body.json
+        } catch let error as ClientError {
+            throw PlusServiceError.transport(error)
+        }
+    }
+
     /// Deletes an article, conditioned on the CID the caller last read.
     ///
     /// Passing the CID is what prevents deleting a revision the user has not

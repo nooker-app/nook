@@ -2921,7 +2921,7 @@ private struct OPMLImportView: View {
 /// Reading holds reading + reader typography, Organize holds Article Rules +
 /// Filters. Rendered as a native `NavigationSplitView` source list + detail Form.
 private enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, reading, feeds, organize, offline, experimental, about
+    case general, reading, feeds, organize, offline, plus, experimental, about
     var id: Self { self }
 
     var title: String {
@@ -2931,6 +2931,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .feeds: String(localized: "Feeds")
         case .organize: String(localized: "Organize")
         case .offline: String(localized: "Offline")
+        case .plus: String(localized: "Publishing")
         case .experimental: String(localized: "Experimental")
         case .about: String(localized: "About")
         }
@@ -2943,6 +2944,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .feeds: "dot.radiowaves.up.forward"
         case .organize: "tag"
         case .offline: "arrow.down.circle"
+        case .plus: "square.and.pencil"
         case .experimental: "flask"
         case .about: "info.circle"
         }
@@ -2984,6 +2986,7 @@ struct ReaderSettingsView: View {
         case .feeds: settingsForm { FeedsSettingsSections() }
         case .organize: settingsForm { ArticleRulesSettingsSections(); FiltersSettingsSections() }
         case .offline: settingsForm { OfflineSettingsSections() }
+        case .plus: settingsForm { PlusSettingsContent() }
         case .experimental: settingsForm { ExperimentalSettingsSections() }
         case .about: AboutSettingsPane()
         }
