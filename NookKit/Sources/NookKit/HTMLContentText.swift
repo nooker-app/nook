@@ -2634,6 +2634,15 @@ public struct HTMLContentText: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Reader text always claims the full height its width needs. Without this
+        // SwiftUI may keep a height measured against a different width and
+        // truncate to fit it — the block then renders as a clipped line ending in
+        // an ellipsis with the space for the missing lines left blank underneath.
+        // It survived pinning the list marker column because the conflicting
+        // proposals can come from anywhere above (a `LazyVStack` row realized
+        // mid-scroll, a nested list inside a list item); asking the text for its
+        // ideal height makes it immune to where they come from.
+        .fixedSize(horizontal: false, vertical: true)
         .task(id: renderKey) {
             // Reuse a prior import of the same fragment (revisits/rebuilds) so the
             // main-thread WebKit importer doesn't re-run for every block.
