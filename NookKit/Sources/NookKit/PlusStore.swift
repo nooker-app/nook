@@ -87,6 +87,11 @@ public final class PlusStore {
     /// True when signup succeeded but the handle has not propagated yet. The
     /// account works regardless, so this is a note rather than a failure.
     public private(set) var handleResolutionPending = false
+    /// True when signup found the account already created and the submitted
+    /// password did not open it. Nothing is broken — the remedy is to sign in
+    /// with the original password, so the UI offers that instead of a retry
+    /// that cannot succeed.
+    public private(set) var signupNeedsSignIn = false
 
     private var environment: PlusEnvironment
     private var pds: PlusPDSClient
@@ -169,12 +174,15 @@ public final class PlusStore {
     public func signUp(invitationCode: String, label: String, email: String, password: String) async {
         let key = signupKey ?? UUID().uuidString
         signupKey = key
+        signupNeedsSignIn = false
+        isWorking = true
+        failure = nil
 
-        await perform {
-            let result = try await self.service.signUp(
+        do {
+            let result = try await service.signUp(
                 idempotencyKey: key,
                 invitationCode: invitationCode.trimmingCharacters(in: .whitespacesAndNewlines),
-                handle: self.fullHandle(for: label),
+                handle: fullHandle(for: label),
                 displayName: label,
                 email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 password: password
@@ -187,10 +195,23 @@ public final class PlusStore {
             )
             _ = PlusCredential.store(session)
             self.session = session
-            self.handleResolutionPending = !(result.handleResolves ?? true)
-            self.signupKey = nil
-            await self.loadContent()
+            handleResolutionPending = !(result.handleResolves ?? true)
+            signupKey = nil
+            await loadContent()
+        } catch PlusServiceError.sessionInvalid {
+            // On a signup there is no session to have expired. The service uses
+            // this to say the account exists but this password does not open
+            // it, which happens whenever a retry carries a password different
+            // from the one that created the account.
+            signupNeedsSignIn = true
+            failure = String(
+                localized: "An account with this name already exists. Sign in with the password you chose when you created it.",
+                bundle: .module
+            )
+        } catch {
+            failure = message(for: error)
         }
+        isWorking = false
     }
 
     /// The publication's public URL, once known.

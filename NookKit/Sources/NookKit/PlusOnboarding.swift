@@ -22,16 +22,43 @@ public struct PlusOnboardingView: View {
         case address
         case credentials
         case working
+        // Reached only when setup finds the account already created: the
+        // remedy is a password, not another attempt at signing up.
+        case signIn
         case done
+
+        /// How many steps the user actually fills in. Setting up, signing in,
+        /// and the finish screen are outcomes, not steps to count towards.
+        static let formCount = 4
+
+        /// 1-based position among the filled-in steps, nil for the outcomes.
+        var position: Int? {
+            switch self {
+            case .intro: 1
+            case .invitation: 2
+            case .address: 3
+            case .credentials: 4
+            case .working, .signIn, .done: nil
+            }
+        }
+
+        var completedFraction: Double {
+            switch self {
+            case .working, .signIn: 1
+            case .done: 1
+            default: Double((position ?? 1) - 1) / Double(Self.formCount)
+            }
+        }
 
         var progressLabel: String {
             switch self {
-            case .intro: String(localized: "Welcome")
-            case .invitation: String(localized: "Invitation")
-            case .address: String(localized: "Your address")
-            case .credentials: String(localized: "Sign-in details")
-            case .working: String(localized: "Setting up")
-            case .done: String(localized: "Ready")
+            case .intro: String(localized: "Welcome", bundle: .module)
+            case .invitation: String(localized: "Invitation", bundle: .module)
+            case .address: String(localized: "Your address", bundle: .module)
+            case .credentials: String(localized: "Sign-in details", bundle: .module)
+            case .working: String(localized: "Setting up", bundle: .module)
+            case .signIn: String(localized: "Sign in", bundle: .module)
+            case .done: String(localized: "Ready", bundle: .module)
             }
         }
     }
@@ -47,6 +74,8 @@ public struct PlusOnboardingView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    /// Lets the user read what a generated password actually put in the field.
+    @State private var passwordVisible = false
 
     enum Availability: Equatable {
         case unknown
@@ -58,17 +87,59 @@ public struct PlusOnboardingView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            header
-            Divider()
-            content
-            Spacer(minLength: 0)
-            footer
-        }
-        .padding(24)
-        .frame(minWidth: 380, minHeight: 460)
-        .task { await useInviteLinkIfPresent() }
+        shell.task { await useInviteLinkIfPresent() }
     }
+
+    /// iOS gets a grouped form with the step's action pinned to the bottom,
+    /// which is how every other setup flow on the platform behaves. macOS keeps
+    /// the panel layout, where a bottom-right button is the convention instead.
+    @ViewBuilder
+    private var shell: some View {
+        #if os(iOS)
+            NavigationStack {
+                iOSBody
+            }
+        #else
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                Divider()
+                content
+                Spacer(minLength: 0)
+                footer
+            }
+            .padding(24)
+            .frame(minWidth: 380, minHeight: 460)
+        #endif
+    }
+
+    #if os(iOS)
+        private var iOSBody: some View {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle(Text("Set up publishing", bundle: .module))
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .top, spacing: 0) { stepIndicator }
+            .safeAreaInset(edge: .bottom) { bottomBar }
+            .toolbar {
+                // Setup is resumable, so leaving part-way is safe and should not
+                // look like a trap.
+                if step != .done {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { onFinished() } label: { Text("Cancel", bundle: .module) }
+                    }
+                }
+            }
+        }
+    #endif
 
     /// Consumes a code that arrived by link, checks it, and moves straight to
     /// choosing a name.
@@ -84,6 +155,48 @@ public struct PlusOnboardingView: View {
         invitationChecked = true
         step = store.invitationAccepted ? .address : .invitation
     }
+
+    #if os(iOS)
+        /// Named position rather than a bare bar: "step 2 of 4" tells the user
+        /// how much is left, which a progress bar alone does not.
+        private var stepIndicator: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(step.progressLabel)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if let position = step.position {
+                        Text("Step \(position) of \(Step.formCount)", bundle: .module)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                ProgressView(value: step.completedFraction)
+                    .progressViewStyle(.linear)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(.bar)
+        }
+
+        private var bottomBar: some View {
+            VStack(spacing: 10) {
+                primaryButton
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                if step != .intro && step != .working && step != .done && step != .signIn {
+                    Button { back() } label: { Text("Back", bundle: .module) }
+                        .font(.subheadline)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(.bar)
+        }
+    #endif
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -103,6 +216,7 @@ public struct PlusOnboardingView: View {
         case .address: address
         case .credentials: credentials
         case .working: working
+        case .signIn: signIn
         case .done: done
         }
     }
@@ -240,10 +354,8 @@ public struct PlusOnboardingView: View {
                 "Password",
                 "Protects your repository. Nook stores it nowhere: it goes straight to the host that keeps your posts."
             )
-            SecureField(text: $password) { Text("Password", bundle: .module) }
-                .textFieldStyle(.roundedBorder)
-            SecureField(text: $confirmPassword) { Text("Repeat password", bundle: .module) }
-                .textFieldStyle(.roundedBorder)
+            passwordField(text: $password, label: Text("Password", bundle: .module))
+            passwordField(text: $confirmPassword, label: Text("Repeat password", bundle: .module))
 
             if !password.isEmpty && password.count < 8 {
                 Text("At least 8 characters.", bundle: .module)
@@ -254,6 +366,59 @@ public struct PlusOnboardingView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+
+            Text("Save it somewhere safe. It is the only way back into your repository, and Nook cannot reset it for you.", bundle: .module)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// A password row that can be read.
+    ///
+    /// Two reasons it is not a bare `SecureField`. A generated password is
+    /// filled in without the user ever seeing it, so there has to be a way to
+    /// look at what is about to become the only key to their repository. And on
+    /// iOS the concealed bullets are drawn in a colour that does not follow the
+    /// dark appearance, which made a filled field look nearly empty; a field
+    /// showing real glyphs uses the label colour and does not have that problem.
+    @ViewBuilder
+    private func passwordField(text: Binding<String>, label: Text) -> some View {
+        let field = Group {
+            if passwordVisible {
+                TextField(text: text) { label }
+            } else {
+                SecureField(text: text) { label }
+            }
+        }
+        .textContentType(.newPassword)
+        .foregroundStyle(.primary)
+        .autocorrectionDisabled()
+        #if os(iOS)
+            .textInputAutocapitalization(.never)
+        #endif
+
+        HStack(spacing: 8) {
+            #if os(iOS)
+                field
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, 12)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 10))
+            #else
+                field.textFieldStyle(.roundedBorder)
+            #endif
+
+            Button {
+                passwordVisible.toggle()
+            } label: {
+                Image(systemName: passwordVisible ? "eye.slash" : "eye")
+                    .accessibilityLabel(
+                        passwordVisible
+                            ? Text("Hide password", bundle: .module)
+                            : Text("Show password", bundle: .module)
+                    )
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -266,6 +431,31 @@ public struct PlusOnboardingView: View {
             if let failure = store.failure {
                 Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
                     .foregroundStyle(.red)
+                    .font(.callout)
+            }
+        }
+    }
+
+    private var signIn: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            explain(
+                "This name is already yours",
+                "The account was created on an earlier attempt, so there is nothing left to set up. Sign in with the password you chose then."
+            )
+            LabeledContent {
+                Text(store.fullHandle(for: label))
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+            } label: {
+                Text("Your handle", bundle: .module)
+            }
+            .font(.caption)
+
+            passwordField(text: $password, label: Text("Password", bundle: .module))
+
+            if let failure = store.failure {
+                Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
+                    .foregroundStyle(.orange)
                     .font(.callout)
             }
         }
@@ -348,6 +538,10 @@ public struct PlusOnboardingView: View {
         case .working:
             Button { Task { await createAccount() } } label: { Text("Try Again", bundle: .module) }
                 .disabled(store.isWorking || store.failure == nil)
+        case .signIn:
+            Button { Task { await signInInstead() } } label: { Text("Sign In", bundle: .module) }
+                .keyboardShortcut(.defaultAction)
+                .disabled(password.isEmpty || store.isWorking)
         case .done:
             Button { onFinished() } label: { Text("Start Writing", bundle: .module) }
                 .keyboardShortcut(.defaultAction)
@@ -390,6 +584,13 @@ public struct PlusOnboardingView: View {
     }
 
     private func createAccount() async {
+        // A retry with no password cannot succeed and would be reported as a
+        // rejected password, which is not what went wrong.
+        guard !password.isEmpty else {
+            step = .credentials
+            return
+        }
+
         step = .working
         await store.signUp(
             invitationCode: invitationCode,
@@ -397,17 +598,45 @@ public struct PlusOnboardingView: View {
             email: email,
             password: password
         )
-        // The password has served its purpose and must not linger in view state.
-        password = ""
-        confirmPassword = ""
-        step = store.isSignedIn ? .done : .working
+
+        if store.isSignedIn {
+            // Only now has the password served its purpose. Clearing it on
+            // failure instead would leave "Try Again" nothing to send.
+            password = ""
+            confirmPassword = ""
+            passwordVisible = false
+            step = .done
+        } else if store.signupNeedsSignIn {
+            password = ""
+            confirmPassword = ""
+            step = .signIn
+        } else {
+            step = .working
+        }
+    }
+
+    private func signInInstead() async {
+        await store.signIn(handle: store.fullHandle(for: label), password: password)
+        if store.isSignedIn {
+            password = ""
+            passwordVisible = false
+            step = .done
+        }
     }
 
     @ViewBuilder
     private func explain(_ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        let block = VStack(alignment: .leading, spacing: 3) {
             Text(title, bundle: .module).font(.subheadline.weight(.semibold))
             Text(detail, bundle: .module).font(.callout).foregroundStyle(.secondary)
         }
+        #if os(iOS)
+            block
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
+        #else
+            block
+        #endif
     }
 }

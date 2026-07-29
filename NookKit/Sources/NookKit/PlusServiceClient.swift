@@ -80,11 +80,11 @@ public struct PlusServiceClient: Sendable {
     /// Whether an invitation code is currently usable. Unauthenticated: it runs
     /// before an account exists.
     public func verifyInvitation(code: String) async throws -> Bool {
-        do {
-            return try await client.verifyInvitation(body: .json(.init(code: code)))
-                .ok.body.json.redeemable
-        } catch let error as ClientError {
-            throw PlusServiceError.transport(error)
+        switch try await send({ try await client.verifyInvitation(body: .json(.init(code: code))) }) {
+        case .ok(let ok):
+            return try ok.body.json.redeemable
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
         }
     }
 
@@ -92,11 +92,11 @@ public struct PlusServiceClient: Sendable {
     public func handleAvailability(handle: String) async throws
         -> Operations.checkHandleAvailability.Output.Ok.Body.jsonPayload
     {
-        do {
-            return try await client.checkHandleAvailability(query: .init(handle: handle))
-                .ok.body.json
-        } catch let error as ClientError {
-            throw PlusServiceError.transport(error)
+        switch try await send({ try await client.checkHandleAvailability(query: .init(handle: handle)) }) {
+        case .ok(let ok):
+            return try ok.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
         }
     }
 
@@ -112,8 +112,8 @@ public struct PlusServiceClient: Sendable {
         email: String,
         password: String
     ) async throws -> Operations.signup.Output.Created.Body.jsonPayload {
-        do {
-            return try await client.signup(
+        let output = try await send({
+            try await client.signup(
                 headers: .init(Idempotency_hyphen_Key: idempotencyKey),
                 body: .json(
                     .init(
@@ -123,19 +123,24 @@ public struct PlusServiceClient: Sendable {
                         email: email,
                         password: password
                     ))
-            ).created.body.json
-        } catch let error as ClientError {
-            throw PlusServiceError.transport(error)
+            )
+        })
+        switch output {
+        case .created(let created):
+            return try created.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
         }
     }
 
     /// The signed-in member's state.
     public func member() async throws -> Components.Schemas.Member {
         guard session() != nil else { throw PlusServiceError.sessionInvalid }
-        do {
-            return try await client.getMe().ok.body.json
-        } catch let error as ClientError {
-            throw PlusServiceError.transport(error)
+        switch try await send({ try await client.getMe() }) {
+        case .ok(let ok):
+            return try ok.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
         }
     }
 
@@ -158,13 +163,18 @@ public struct PlusServiceClient: Sendable {
         if !summary.isEmpty {
             input.summary = summary
         }
-        do {
-            return try await client.createArticle(
+        let body = input
+        let output = try await send({
+            try await client.createArticle(
                 headers: .init(Idempotency_hyphen_Key: UUID().uuidString),
-                body: .json(input)
-            ).created.body.json
-        } catch let error as ClientError {
-            throw PlusServiceError.transport(error)
+                body: .json(body)
+            )
+        })
+        switch output {
+        case .created(let created):
+            return try created.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
         }
     }
 
@@ -175,13 +185,17 @@ public struct PlusServiceClient: Sendable {
     /// not optional here even though the API allows it.
     public func deleteArticle(recordKey: String, cid: String) async throws {
         guard session() != nil else { throw PlusServiceError.sessionInvalid }
-        do {
-            _ = try await client.deleteArticle(
+        let output = try await send({
+            try await client.deleteArticle(
                 path: .init(rkey: recordKey),
                 headers: .init(If_hyphen_Match: quoted(cid))
-            ).noContent
-        } catch let error as ClientError {
-            throw PlusServiceError.transport(error)
+            )
+        })
+        switch output {
+        case .noContent:
+            return
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
         }
     }
 
@@ -194,10 +208,31 @@ public struct PlusServiceClient: Sendable {
         -> Components.Schemas.DisconnectionReceipt
     {
         guard session() != nil else { throw PlusServiceError.sessionInvalid }
-        do {
-            return try await client.requestServiceDisconnection(
+        let output = try await send({
+            try await client.requestServiceDisconnection(
                 headers: .init(Idempotency_hyphen_Key: idempotencyKey)
-            ).accepted.body.json
+            )
+        })
+        switch output {
+        case .accepted(let accepted):
+            return try accepted.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
+        }
+    }
+
+    /// Runs a generated call, turning a transport failure into `transport`.
+    ///
+    /// The output itself is returned unexamined so each caller can map the
+    /// contract's problem response. Reaching for `.ok`/`.created` instead would
+    /// throw the generated client's own unexpected-response error, whose
+    /// description is a dump of Swift types — the opposite of what a person
+    /// reading a failure needs.
+    private func send<Output>(
+        _ call: @Sendable () async throws -> Output
+    ) async throws -> Output {
+        do {
+            return try await call()
         } catch let error as ClientError {
             throw PlusServiceError.transport(error)
         }
@@ -211,6 +246,14 @@ public struct PlusServiceClient: Sendable {
 }
 
 extension PlusServiceError {
+    /// Maps a problem document to the case a caller should act on.
+    public static func from(_ response: Components.Responses.Problem) -> PlusServiceError {
+        switch response.body {
+        case .application_problem_plus_json(let problem):
+            return from(problem)
+        }
+    }
+
     /// Maps a problem document to the case a caller should act on.
     public static func from(_ problem: Components.Schemas.Problem) -> PlusServiceError {
         let type = ProblemType(unchecked: problem._type)
