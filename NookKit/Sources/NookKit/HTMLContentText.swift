@@ -846,8 +846,88 @@ enum HTMLContentParser {
     private static func appendText(_ html: String, to blocks: inout [HTMLContentBlock]) {
         guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !plainText(html).isEmpty else { return }
-        blocks.append(.text(html))
+        for fragment in paragraphFragments(of: html) {
+            guard !plainText(fragment).isEmpty else { continue }
+            blocks.append(.text(fragment))
+        }
     }
+
+    /// Splits a run of body HTML into one fragment per top-level `<p>`, so every
+    /// paragraph becomes its own block.
+    ///
+    /// Paragraph breaks used to live *inside* a single `.text` block, carried only
+    /// by `NSParagraphStyle.paragraphSpacing`. SwiftUI's `Text` ignores that
+    /// attribute — 40pt of it changes the rendered height by a measured 0 — so
+    /// consecutive paragraphs ran together with nothing but a line break between
+    /// them at every font size. As separate blocks they collapse margins through
+    /// `HTMLBlockSpacing` like every other pair of blocks, which is also the only
+    /// way the "same rhythm however the parser split it" promise is actually kept.
+    ///
+    /// Only a clean sequence of top-level `<p>` elements is split, matching the
+    /// model `NativeInlineHTMLRenderer.tokenize` already enforces. Anything looser
+    /// — bare text mixed with paragraphs, implied paragraph closes, `<div>`-per-
+    /// paragraph markup — falls back to one fragment, so this never reinterprets
+    /// markup the renderer would refuse.
+    static func paragraphFragments(of html: String) -> [String] {
+        // Most runs between structural blocks are a single paragraph or none at
+        // all; skip the tag scan entirely for those.
+        guard html.range(of: "<p", options: [.caseInsensitive]) != nil else { return [html] }
+
+        let source = html as NSString
+        let matches = tagRegex.matches(in: html, range: NSRange(location: 0, length: source.length))
+        guard !matches.isEmpty else { return [html] }
+
+        func hasVisibleContent(from start: Int, to end: Int) -> Bool {
+            guard end > start else { return false }
+            let text = source.substring(with: NSRange(location: start, length: end - start))
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        var fragments: [String] = []
+        var paragraphStart: Int?
+        var cursor = 0
+
+        for match in matches {
+            let isClosing = source.substring(with: match.range(at: 1)) == "/"
+            let name = source.substring(with: match.range(at: 2)).lowercased()
+            let tagEnd = match.range.location + match.range.length
+
+            // `</p>` cannot legally appear inside a paragraph, so it closes the
+            // open one even when the source left inline tags unclosed.
+            if isClosing, name == "p" {
+                guard let start = paragraphStart else { return [html] }
+                fragments.append(source.substring(with: NSRange(location: start, length: tagEnd - start)))
+                paragraphStart = nil
+                cursor = tagEnd
+                continue
+            }
+
+            if paragraphStart == nil {
+                // Between paragraphs only whitespace is tolerated; loose text or
+                // any other element means this run isn't a paragraph sequence.
+                guard !hasVisibleContent(from: cursor, to: match.range.location) else { return [html] }
+                guard name == "p", !isClosing else { return [html] }
+                paragraphStart = match.range.location
+            } else if name == "p", !isClosing {
+                // An implied close (`<p>a<p>b`); the renderer declines to recover
+                // from these, so this declines too.
+                return [html]
+            }
+            cursor = tagEnd
+        }
+
+        guard paragraphStart == nil,
+              !hasVisibleContent(from: cursor, to: source.length),
+              !fragments.isEmpty
+        else { return [html] }
+        return fragments
+    }
+
+    /// Compiled once, like `blockRegex` — this runs over every body text run.
+    private static let tagRegex = try! NSRegularExpression(
+        pattern: #"<\s*(/?)\s*([a-zA-Z][a-zA-Z0-9]*)[^>]*>"#,
+        options: [.caseInsensitive, .dotMatchesLineSeparators]
+    )
 
     // MARK: Tag helpers
 

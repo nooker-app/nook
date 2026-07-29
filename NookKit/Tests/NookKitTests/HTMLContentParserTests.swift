@@ -4,6 +4,75 @@ import Testing
 
 @Suite("Native article HTML blocks")
 struct HTMLContentParserTests {
+    @Test("Consecutive paragraphs become separate blocks")
+    func splitsParagraphRuns() {
+        // These used to arrive as one block whose internal paragraph breaks were
+        // carried by NSParagraphStyle.paragraphSpacing — an attribute SwiftUI's
+        // Text ignores, so the paragraphs ran together at every font size.
+        let blocks = HTMLContentParser.parse(
+            "<p>First paragraph.</p>\n<p>Second <em>paragraph</em>.</p>  <p>Third.</p>",
+            baseURL: nil
+        )
+
+        #expect(blocks.count == 3)
+        for (index, expected) in ["First", "Second", "Third"].enumerated() {
+            guard case .text(let html) = blocks[index] else {
+                Issue.record("Block \(index) is not text: \(blocks[index])")
+                continue
+            }
+            #expect(html.contains(expected))
+        }
+    }
+
+    @Test("Paragraph splitting survives inline markup the source left unclosed")
+    func splitsDespiteUnclosedInlineTags() {
+        let blocks = HTMLContentParser.parse("<p>One <b>bold</p><p>Two</p>", baseURL: nil)
+
+        #expect(blocks.count == 2)
+    }
+
+    @Test("A paragraph run keeps its place among structural blocks")
+    func splitParagraphsStayInDocumentOrder() {
+        let blocks = HTMLContentParser.parse(
+            "<p>Intro one.</p><p>Intro two.</p><h2>Heading</h2><p>Body one.</p><p>Body two.</p>",
+            baseURL: nil
+        )
+
+        #expect(blocks.count == 5)
+        guard case .text = blocks[0], case .text = blocks[1],
+              case .heading(let level, _) = blocks[2],
+              case .text = blocks[3], case .text = blocks[4] else {
+            Issue.record("Unexpected order: \(blocks)")
+            return
+        }
+        #expect(level == 2)
+    }
+
+    @Test("Markup outside the paragraph model is left as one block")
+    func leavesLooserMarkupIntact() {
+        // Each of these is something NativeInlineHTMLRenderer.tokenize also
+        // declines to interpret, so the parser must not split them either — the
+        // two have to agree on what a paragraph is.
+        let cases = [
+            "Loose text <p>and a paragraph.</p>",
+            "<p>Implied close.<p>Second.",
+            "<div>Paragraph-shaped div.</div><div>Another.</div>",
+            "<p>Trailing text after.</p> and then more prose",
+            "Just one run of prose with no paragraph tags at all",
+        ]
+        for html in cases {
+            let blocks = HTMLContentParser.parse(html, baseURL: nil)
+            #expect(blocks.count == 1, "expected a single block for: \(html) — got \(blocks.count)")
+        }
+    }
+
+    @Test("Empty paragraphs are dropped rather than becoming blank blocks")
+    func dropsEmptyParagraphs() {
+        let blocks = HTMLContentParser.parse("<p>Real text.</p><p></p><p>   </p><p>More.</p>", baseURL: nil)
+
+        #expect(blocks.count == 2)
+    }
+
     @Test("Preserves CSS-Tricks-style media in article order")
     func preservesRichMedia() throws {
         let html = """
