@@ -3,6 +3,30 @@ import Testing
 
 @Suite("Native reader article summaries")
 struct ArticleSummaryTests {
+    @Test("Feature opt-in and automatic generation are independent")
+    func generationPolicySeparatesManualAndAutomaticUse() {
+        #expect(!ArticleSummarySettings.shouldGenerate(
+            isEnabled: false,
+            isAutomatic: true,
+            isManuallyRequested: true
+        ))
+        #expect(!ArticleSummarySettings.shouldGenerate(
+            isEnabled: true,
+            isAutomatic: false,
+            isManuallyRequested: false
+        ))
+        #expect(ArticleSummarySettings.shouldGenerate(
+            isEnabled: true,
+            isAutomatic: false,
+            isManuallyRequested: true
+        ))
+        #expect(ArticleSummarySettings.shouldGenerate(
+            isEnabled: true,
+            isAutomatic: true,
+            isManuallyRequested: false
+        ))
+    }
+
     @Test("Every style asks for a materially different summary shape")
     func stylePromptsAreDistinct() {
         let concise = ArticleSummarizer.systemPrompt(style: .concise, language: "Korean")

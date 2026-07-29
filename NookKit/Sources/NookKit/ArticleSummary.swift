@@ -50,16 +50,29 @@ public enum ArticleSummaryStyle: String, CaseIterable, Identifiable, Sendable, C
 
 public enum ArticleSummarySettings {
     public static let enabledKey = "articleSummariesEnabled"
+    public static let automaticKey = "articleSummariesAutomatic"
     public static let styleKey = "articleSummaryStyle"
 
     public static var isEnabled: Bool {
         UserDefaults.standard.bool(forKey: enabledKey)
     }
 
+    public static var isAutomatic: Bool {
+        UserDefaults.standard.bool(forKey: automaticKey)
+    }
+
     public static var style: ArticleSummaryStyle {
         ArticleSummaryStyle(
             rawValue: UserDefaults.standard.string(forKey: styleKey) ?? ""
         ) ?? .concise
+    }
+
+    public static func shouldGenerate(
+        isEnabled: Bool,
+        isAutomatic: Bool,
+        isManuallyRequested: Bool
+    ) -> Bool {
+        isEnabled && (isAutomatic || isManuallyRequested)
     }
 }
 

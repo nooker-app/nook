@@ -1958,6 +1958,7 @@ private struct ReaderDetailView: View {
     @AppStorage("markReadDelaySeconds") private var markReadDelaySeconds = 3
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
     @AppStorage(ArticleSummarySettings.enabledKey) private var summariesEnabled = false
+    @AppStorage(ArticleSummarySettings.automaticKey) private var summariesAutomatic = false
     @AppStorage(ArticleSummarySettings.styleKey) private var summaryStyleRaw = ArticleSummaryStyle.concise.rawValue
     @AppStorage(TranslationSettings.summaryProviderKey) private var summaryProviderRaw = TranslationProvider.appleIntelligence.rawValue
     // Typography settings drive the native reader body (family, size, leading,
@@ -1989,6 +1990,7 @@ private struct ReaderDetailView: View {
     @State private var confirmingDelete = false
     @State private var summaryController = ArticleSummaryController()
     @State private var summaryRequestedArticleID: String?
+    @State private var summaryArticleID: String?
     @State private var summaryGenerationID = 0
 
     private var targetLanguage: Locale.Language {
@@ -2144,16 +2146,18 @@ private struct ReaderDetailView: View {
             VStack(alignment: .leading, spacing: 24) {
                 articleHeader(article)
 
-                if let summary = summaryController.summary {
-                    ArticleSummaryCard(
-                        summary: summary,
-                        style: summaryController.style,
-                        provider: summaryController.provider
-                    )
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                } else {
-                    ArticleSummaryActionButton(isLoading: summaryController.isLoading) {
-                        requestSummary(for: article)
+                if summariesEnabled {
+                    if let summary = summaryController.summary {
+                        ArticleSummaryCard(
+                            summary: summary,
+                            style: summaryController.style,
+                            provider: summaryController.provider
+                        )
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    } else {
+                        ArticleSummaryActionButton(isLoading: summaryController.isLoading) {
+                            requestSummary(for: article)
+                        }
                     }
                 }
 
@@ -2232,12 +2236,21 @@ private struct ReaderDetailView: View {
             await markReadAfterDwell(article)
         }
         .task(id: summaryTaskKey(for: article)) {
-            guard summariesEnabled || summaryRequestedArticleID == article.id,
-                  let markdown = summaryMarkdown(for: article)
-            else {
+            if summaryArticleID != article.id {
                 summaryController.reset()
+                summaryRequestedArticleID = nil
+                summaryArticleID = article.id
+            }
+            let manuallyRequested = summaryRequestedArticleID == article.id
+            guard ArticleSummarySettings.shouldGenerate(
+                isEnabled: summariesEnabled,
+                isAutomatic: summariesAutomatic,
+                isManuallyRequested: manuallyRequested
+            ) else {
+                if !summariesEnabled { summaryController.reset() }
                 return
             }
+            guard let markdown = summaryMarkdown(for: article) else { return }
             await summaryController.load(
                 ArticleSummaryRequest(
                     title: article.title,
@@ -2254,6 +2267,11 @@ private struct ReaderDetailView: View {
         .onChange(of: store.readerContentState(for: article)) { _, newValue in
             guard nativeTranslator.isActive, case .ready(let extracted) = newValue else { return }
             nativeTranslator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
+        }
+        .onChange(of: summariesEnabled) { _, enabled in
+            guard !enabled else { return }
+            summaryRequestedArticleID = nil
+            summaryController.reset()
         }
         // Pull past the bottom for the next article, past the top for the
         // previous one. The web reader keeps its own bottom-only affordance.
@@ -2294,17 +2312,17 @@ private struct ReaderDetailView: View {
         return [
             article.id,
             String(summariesEnabled),
-            summaryStyleRaw,
-            summaryProviderRaw,
-            targetLanguageName,
+            String(summariesAutomatic),
             contentState,
-            summaryRequestedArticleID == article.id ? "requested" : "automatic",
-            String(summaryGenerationID),
+            summariesAutomatic
+                ? "\(summaryStyleRaw)|\(summaryProviderRaw)|\(targetLanguageName)"
+                : (summaryRequestedArticleID == article.id ? "manual:\(summaryGenerationID)" : "idle"),
         ].joined(separator: "|")
     }
 
     private func requestSummary(for article: Article) {
         summaryController.reset()
+        summaryArticleID = article.id
         summaryRequestedArticleID = article.id
         summaryGenerationID += 1
     }

@@ -2,13 +2,14 @@ import SwiftUI
 
 public struct ArticleSummarySettingsContent: View {
     @AppStorage(ArticleSummarySettings.enabledKey) private var enabled = false
+    @AppStorage(ArticleSummarySettings.automaticKey) private var automatic = false
     @AppStorage(ArticleSummarySettings.styleKey) private var style = ArticleSummaryStyle.concise.rawValue
     @AppStorage(TranslationSettings.summaryProviderKey) private var provider = TranslationProvider.appleIntelligence.rawValue
 
     public init() {}
 
     public var body: some View {
-        Toggle("Show AI summaries", isOn: $enabled)
+        Toggle("Enable AI summaries", isOn: $enabled)
 
         Picker("Summary style", selection: $style) {
             ForEach(ArticleSummaryStyle.allCases) { style in
@@ -24,6 +25,21 @@ public struct ArticleSummarySettingsContent: View {
                 .tag(TranslationProvider.gemini.rawValue)
         }
         .disabled(!enabled)
+
+        Toggle("Summarize articles automatically", isOn: $automatic)
+            .disabled(!enabled)
+
+        if enabled,
+           automatic,
+           provider == TranslationProvider.gemini.rawValue {
+            Label {
+                Text("Automatic Gemini summaries can increase API usage and may incur charges. A request is made whenever an article is opened.", bundle: .module)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+            }
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
 
         Text("Summaries use only the Markdown shown by the native reader and appear above the original article. They may be omitted when the content cannot be summarized reliably.", bundle: .module)
             .font(.caption)

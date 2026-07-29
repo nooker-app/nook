@@ -136,24 +136,46 @@
         }
       }
     },
-    "Show AI summaries" : {
+    "Enable AI summaries" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AI要約を表示"
+            "value" : "AI要約を有効にする"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AI 요약 표시"
+            "value" : "AI 요약 사용"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "显示 AI 摘要"
+            "value" : "启用 AI 摘要"
+          }
+        }
+      }
+    },
+    "Automatic Gemini summaries can increase API usage and may incur charges. A request is made whenever an article is opened." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini の自動要約は API 使用量を増やし、料金が発生する場合があります。記事を開くたびにリクエストが送信されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini 자동 요약은 API 사용량을 늘리고 비용이 발생할 수 있습니다. 글을 열 때마다 요청이 전송됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini 自动摘要会增加 API 使用量，并可能产生费用。每次打开文章时都会发送请求。"
           }
         }
       }
@@ -176,6 +198,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "生成摘要"
+          }
+        }
+      }
+    },
+    "Summarize articles automatically" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記事を自動的に要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글 자동 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动生成文章摘要"
           }
         }
       }
