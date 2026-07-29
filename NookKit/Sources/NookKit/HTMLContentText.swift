@@ -1994,18 +1994,26 @@ private struct NativeArticleList: View {
     var typography: ReaderTypography = .platformDefault
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Resolve the marker and body columns before measuring row height.
+        // Nested HStacks can first measure their text at an intermediate width,
+        // then keep a one-line drawing height after the nested marker narrows the
+        // final width. SwiftUI reserves the missing continuation-line space but
+        // draws an ellipsis instead. Grid gives every body its final column width
+        // up front, so wrapped text is measured and drawn at the same width.
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, blocks in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                GridRow(alignment: .firstTextBaseline) {
                     Text(marker(index))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .frame(minWidth: ordered ? 24 : 14, alignment: .trailing)
+                        .gridCellUnsizedAxes(.horizontal)
                     HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func marker(_ index: Int) -> String {
