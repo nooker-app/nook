@@ -132,15 +132,15 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .badRequest:
-            return String(localized: "Could not build the request.")
+            return String(localized: "Could not build the request.", bundle: .module)
         case .upstream(let status, let kind):
             if status == 401 || kind == "AuthenticationRequired" || kind == "InvalidPassword" {
-                return String(localized: "That handle and password did not match.")
+                return String(localized: "That handle and password did not match.", bundle: .module)
             }
             if kind == "AccountTakedown" {
-                return String(localized: "This account is not available.")
+                return String(localized: "This account is not available.", bundle: .module)
             }
-            return String(localized: "The server could not complete that request.")
+            return String(localized: "The server could not complete that request.", bundle: .module)
         }
     }
 }

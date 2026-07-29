@@ -30,7 +30,7 @@ public struct PlusEnvironment: Sendable, Hashable {
         pdsHost: "nooker.social",
         publicBaseURL: "https://nooker.app",
         handleDomain: "nooker.app",
-        name: String(localized: "Production")
+        name: String(localized: "Production", bundle: .module)
     )
 
     /// The test service. Accounts created here are throwaway.
@@ -39,7 +39,7 @@ public struct PlusEnvironment: Sendable, Hashable {
         pdsHost: "pds.staging.nooker.social",
         publicBaseURL: "https://staging.nooker.app",
         handleDomain: "staging.nooker.app",
-        name: String(localized: "Staging (test server)")
+        name: String(localized: "Staging (test server)", bundle: .module)
     )
 
     public static let all: [PlusEnvironment] = [production, staging]
@@ -135,7 +135,7 @@ public final class PlusStore {
     /// codes into something a person can act on.
     public func checkHandle(label: String) async -> HandleCheck {
         let clean = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        var outcome = HandleCheck.unavailable(String(localized: "Could not check that name."))
+        var outcome = HandleCheck.unavailable(String(localized: "Could not check that name.", bundle: .module))
         await perform {
             let result = try await self.service.handleAvailability(handle: self.fullHandle(for: clean))
             if result.available {
@@ -151,11 +151,11 @@ public final class PlusStore {
     private static func explain(reason: String?) -> String {
         switch reason {
         case "taken":
-            return String(localized: "Someone already has that name.")
+            return String(localized: "Someone already has that name.", bundle: .module)
         case "reserved":
-            return String(localized: "That name is reserved.")
+            return String(localized: "That name is reserved.", bundle: .module)
         default:
-            return String(localized: "Use lowercase letters, numbers, and hyphens, at least three characters.")
+            return String(localized: "Use lowercase letters, numbers, and hyphens, at least three characters.", bundle: .module)
         }
     }
 
@@ -235,7 +235,7 @@ public final class PlusStore {
     /// and schedules rendering.
     public func publish(title: String, slug: String, markdown: String, summary: String) async {
         guard let publication = publications.first else {
-            failure = String(localized: "No publication to publish into yet.")
+            failure = String(localized: "No publication to publish into yet.", bundle: .module)
             return
         }
         await perform {
@@ -255,7 +255,7 @@ public final class PlusStore {
     /// user has not seen cannot be destroyed.
     public func delete(_ record: ATRecord<ArticleRecord>) async {
         guard let rkey = record.recordKey, let cid = record.cid else {
-            failure = String(localized: "That article is missing the information needed to delete it safely.")
+            failure = String(localized: "That article is missing the information needed to delete it safely.", bundle: .module)
             return
         }
         await perform {
@@ -285,17 +285,17 @@ public final class PlusStore {
                 // UI back into a state the user can act on.
                 PlusCredential.signOut()
                 session = nil
-                return String(localized: "Your session expired. Sign in again.")
+                return String(localized: "Your session expired. Sign in again.", bundle: .module)
             case .recordConflict:
-                return String(localized: "This article changed elsewhere. Reload before saving again.")
+                return String(localized: "This article changed elsewhere. Reload before saving again.", bundle: .module)
             case .problem(_, _, let detail):
-                return detail ?? String(localized: "The service could not complete that request.")
+                return detail ?? String(localized: "The service could not complete that request.", bundle: .module)
             case .transport:
-                return String(localized: "Could not reach the service.")
+                return String(localized: "Could not reach the service.", bundle: .module)
             }
         }
         if let pdsError = error as? PlusPDSError {
-            return pdsError.errorDescription ?? String(localized: "Something went wrong.")
+            return pdsError.errorDescription ?? String(localized: "Something went wrong.", bundle: .module)
         }
         return error.localizedDescription
     }

@@ -68,7 +68,7 @@ public struct PlusOnboardingView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Set up publishing")
+            Text("Set up publishing", bundle: .module)
                 .font(.title2.weight(.semibold))
             Text(step.progressLabel)
                 .font(.subheadline)
@@ -113,7 +113,7 @@ public struct PlusOnboardingView: View {
                 "Invitation code",
                 "The code you were given when you were invited. It looks like four groups of letters and numbers."
             )
-            TextField("Invitation code", text: $invitationCode, prompt: Text(verbatim: "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"))
+            TextField(text: $invitationCode, prompt: Text(verbatim: "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX")) { Text("Invitation code", bundle: .module) }
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
                 .font(.body.monospaced())
@@ -123,14 +123,15 @@ public struct PlusOnboardingView: View {
 
             if invitationChecked {
                 if store.invitationAccepted {
-                    Label("This code works.", systemImage: "checkmark.circle.fill")
+                    Label { Text("This code works.", bundle: .module) } icon: { Image(systemName: "checkmark.circle.fill") }
                         .foregroundStyle(.green)
                         .font(.callout)
                 } else {
-                    Label(
-                        "That code was not recognised. It may have been used already or expired.",
-                        systemImage: "exclamationmark.triangle"
-                    )
+                    Label {
+                        Text("That code was not recognised. It may have been used already or expired.", bundle: .module)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle")
+                    }
                     .foregroundStyle(.orange)
                     .font(.callout)
                 }
@@ -145,7 +146,7 @@ public struct PlusOnboardingView: View {
                 "Pick a short name. It becomes both your identity on the network and the address of your site, so choose something you are happy to be known by."
             )
 
-            TextField("Name", text: $label, prompt: Text(verbatim: "yourname"))
+            TextField(text: $label, prompt: Text(verbatim: "yourname")) { Text("Name", bundle: .module) }
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
                 #if os(iOS)
@@ -160,14 +161,14 @@ public struct PlusOnboardingView: View {
                             .font(.callout.monospaced())
                             .textSelection(.enabled)
                     } label: {
-                        Text("Your handle")
+                        Text("Your handle", bundle: .module)
                     }
                     LabeledContent {
                         Text(store.publicSiteURL(for: label))
                             .font(.callout.monospaced())
                             .textSelection(.enabled)
                     } label: {
-                        Text("Your site")
+                        Text("Your site", bundle: .module)
                     }
                 }
                 .font(.caption)
@@ -175,17 +176,17 @@ public struct PlusOnboardingView: View {
 
             switch availability {
             case .unknown:
-                Text("Lowercase letters, numbers, and hyphens. At least three characters.")
+                Text("Lowercase letters, numbers, and hyphens. At least three characters.", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             case .checking:
                 ProgressView().controlSize(.small)
             case .available:
-                Label("Available.", systemImage: "checkmark.circle.fill")
+                Label { Text("Available.", bundle: .module) } icon: { Image(systemName: "checkmark.circle.fill") }
                     .foregroundStyle(.green)
                     .font(.callout)
             case .unavailable(let reason):
-                Label(reason, systemImage: "exclamationmark.triangle")
+                Label { Text(verbatim: reason) } icon: { Image(systemName: "exclamationmark.triangle") }
                     .foregroundStyle(.orange)
                     .font(.callout)
             }
@@ -198,7 +199,7 @@ public struct PlusOnboardingView: View {
                 "Email",
                 "Used only to recover your account if you forget your password. It is never shown on your site."
             )
-            TextField("Email", text: $email, prompt: Text(verbatim: "you@example.com"))
+            TextField(text: $email, prompt: Text(verbatim: "you@example.com")) { Text("Email", bundle: .module) }
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
                 #if os(iOS)
@@ -210,17 +211,17 @@ public struct PlusOnboardingView: View {
                 "Password",
                 "Protects your repository. Nook stores it nowhere: it goes straight to the host that keeps your posts."
             )
-            SecureField("Password", text: $password)
+            SecureField(text: $password) { Text("Password", bundle: .module) }
                 .textFieldStyle(.roundedBorder)
-            SecureField("Repeat password", text: $confirmPassword)
+            SecureField(text: $confirmPassword) { Text("Repeat password", bundle: .module) }
                 .textFieldStyle(.roundedBorder)
 
             if !password.isEmpty && password.count < 8 {
-                Text("At least 8 characters.")
+                Text("At least 8 characters.", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.orange)
             } else if !confirmPassword.isEmpty && password != confirmPassword {
-                Text("The two passwords do not match.")
+                Text("The two passwords do not match.", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -230,11 +231,11 @@ public struct PlusOnboardingView: View {
     private var working: some View {
         VStack(alignment: .leading, spacing: 14) {
             ProgressView().controlSize(.small)
-            Text("Creating your repository and your first publication. This takes a few seconds.")
+            Text("Creating your repository and your first publication. This takes a few seconds.", bundle: .module)
                 .font(.callout)
                 .foregroundStyle(.secondary)
             if let failure = store.failure {
-                Label(failure, systemImage: "exclamationmark.triangle")
+                Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
                     .foregroundStyle(.red)
                     .font(.callout)
             }
@@ -243,24 +244,26 @@ public struct PlusOnboardingView: View {
 
     private var done: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("You can publish now.", systemImage: "checkmark.circle.fill")
+            Label { Text("You can publish now.", bundle: .module) } icon: { Image(systemName: "checkmark.circle.fill") }
                 .foregroundStyle(.green)
                 .font(.headline)
 
             if let session = store.session {
-                LabeledContent("Handle", value: session.handle)
+                LabeledContent { Text(verbatim: session.handle) } label: { Text("Handle", bundle: .module) }
             }
             if let url = store.publicationURL {
-                LabeledContent("Your site") {
+                LabeledContent {
                     Link(url, destination: URL(string: url) ?? URL(string: "https://example.com")!)
                         .font(.callout.monospaced())
+                } label: {
+                    Text("Your site", bundle: .module)
                 }
             }
 
             if store.handleResolutionPending {
                 // The DNS record exists but has not propagated. The account
                 // works regardless, so this is a note, not a warning.
-                Text("Your handle is still spreading across the network, which can take a few minutes. Everything works in the meantime.")
+                Text("Your handle is still spreading across the network, which can take a few minutes. Everything works in the meantime.", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -272,7 +275,7 @@ public struct PlusOnboardingView: View {
     private var footer: some View {
         HStack {
             if step != .intro && step != .working && step != .done {
-                Button("Back") { back() }
+                Button { back() } label: { Text("Back", bundle: .module) }
             }
             Spacer()
             primaryButton
@@ -283,29 +286,41 @@ public struct PlusOnboardingView: View {
     private var primaryButton: some View {
         switch step {
         case .intro:
-            Button("Continue") { step = .invitation }
+            Button { step = .invitation } label: { Text("Continue", bundle: .module) }
                 .keyboardShortcut(.defaultAction)
         case .invitation:
-            Button(invitationChecked && store.invitationAccepted ? "Continue" : "Check Code") {
+            Button {
                 Task { await checkInvitation() }
+            } label: {
+                if invitationChecked && store.invitationAccepted {
+                    Text("Continue", bundle: .module)
+                } else {
+                    Text("Check Code", bundle: .module)
+                }
             }
             .keyboardShortcut(.defaultAction)
             .disabled(invitationCode.isEmpty || store.isWorking)
         case .address:
-            Button(availability.isAvailable ? "Continue" : "Check Availability") {
+            Button {
                 Task { await checkAvailability() }
+            } label: {
+                if availability.isAvailable {
+                    Text("Continue", bundle: .module)
+                } else {
+                    Text("Check Availability", bundle: .module)
+                }
             }
             .keyboardShortcut(.defaultAction)
             .disabled(label.isEmpty || store.isWorking)
         case .credentials:
-            Button("Create Account") { Task { await createAccount() } }
+            Button { Task { await createAccount() } } label: { Text("Create Account", bundle: .module) }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!credentialsReady || store.isWorking)
         case .working:
-            Button("Try Again") { Task { await createAccount() } }
+            Button { Task { await createAccount() } } label: { Text("Try Again", bundle: .module) }
                 .disabled(store.isWorking || store.failure == nil)
         case .done:
-            Button("Start Writing") { onFinished() }
+            Button { onFinished() } label: { Text("Start Writing", bundle: .module) }
                 .keyboardShortcut(.defaultAction)
         }
     }
@@ -362,8 +377,8 @@ public struct PlusOnboardingView: View {
     @ViewBuilder
     private func explain(_ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.subheadline.weight(.semibold))
-            Text(detail).font(.callout).foregroundStyle(.secondary)
+            Text(title, bundle: .module).font(.subheadline.weight(.semibold))
+            Text(detail, bundle: .module).font(.callout).foregroundStyle(.secondary)
         }
     }
 }

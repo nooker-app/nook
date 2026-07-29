@@ -1123,7 +1123,7 @@ private struct PlusSettingsScreen: View {
         List {
             PlusSettingsContent()
         }
-        .navigationTitle("Publishing")
+        .navigationTitle(Text("Publishing"))
         .warmRows()
     }
 }

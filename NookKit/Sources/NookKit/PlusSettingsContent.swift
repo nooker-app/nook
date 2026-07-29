@@ -40,14 +40,14 @@ public struct PlusSettingsContent: View {
         Group {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Publish your own writing")
+                    Text("Publish your own writing", bundle: .module)
                         .font(.headline)
                     Text(
                         "Nook can turn your writing into a small website with an RSS feed, so anyone can follow you in Nook or any other reader. Your posts are stored in a repository that belongs to you, not inside Nook's database."
-                    )
+                    , bundle: .module)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    Text("Reading feeds works exactly as before whether or not you set this up.")
+                    Text("Reading feeds works exactly as before whether or not you set this up.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -58,15 +58,15 @@ public struct PlusSettingsContent: View {
                 Button {
                     showingSetup = true
                 } label: {
-                    Label("Set Up Publishing", systemImage: "sparkles")
+                    Label { Text("Set Up Publishing", bundle: .module) } icon: { Image(systemName: "sparkles") }
                 }
                 Button {
                     showingSignIn = true
                 } label: {
-                    Label("I Already Have an Account", systemImage: "person.crop.circle")
+                    Label { Text("I Already Have an Account", bundle: .module) } icon: { Image(systemName: "person.crop.circle") }
                 }
             } footer: {
-                Text("Setting up needs an invitation code. Publishing is limited to invited writers for now.")
+                Text("Setting up needs an invitation code. Publishing is limited to invited writers for now.", bundle: .module)
             }
         }
     }
@@ -82,41 +82,43 @@ public struct PlusSettingsContent: View {
         Group {
             Section {
                 if let session = store.session {
-                    LabeledContent("Handle", value: session.handle)
+                    LabeledContent { Text(verbatim: session.handle) } label: { Text("Handle", bundle: .module) }
                 }
                 if let url = store.publicationURL {
-                    LabeledContent("Your site") {
+                    LabeledContent {
                         Link(url, destination: URL(string: url) ?? URL(string: "https://example.com")!)
                             .font(.callout)
+                    } label: {
+                        Text("Your site", bundle: .module)
                     }
                 }
                 if store.handleResolutionPending {
-                    Text("Your handle is still spreading across the network. Everything works in the meantime.")
+                    Text("Your handle is still spreading across the network. Everything works in the meantime.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Button("Sign Out on This Device", role: .destructive) { store.signOut() }
+                Button(role: .destructive) { store.signOut() } label: { Text("Sign Out on This Device", bundle: .module) }
             } header: {
-                Text("Your account")
+                Text("Your account", bundle: .module)
             } footer: {
-                Text("Signing out only forgets this device. Your account and your posts are untouched.")
+                Text("Signing out only forgets this device. Your account and your posts are untouched.", bundle: .module)
             }
 
             Section {
-                TextField("Title", text: $title)
+                TextField(text: $title) { Text("Title", bundle: .module) }
                 TextField("Web address", text: $slug, prompt: Text(verbatim: "my-first-post"))
                     .autocorrectionDisabled()
                     #if os(iOS)
                         .textInputAutocapitalization(.never)
                     #endif
-                TextField("One-line summary (optional)", text: $summary)
+                TextField(text: $summary) { Text("One-line summary (optional)", bundle: .module) }
 
                 TextEditor(text: $markdown)
                     .font(.body)
                     .frame(minHeight: 150)
                     .overlay(alignment: .topLeading) {
                         if markdown.isEmpty {
-                            Text("Write here. **Bold**, *italic*, and [links](https://example.com) work.")
+                            Text("Write here. **Bold**, *italic*, and [links](https://example.com) work.", bundle: .module)
                                 .foregroundStyle(.tertiary)
                                 .padding(.top, 8)
                                 .padding(.leading, 5)
@@ -138,7 +140,7 @@ public struct PlusSettingsContent: View {
                     if store.isWorking {
                         ProgressView().controlSize(.small)
                     } else {
-                        Text("Publish")
+                        Text("Publish", bundle: .module)
                     }
                 }
                 .disabled(!canPublish)
@@ -150,19 +152,19 @@ public struct PlusSettingsContent: View {
                 }
                 if let url = store.lastPublishedURL {
                     Link(destination: URL(string: url) ?? URL(string: "https://example.com")!) {
-                        Label("View your post", systemImage: "safari")
+                        Label { Text("View your post", bundle: .module) } icon: { Image(systemName: "safari") }
                     }
                     .font(.callout)
                 }
             } header: {
-                Text("Write a post")
+                Text("Write a post", bundle: .module)
             } footer: {
-                Text("The web address becomes the last part of the link to this post. Lowercase letters, numbers, and hyphens.")
+                Text("The web address becomes the last part of the link to this post. Lowercase letters, numbers, and hyphens.", bundle: .module)
             }
 
             Section {
                 if store.articles.isEmpty {
-                    Text("Nothing published yet.")
+                    Text("Nothing published yet.", bundle: .module)
                         .foregroundStyle(.secondary)
                         .font(.callout)
                 } else {
@@ -170,12 +172,12 @@ public struct PlusSettingsContent: View {
                         articleRow(record)
                     }
                 }
-                Button("Reload") { Task { await store.loadContent() } }
+                Button { Task { await store.loadContent() } } label: { Text("Reload", bundle: .module) }
                     .disabled(store.isWorking)
             } header: {
-                Text("Your posts")
+                Text("Your posts", bundle: .module)
             } footer: {
-                Text("Read straight from your own repository, so this is what actually exists — not a copy Nook keeps.")
+                Text("Read straight from your own repository, so this is what actually exists — not a copy Nook keeps.", bundle: .module)
             }
         }
     }
@@ -215,25 +217,31 @@ public struct PlusSettingsContent: View {
     /// disclosed, labelled, and explained rather than exposed as a bare field.
     private var developerSection: some View {
         Section {
-            DisclosureGroup("Developer", isExpanded: $showingDeveloper) {
-                Picker("Server", selection: $selected) {
+            DisclosureGroup(isExpanded: $showingDeveloper) {
+                Picker(selection: $selected) {
                     ForEach(PlusEnvironment.all, id: \.handleDomain) { environment in
-                        Text(environment.name).tag(environment)
+                        Text(verbatim: environment.name).tag(environment)
                     }
+                } label: {
+                    Text("Server", bundle: .module)
                 }
                 Text(verbatim: selected.apiBaseURL.absoluteString)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
 
-                Button("Use This Server") {
+                Button {
                     PlusEnvironment.select(selected)
                     store.use(selected)
                     store.signOut()
+                } label: {
+                    Text("Use This Server", bundle: .module)
                 }
                 .disabled(selected == PlusEnvironment.current)
+            } label: {
+                Text("Developer", bundle: .module)
             }
         } footer: {
-            Text("Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out.")
+            Text("Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out.", bundle: .module)
         }
     }
 }
@@ -249,20 +257,20 @@ struct PlusSignInView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Sign in").font(.title2.weight(.semibold))
-                Text("Use the handle and password you chose when you set up publishing.")
+                Text("Sign in", bundle: .module).font(.title2.weight(.semibold))
+                Text("Use the handle and password you chose when you set up publishing.", bundle: .module)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                TextField("Handle", text: $handle, prompt: Text(verbatim: "yourname.\(PlusEnvironment.current.handleDomain)"))
+                TextField(text: $handle, prompt: Text(verbatim: "yourname.\(PlusEnvironment.current.handleDomain)")) { Text("Handle", bundle: .module) }
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     #if os(iOS)
                         .textInputAutocapitalization(.never)
                     #endif
-                SecureField("Password", text: $password)
+                SecureField(text: $password) { Text("Password", bundle: .module) }
                     .textFieldStyle(.roundedBorder)
             }
 
@@ -275,14 +283,16 @@ struct PlusSignInView: View {
             Spacer(minLength: 0)
 
             HStack {
-                Button("Cancel") { onFinished() }
+                Button { onFinished() } label: { Text("Cancel", bundle: .module) }
                 Spacer()
-                Button("Sign In") {
+                Button {
                     Task {
                         await store.signIn(handle: handle, password: password)
                         password = ""
                         if store.isSignedIn { onFinished() }
                     }
+                } label: {
+                    Text("Sign In", bundle: .module)
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(handle.isEmpty || password.isEmpty || store.isWorking)
