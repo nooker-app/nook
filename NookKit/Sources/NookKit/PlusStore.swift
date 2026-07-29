@@ -93,6 +93,11 @@ public final class PlusStore {
     /// with the original password, so the UI offers that instead of a retry
     /// that cannot succeed.
     public private(set) var signupNeedsSignIn = false
+    /// Which field the last failure blames, when the service named one. A screen
+    /// that reports "use a different email address" has to be able to send the
+    /// user to the email field; otherwise the instruction is impossible to
+    /// follow.
+    public private(set) var failureField: ProblemReason.Field?
 
     private var environment: PlusEnvironment
     private var pds: PlusPDSClient
@@ -117,6 +122,7 @@ public final class PlusStore {
     public func clearFailure() {
         failure = nil
         signupNeedsSignIn = false
+        failureField = nil
     }
 
     /// Reloads the client pair after the environment changes.
@@ -183,11 +189,36 @@ public final class PlusStore {
     /// so pressing "Try Again" resumes the same signup rather than starting a
     /// second one — which would otherwise create a second identity.
     private var signupKey: String?
+    /// The code and name the current key was minted for.
+    ///
+    /// A key belongs to one signup, and the service rejects it outright if it
+    /// arrives with a different code or handle. Without remembering what it was
+    /// for, a user who corrected either — exactly what a rejection tells them to
+    /// do — was permanently stuck on "this idempotency key was used for a
+    /// different signup", with no way out but relaunching the app.
+    private var signupIdentity: SignupIdentity?
+
+    private struct SignupIdentity: Equatable {
+        let code: String
+        let handle: String
+    }
 
     public func signUp(invitationCode: String, label: String, email: String, password: String) async {
+        let identity = SignupIdentity(
+            code: invitationCode.trimmingCharacters(in: .whitespacesAndNewlines),
+            handle: fullHandle(for: label)
+        )
+        // A changed code or name is a different signup, so it needs a key of its
+        // own. Reusing the old one is refused by the service and cannot be
+        // recovered from within the flow.
+        if signupIdentity != identity {
+            signupKey = nil
+            signupIdentity = identity
+        }
         let key = signupKey ?? UUID().uuidString
         signupKey = key
         signupNeedsSignIn = false
+        failureField = nil
         isWorking = true
         failure = nil
 
@@ -210,12 +241,16 @@ public final class PlusStore {
             self.session = session
             handleResolutionPending = !(result.handleResolves ?? true)
             signupKey = nil
+            signupIdentity = nil
             await loadContent()
         } catch PlusServiceError.rejected(.accountPasswordMismatch, _) {
             // Not a failure to fix by retrying: the account exists and only the
             // password is wrong, so the flow moves to signing in.
             signupNeedsSignIn = true
             failure = PlusStore.message(for: .accountPasswordMismatch)
+        } catch PlusServiceError.rejected(let reason, _) {
+            failure = PlusStore.message(for: reason)
+            failureField = reason.offendingField
         } catch {
             failure = message(for: error)
         }
@@ -300,6 +335,9 @@ public final class PlusStore {
         failure = nil
         do {
             try await work()
+        } catch PlusServiceError.rejected(let reason, _) {
+            failure = PlusStore.message(for: reason)
+            failureField = reason.offendingField
         } catch {
             failure = message(for: error)
         }
@@ -347,8 +385,12 @@ public final class PlusStore {
                 return String(localized: "Your session expired. Sign in again.", bundle: .module)
             case .recordConflict:
                 return String(localized: "This article changed elsewhere. Reload before saving again.", bundle: .module)
-            case .problem(_, _, let detail):
-                return detail ?? String(localized: "The service could not complete that request.", bundle: .module)
+            case .problem:
+                // `detail` is deliberately not shown: the contract documents it
+                // as English prose for whoever reads a log, so relaying it puts
+                // an untranslated sentence in front of the user. A cause worth
+                // showing arrives as a `reason` instead.
+                return String(localized: "The service could not complete that request.", bundle: .module)
             case .rejected(let reason, _):
                 return PlusStore.message(for: reason)
             case .transport:

@@ -125,7 +125,9 @@ public struct PlusSettingsContent: View {
 
             Section {
                 TextField(text: $title) { Text("Title", bundle: .module) }
-                TextField("Web address", text: $slug, prompt: Text(verbatim: "my-first-post"))
+                TextField(text: $slug, prompt: Text(verbatim: "my-first-post")) {
+                    Text("Web address", bundle: .module)
+                }
                     .autocorrectionDisabled()
                     #if os(iOS)
                         .textInputAutocapitalization(.never)

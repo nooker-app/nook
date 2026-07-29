@@ -1,3 +1,4 @@
+import NookPlusServiceAPI
 import SwiftUI
 
 /// Guided setup for Nook Plus, shared by macOS and iOS.
@@ -47,6 +48,15 @@ public struct PlusOnboardingView: View {
             case .working, .signIn: 1
             case .done: 1
             default: Double((position ?? 1) - 1) / Double(Self.formCount)
+            }
+        }
+
+        /// The step that owns a field the service complained about.
+        init?(editing field: ProblemReason.Field) {
+            switch field {
+            case .invitation: self = .invitation
+            case .handle: self = .address
+            case .email, .password: self = .credentials
             }
         }
 
@@ -304,6 +314,7 @@ public struct PlusOnboardingView: View {
 
     private var invitation: some View {
         VStack(alignment: .leading, spacing: 14) {
+            failureNotice
             explain(
                 "Invitation code",
                 "The code you were given when you were invited. It looks like four groups of letters and numbers."
@@ -311,6 +322,14 @@ public struct PlusOnboardingView: View {
             TextField(text: $invitationCode, prompt: Text(verbatim: "XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX")) { Text("Invitation code", bundle: .module) }
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
+                // Without this an edited code keeps the previous code's verdict,
+                // so "Continue" skips the check and the flow fails at the last
+                // step instead of at the one that can still be corrected.
+                .onChange(of: invitationCode) { _, _ in
+                    invitationChecked = false
+                    arrivedByLink = false
+                    store.clearFailure()
+                }
                 .font(.body.monospaced())
                 #if os(iOS)
                     .textInputAutocapitalization(.characters)
@@ -346,6 +365,7 @@ public struct PlusOnboardingView: View {
 
     private var address: some View {
         VStack(alignment: .leading, spacing: 14) {
+            failureNotice
             explain(
                 "Your address",
                 "Pick a short name. It becomes both your identity on the network and the address of your site, so choose something you are happy to be known by."
@@ -400,6 +420,7 @@ public struct PlusOnboardingView: View {
 
     private var credentials: some View {
         VStack(alignment: .leading, spacing: 14) {
+            failureNotice
             // The handle appears here, not only on the previous step, because it
             // is the username half of the credential. A password manager saves
             // a pair, and without a username field alongside the password
@@ -619,7 +640,14 @@ public struct PlusOnboardingView: View {
 
     private var footer: some View {
         HStack {
-            if step != .intro && step != .working && step != .done {
+            if step != .done {
+                // A macOS sheet has no close control of its own, and the only
+                // other buttons are Back and the step's action — so without this
+                // the window could not be left except by finishing or quitting.
+                Button { onFinished() } label: { Text("Cancel", bundle: .module) }
+                    .keyboardShortcut(.cancelAction)
+            }
+            if step != .intro && step != .working && step != .done && step != .signIn {
                 Button { back() } label: { Text("Back", bundle: .module) }
             }
             Spacer()
@@ -736,6 +764,13 @@ public struct PlusOnboardingView: View {
             password = ""
             confirmPassword = ""
             step = .signIn
+        } else if let field = store.failureField, let editable = Step(editing: field) {
+            // "Use a different email address" is impossible to act on from a
+            // screen with no email field. Go back to the one that has it, with
+            // the message still showing.
+            if field == .invitation { invitationChecked = false }
+            if field == .handle { availability = .unknown }
+            step = editable
         } else {
             step = .working
         }
@@ -747,6 +782,19 @@ public struct PlusOnboardingView: View {
             password = ""
             passwordVisible = false
             step = .done
+        }
+    }
+
+    /// The last failure, shown on the step that can fix it.
+    @ViewBuilder
+    private var failureNotice: some View {
+        if let failure = store.failure, store.failureField != nil {
+            Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
+                .foregroundStyle(.orange)
+                .font(.callout)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(cardBackground)
         }
     }
 
