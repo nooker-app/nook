@@ -5378,6 +5378,34 @@
         }
       }
     },
+    "Read a few short pieces the way you always do, and Nook will find the type size and spacing that suit your eyes — based on how you actually read.\nAbout five minutes, and quitting early still keeps what it learned." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read a few short pieces the way you always do, and Nook will find the type size and spacing that suit your eyes — based on how you actually read.\nAbout five minutes, and quitting early still keeps what it learned."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短い文章を数本いつも通りに読むだけで、Nook が読む速さをもとに目に合う文字サイズと間隔を見つけます。\n約5分。途中でやめても、それまでの結果は使えます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "짧은 글 몇 편을 평소처럼 읽기만 하면, Nook이 읽는 속도를 바탕으로 눈에 맞는 글자 크기와 간격을 찾아드려요.\n약 5분 걸리고, 언제든 그만둬도 그때까지의 결과를 쓸 수 있어요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只需像平常一样读几段短文，Nook 就会根据你的实际阅读速度，找到适合你眼睛的字号和间距。\n大约五分钟，中途退出也会保留已学到的结果。"
+          }
+        }
+      }
+    },
     "Read at your own pace" : {
       "localizations" : {
         "en" : {
@@ -8119,6 +8147,7 @@
       }
     },
     "What you read today" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8398,34 +8427,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在检查你关注网站的最新文章。"
-          }
-        }
-      }
-    },
-    "Read a few short pieces the way you always do, and Nook will find the type size and spacing that suit your eyes — based on how you actually read.\nAbout five minutes, and quitting early still keeps what it learned." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Read a few short pieces the way you always do, and Nook will find the type size and spacing that suit your eyes — based on how you actually read.\nAbout five minutes, and quitting early still keeps what it learned."
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "짧은 글 몇 편을 평소처럼 읽기만 하면, Nook이 읽는 속도를 바탕으로 눈에 맞는 글자 크기와 간격을 찾아드려요.\n약 5분 걸리고, 언제든 그만둬도 그때까지의 결과를 쓸 수 있어요."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "短い文章を数本いつも通りに読むだけで、Nook が読む速さをもとに目に合う文字サイズと間隔を見つけます。\n約5分。途中でやめても、それまでの結果は使えます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只需像平常一样读几段短文，Nook 就会根据你的实际阅读速度，找到适合你眼睛的字号和间距。\n大约五分钟，中途退出也会保留已学到的结果。"
           }
         }
       }
