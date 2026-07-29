@@ -1957,6 +1957,9 @@ private struct ReaderDetailView: View {
     @AppStorage("markReadOnOpen") private var markReadOnOpen = true
     @AppStorage("markReadDelaySeconds") private var markReadDelaySeconds = 3
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
+    @AppStorage(ArticleSummarySettings.enabledKey) private var summariesEnabled = false
+    @AppStorage(ArticleSummarySettings.styleKey) private var summaryStyleRaw = ArticleSummaryStyle.concise.rawValue
+    @AppStorage(TranslationSettings.summaryProviderKey) private var summaryProviderRaw = TranslationProvider.appleIntelligence.rawValue
     // Typography settings drive the native reader body (family, size, leading,
     // kern). Observed here so a settings change restyles the open article live.
     @AppStorage("readerFont") private var readerFont = ReaderFont.system
@@ -1984,6 +1987,7 @@ private struct ReaderDetailView: View {
     @State private var isTranslating = false
     @State private var isShowingTranslation = false
     @State private var confirmingDelete = false
+    @State private var summaryController = ArticleSummaryController()
 
     private var targetLanguage: Locale.Language {
         (appLanguage == .system ? Locale.current : appLanguage.locale).language
@@ -2138,6 +2142,15 @@ private struct ReaderDetailView: View {
             VStack(alignment: .leading, spacing: 24) {
                 articleHeader(article)
 
+                if let summary = summaryController.summary {
+                    ArticleSummaryCard(
+                        summary: summary,
+                        style: summaryController.style,
+                        provider: summaryController.provider
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
                 Divider()
 
                 readerBody(article)
@@ -2212,6 +2225,23 @@ private struct ReaderDetailView: View {
             if !Task.isCancelled { detectedLanguage = detected }
             await markReadAfterDwell(article)
         }
+        .task(id: summaryTaskKey(for: article)) {
+            guard summariesEnabled,
+                  let markdown = summaryMarkdown(for: article)
+            else {
+                summaryController.reset()
+                return
+            }
+            await summaryController.load(
+                ArticleSummaryRequest(
+                    title: article.title,
+                    markdown: markdown,
+                    style: ArticleSummaryStyle(rawValue: summaryStyleRaw) ?? .concise,
+                    provider: TranslationProvider(rawValue: summaryProviderRaw) ?? .appleIntelligence,
+                    outputLanguage: targetLanguageName
+                )
+            )
+        }
         // If reader-mode content finishes extracting AFTER translation was turned
         // on, restart the translator against the now-rendered extracted HTML so
         // its per-block overrides line up with what's shown.
@@ -2229,6 +2259,40 @@ private struct ReaderDetailView: View {
         )
         .id(article.id)
         .transition(.push(from: readerNavForward ? .bottom : .top))
+    }
+
+    /// Summaries consume exactly the Markdown represented by the visible native
+    /// reader. While Reader extraction is still loading there is deliberately no
+    /// fallback request: the task reruns when the final visible body is known.
+    private func summaryMarkdown(for article: Article) -> String? {
+        if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+            switch store.readerContentState(for: article) {
+            case .ready, .failed, .gone:
+                return store.nativeReaderMarkdown(for: article)
+            case .loading, .none:
+                return nil
+            }
+        }
+        return store.nativeReaderMarkdown(for: article)
+    }
+
+    private func summaryTaskKey(for article: Article) -> String {
+        let contentState: String
+        switch store.readerContentState(for: article) {
+        case .ready(let html): contentState = "ready:\(html.hashValue)"
+        case .failed: contentState = "failed"
+        case .gone: contentState = "gone"
+        case .loading: contentState = "loading"
+        case .none: contentState = "none"
+        }
+        return [
+            article.id,
+            String(summariesEnabled),
+            summaryStyleRaw,
+            summaryProviderRaw,
+            targetLanguageName,
+            contentState,
+        ].joined(separator: "|")
     }
 
     /// The reader body: reader-mode-extracted content when the experiment is on,
@@ -3172,6 +3236,10 @@ private struct ReadingSettingsSections: View {
             Picker("Links Open", selection: $readerLinkBehavior) {
                 ForEach(ReaderLinkBehavior.allCases) { Text($0.label).tag($0) }
             }
+        }
+
+        Section("AI Summary") {
+            ArticleSummarySettingsContent()
         }
     }
 }

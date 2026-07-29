@@ -483,6 +483,11 @@ private struct ReaderSettingsScreen: View {
             }
             .warmRows()
 
+            Section("AI Summary") {
+                ArticleSummarySettingsContent()
+            }
+            .warmRows()
+
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Default Position")

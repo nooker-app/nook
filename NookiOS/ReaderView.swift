@@ -48,6 +48,9 @@ struct ReaderDetailView: View {
     @AppStorage("readerControlHand") private var defaultControlSide = ReaderControlSide.right
     @AppStorage("readerHandedness") private var readerHandedness = ReaderHandedness.right
     @AppStorage("readerAdaptiveControlsEnabled") private var adaptiveControlsEnabled = true
+    @AppStorage(ArticleSummarySettings.enabledKey) private var summariesEnabled = false
+    @AppStorage(ArticleSummarySettings.styleKey) private var summaryStyleRaw = ArticleSummaryStyle.concise.rawValue
+    @AppStorage(TranslationSettings.summaryProviderKey) private var summaryProviderRaw = TranslationProvider.appleIntelligence.rawValue
 
     @State private var isShowingInfo = false
     @State private var confirmingDelete = false
@@ -145,6 +148,7 @@ struct ReaderDetailView: View {
     /// each block's text as it arrives while preserving markup. The legacy
     /// `translatedBody` path above still handles plain-paragraph-only articles.
     @State private var nativeTranslator = NativeArticleTranslator()
+    @State private var summaryController = ArticleSummaryController()
 
     /// The language to translate into: the app's chosen language, or the system
     /// language when set to "System".
@@ -290,6 +294,16 @@ struct ReaderDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header(article)
+
+                    if let summary = summaryController.summary {
+                        ArticleSummaryCard(
+                            summary: summary,
+                            style: summaryController.style,
+                            provider: summaryController.provider
+                        )
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     Divider()
 
                     readerBody(article)
@@ -528,6 +542,23 @@ struct ReaderDetailView: View {
             let detected = await Task.detached { Self.detectLanguage(for: article) }.value
             if !Task.isCancelled { detectedLanguage = detected }
         }
+        .task(id: summaryTaskKey(for: article)) {
+            guard summariesEnabled,
+                  let markdown = summaryMarkdown(for: article)
+            else {
+                summaryController.reset()
+                return
+            }
+            await summaryController.load(
+                ArticleSummaryRequest(
+                    title: article.title,
+                    markdown: markdown,
+                    style: ArticleSummaryStyle(rawValue: summaryStyleRaw) ?? .concise,
+                    provider: TranslationProvider(rawValue: summaryProviderRaw) ?? .appleIntelligence,
+                    outputLanguage: targetLanguageName
+                )
+            )
+        }
         // Warm the reader's text-import cache after the open transition settles, so
         // per-block WebKit imports don't stall scrolling. Re-runs when reader-mode
         // content becomes ready (to warm the extracted HTML shown then), and cancels
@@ -585,6 +616,39 @@ struct ReaderDetailView: View {
         }
         .id(article.id)
         .transition(.push(from: readerNavForward ? .bottom : .top))
+    }
+
+    /// Waits for Reader extraction so the model never summarizes feed fallback
+    /// text while the native reader is about to replace it with full content.
+    private func summaryMarkdown(for article: Article) -> String? {
+        if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+            switch store.readerContentState(for: article) {
+            case .ready, .failed, .gone:
+                return store.nativeReaderMarkdown(for: article)
+            case .loading, .none:
+                return nil
+            }
+        }
+        return store.nativeReaderMarkdown(for: article)
+    }
+
+    private func summaryTaskKey(for article: Article) -> String {
+        let contentState: String
+        switch store.readerContentState(for: article) {
+        case .ready(let html): contentState = "ready:\(html.hashValue)"
+        case .failed: contentState = "failed"
+        case .gone: contentState = "gone"
+        case .loading: contentState = "loading"
+        case .none: contentState = "none"
+        }
+        return [
+            article.id,
+            String(summariesEnabled),
+            summaryStyleRaw,
+            summaryProviderRaw,
+            targetLanguageName,
+            contentState,
+        ].joined(separator: "|")
     }
 
     /// Whether the last article change moved forward (next). Drives the push

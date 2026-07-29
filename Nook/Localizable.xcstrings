@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "AI Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 摘要"
+          }
+        }
+      }
+    },
     "%lld min" : {
       "localizations" : {
         "en" : {

@@ -6,13 +6,16 @@ import SwiftUI
 public struct TranslationEngineSettingsContent: View {
     @AppStorage(TranslationSettings.readerProviderKey) private var readerProvider = TranslationProvider.appleIntelligence.rawValue
     @AppStorage(TranslationSettings.titleProviderKey) private var titleProvider = TranslationProvider.appleIntelligence.rawValue
+    @AppStorage(TranslationSettings.summaryProviderKey) private var summaryProvider = TranslationProvider.appleIntelligence.rawValue
     @AppStorage(TranslationSettings.geminiKeyConfiguredKey) private var geminiKeyConfigured = false
     @State private var keyInput = ""
 
     public init() {}
 
     private var usesGemini: Bool {
-        readerProvider == TranslationProvider.gemini.rawValue || titleProvider == TranslationProvider.gemini.rawValue
+        readerProvider == TranslationProvider.gemini.rawValue
+            || titleProvider == TranslationProvider.gemini.rawValue
+            || summaryProvider == TranslationProvider.gemini.rawValue
     }
 
     public var body: some View {
@@ -21,6 +24,9 @@ public struct TranslationEngineSettingsContent: View {
         }
         Picker(selection: $titleProvider) { providerOptions } label: {
             Text("Article list titles", bundle: .module)
+        }
+        Picker(selection: $summaryProvider) { providerOptions } label: {
+            Text("Article summaries", bundle: .module)
         }
 
         if usesGemini {
@@ -57,7 +63,7 @@ public struct TranslationEngineSettingsContent: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("Your key is stored only on this device and is never synced. When Gemini is selected, article text is sent to Google to translate it.", bundle: .module)
+            Text("Your key is stored only on this device and is never synced. Features configured to use Gemini send the relevant article text to Google.", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

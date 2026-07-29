@@ -4,6 +4,28 @@
     "" : {
       "shouldTranslate" : false
     },
+    "AI Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 摘要"
+          }
+        }
+      }
+    },
     "— Diagnostics (helps with troubleshooting; feel free to delete) —" : {
       "localizations" : {
         "en" : {

@@ -4,6 +4,226 @@
     "" : {
       "shouldTranslate" : false
     },
+    "AI Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 摘要"
+          }
+        }
+      }
+    },
+    "Article summaries" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記事の要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文章摘要"
+          }
+        }
+      }
+    },
+    "Brief Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "簡潔な要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "간단 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简要摘要"
+          }
+        }
+      }
+    },
+    "Detailed Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "詳細な要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상세 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "详细摘要"
+          }
+        }
+      }
+    },
+    "Expert Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "専門家向け要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전문가 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "专家摘要"
+          }
+        }
+      }
+    },
+    "Gemini sends article Markdown to Google and requires an API key in Translation Engine settings." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini は記事の Markdown を Google に送信します。翻訳エンジン設定で API キーが必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini는 글의 Markdown을 Google로 전송하며 번역 엔진 설정에 API 키가 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini 会将文章 Markdown 发送给 Google，并需要在翻译引擎设置中配置 API 密钥。"
+          }
+        }
+      }
+    },
+    "Show AI summaries" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI要約を表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 요약 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 AI 摘要"
+          }
+        }
+      }
+    },
+    "Summaries use only the Markdown shown by the native reader and appear above the original article. They may be omitted when the content cannot be summarized reliably." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要約にはネイティブリーダーに表示される Markdown だけを使用し、原文の上に表示します。内容を確実に要約できない場合は表示されないことがあります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약은 네이티브 리더에 표시되는 Markdown만 사용하며 원문 위에 나타납니다. 내용을 신뢰성 있게 요약할 수 없으면 제공되지 않을 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摘要仅使用原生阅读器中显示的 Markdown，并显示在原文上方。内容无法可靠总结时可能不会提供摘要。"
+          }
+        }
+      }
+    },
+    "Summary style" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要約スタイル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약 스타일"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摘要样式"
+          }
+        }
+      }
+    },
+    "The original article remains below for comparison." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比較できるよう、原文は下にそのまま表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비교할 수 있도록 원문은 아래에 그대로 표시됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原文会保留在下方以便对照。"
+          }
+        }
+      }
+    },
     "'%@' is not a valid URL." : {
       "localizations" : {
         "en" : {
@@ -4375,24 +4595,24 @@
         }
       }
     },
-    "Your key is stored only on this device and is never synced. When Gemini is selected, article text is sent to Google to translate it." : {
+    "Your key is stored only on this device and is never synced. Features configured to use Gemini send the relevant article text to Google." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "キーはこの端末にのみ保存され、同期されません。Gemini を選択すると、翻訳のために記事のテキストが Google に送信されます。"
+            "value" : "キーはこの端末にのみ保存され、同期されません。Gemini を使用するよう設定した機能では、関連する記事テキストが Google に送信されます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "키는 이 기기에만 저장되며 동기화되지 않습니다. Gemini를 선택하면 번역을 위해 기사 텍스트가 Google로 전송됩니다."
+            "value" : "키는 이 기기에만 저장되며 동기화되지 않습니다. Gemini를 사용하도록 설정한 기능은 관련 기사 텍스트를 Google로 전송합니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "密钥仅存储在此设备上，绝不同步。选择 Gemini 时，文章文本会发送给 Google 进行翻译。"
+            "value" : "密钥仅存储在此设备上，绝不同步。配置为使用 Gemini 的功能会将相关的文章文本发送给 Google。"
           }
         }
       }
