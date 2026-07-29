@@ -1414,9 +1414,10 @@ private struct ArticleRow: View {
     var feed: Feed?
     let translationBox: ListTitleTranslator.StateBox
     /// Reveal progress of the translated-title block, used only to detect that
-    /// the row height moved. Badges do not animate their height — see
-    /// ``ArticleRowIdentity`` for why the row is re-created for them instead.
+    /// the row height moved. Badges never move it — they live inline in the
+    /// metadata line, so their arrival costs no height.
     @State private var rowRevealProgress: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -1462,32 +1463,46 @@ private struct ArticleRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
-                // Metadata + badges share a zero-spacing group so the collapsed
-                // (height-zero) badge block leaves no gap below the metadata; the
-                // block carries the spacing itself once it reveals.
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        Text(feed?.displayTitle ?? String(localized: "Unknown Feed"))
-                        Text("·")
-                        RelativeTimeText(article.publishedAt)
-                        Text("·")
-                        Text("\(article.estimatedReadMinutes) min")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                // Badges share the metadata line, because this outline-backed
+                // list never re-measures a live row: category chips arriving
+                // seconds later (keyword rules, then the AI classifier) must not
+                // change the row's height, or they render clipped. On one line
+                // the chips only consume width — the invisible chip pins the
+                // line's height from the first layout, so even that is settled
+                // before any category exists. (Re-identifying the row with a
+                // fresh `.id` re-measured it, but corrupted the list's
+                // swipe-action rendering from then on; a reserved badge line
+                // put a visible gap under every untagged row.)
+                HStack(spacing: 6) {
+                    Text(feed?.displayTitle ?? String(localized: "Unknown Feed"))
+                    Text("·")
+                    RelativeTimeText(article.publishedAt)
+                    Text("·")
+                    Text("\(article.estimatedReadMinutes) min")
 
-                    // `reservesSpace` because this outline-backed list never
-                    // re-measures a live row: the badge line's height must be
-                    // owned by the row from its very first layout. Gated on the
-                    // user having categories at all so unused stays free.
-                    CategoryBadgesBlock(
-                        ReaderStore.shared.categories(forArticle: article),
-                        topPadding: 5,
-                        animatesReveal: !ReaderStore.shared.isBulkCategorizing,
-                        reservesSpace: ReaderStore.shared.hasCategories
-                    )
+                    let categories = ReaderStore.shared.categories(forArticle: article)
+                    if !categories.isEmpty {
+                        // Never compressed: a squeezed-to-nothing chip would
+                        // read as the tag silently missing. The feed title is
+                        // what truncates in a narrow column.
+                        CategoryBadges(categories)
+                            .fixedSize()
+                            .transition(.opacity)
+                    }
+                    Text(verbatim: "\u{200B}")
+                        .font(.caption2.weight(.medium))
+                        .padding(.vertical, 2)
+                        .opacity(0)
+                        .accessibilityHidden(true)
                 }
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .animation(
+                    ReaderStore.shared.isBulkCategorizing || reduceMotion
+                        ? nil : .smooth(duration: 0.28),
+                    value: article.categories
+                )
             }
         }
         .padding(.vertical, 8)
