@@ -1,6 +1,12 @@
 import NookPlusServiceAPI
 import SwiftUI
 
+#if canImport(UIKit)
+    import UIKit
+#else
+    import AppKit
+#endif
+
 /// Guided setup for Nook Plus, shared by macOS and iOS.
 ///
 /// Written for someone who has never heard of AT Protocol. Each step explains
@@ -335,24 +341,24 @@ public struct PlusOnboardingView: View {
                     .textInputAutocapitalization(.characters)
                 #endif
 
-            if arrivedByLink && !store.invitationAccepted {
-                Label {
-                    Text("The invitation in that link cannot be used. It may have been used already or expired.", bundle: .module)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle")
-                }
-                .foregroundStyle(.orange)
-                .font(.callout)
-            }
-
-            if invitationChecked && !arrivedByLink {
+            if invitationChecked || arrivedByLink {
                 if store.invitationAccepted {
                     Label { Text("This code works.", bundle: .module) } icon: { Image(systemName: "checkmark.circle.fill") }
                         .foregroundStyle(.green)
                         .font(.callout)
                 } else {
                     Label {
-                        Text("That code was not recognised. It may have been used already or expired.", bundle: .module)
+                        // The store's message when there is one: the check can
+                        // fail because the service is unreachable or broken, and
+                        // saying "used already or expired" then is a diagnosis
+                        // this screen is in no position to make.
+                        if let failure = store.failure {
+                            Text(verbatim: failure)
+                        } else if arrivedByLink {
+                            Text("The invitation in that link cannot be used. It may have been used already or expired.", bundle: .module)
+                        } else {
+                            Text("That code was not recognised. It may have been used already or expired.", bundle: .module)
+                        }
                     } icon: {
                         Image(systemName: "exclamationmark.triangle")
                     }
@@ -501,6 +507,21 @@ public struct PlusOnboardingView: View {
         .onChange(of: label) { _, _ in handleForCredential = store.fullHandle(for: label) }
     }
 
+    /// Whether a password field is setting a new password or offering an
+    /// existing one. The content type decides whether the system generates a
+    /// password or fills a saved one, and getting it backwards means either no
+    /// suggestion or no fill.
+    enum PasswordPurpose {
+        case create
+        case existing
+
+        #if canImport(UIKit)
+            var contentType: UITextContentType { self == .create ? .newPassword : .password }
+        #else
+            var contentType: NSTextContentType { self == .create ? .newPassword : .password }
+        #endif
+    }
+
     /// A password row that can be read.
     ///
     /// Two reasons it is not a bare `SecureField`. A generated password is
@@ -510,7 +531,9 @@ public struct PlusOnboardingView: View {
     /// dark appearance, which made a filled field look nearly empty; a field
     /// showing real glyphs uses the label colour and does not have that problem.
     @ViewBuilder
-    private func passwordField(text: Binding<String>, label: Text) -> some View {
+    private func passwordField(
+        text: Binding<String>, label: Text, purpose: PasswordPurpose = .create
+    ) -> some View {
         // Both fields stay in the hierarchy and only their visibility changes.
         // Swapping one for the other changes view identity, which cancels an
         // in-flight AutoFill session — and offering to generate and save the
@@ -525,7 +548,7 @@ public struct PlusOnboardingView: View {
                 .allowsHitTesting(passwordVisible)
                 .accessibilityHidden(!passwordVisible)
         }
-        .textContentType(.newPassword)
+        .textContentType(purpose.contentType)
         .foregroundStyle(.primary)
         .autocorrectionDisabled()
         #if os(iOS)
@@ -577,16 +600,11 @@ public struct PlusOnboardingView: View {
                 "This name is already yours",
                 "The account was created on an earlier attempt, so there is nothing left to set up. Sign in with the password you chose then."
             )
-            LabeledContent {
-                Text(store.fullHandle(for: label))
-                    .font(.callout.monospaced())
-                    .textSelection(.enabled)
-            } label: {
-                Text("Your handle", bundle: .module)
-            }
-            .font(.caption)
+            // The same username field as setup, so the password saved then can
+            // be offered back here rather than having to be remembered.
+            handleRow
 
-            passwordField(text: $password, label: Text("Password", bundle: .module))
+            passwordField(text: $password, label: Text("Password", bundle: .module), purpose: .existing)
 
             if let failure = store.failure {
                 Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
@@ -726,8 +744,14 @@ public struct PlusOnboardingView: View {
             step = .credentials
             return
         }
+        let checking = label
         availability = .checking
-        let result = await store.checkHandle(label: label)
+        let result = await store.checkHandle(label: checking)
+        // The field stays editable while the request is in flight, so a verdict
+        // for a name the user has since changed must be dropped — otherwise an
+        // unchecked name passes the gate, or a stale rejection is shown against
+        // a name that is fine.
+        guard checking == label else { return }
         switch result {
         case .available(let handle):
             availability = .available(handle)
@@ -798,6 +822,9 @@ public struct PlusOnboardingView: View {
         }
     }
 
+    /// Grows with the text size, so a digit cannot outrun its circle.
+    @ScaledMetric(relativeTo: .caption) private var badgeSize: CGFloat = 20
+
     /// A numbered next step for the finish screen.
     @ViewBuilder
     private func nextStep(_ number: Int, _ title: LocalizedStringKey, _ detail: LocalizedStringKey) -> some View {
@@ -805,7 +832,9 @@ public struct PlusOnboardingView: View {
             Text(number, format: .number)
                 .font(.caption.weight(.bold))
                 .monospacedDigit()
-                .frame(width: 20, height: 20)
+                // Scaled, not fixed: .caption grows to roughly 30pt at the
+                // largest accessibility sizes and spilled out of a 20pt circle.
+                .frame(minWidth: badgeSize, minHeight: badgeSize)
                 .background(Circle().fill(PlusTheme.accent.opacity(0.15)))
                 .foregroundStyle(PlusTheme.accent)
             VStack(alignment: .leading, spacing: 2) {

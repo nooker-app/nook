@@ -36,11 +36,15 @@ public struct PlusSettingsContent: View {
         .onChange(of: PlusInviteInbox.shared.pendingCode) { _, code in
             if code != nil { openSetupIfInvited() }
         }
-        .sheet(isPresented: $showingSetup) {
+        // The store outlives both sheets, so a failure left by one described
+        // something the user was no longer doing when the other opened.
+        .sheet(isPresented: $showingSetup, onDismiss: store.clearFailure) {
             PlusOnboardingView(store: store) { showingSetup = false }
+                .task { store.clearFailure() }
         }
-        .sheet(isPresented: $showingSignIn) {
+        .sheet(isPresented: $showingSignIn, onDismiss: store.clearFailure) {
             PlusSignInView(store: store) { showingSignIn = false }
+                .task { store.clearFailure() }
         }
     }
 

@@ -79,6 +79,8 @@ struct PlusSignInView: View {
     /// Prefills the name, for a flow that already knows it.
     var initialName: String = ""
 
+    @ScaledMetric(relativeTo: .title3) private var symbolColumn: CGFloat = 28
+
     @State private var kind: PlusAccountKind = .nook
     @State private var name = ""
     @State private var password = ""
@@ -184,7 +186,9 @@ struct PlusSignInView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: candidate.symbol)
                 .font(.title3)
-                .frame(width: 28)
+                // Scaled: a fixed 28pt column let the glyph grow past it and
+                // into the text at the largest accessibility sizes.
+                .frame(minWidth: symbolColumn)
                 .foregroundStyle(candidate.isSupported ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
 
             VStack(alignment: .leading, spacing: 2) {
@@ -303,8 +307,12 @@ struct PlusSignInView: View {
 
     private func signIn() async {
         await store.signIn(handle: submittedHandle, password: password)
-        password = ""
-        if store.isSignedIn { onFinished() }
+        // Cleared only on success. A network failure or a handle belonging to
+        // another server is not a reason to make the user type it again.
+        if store.isSignedIn {
+            password = ""
+            onFinished()
+        }
     }
 }
 

@@ -8,14 +8,6 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<!-- Claims the domains Nook Plus issues handles under, so the system can
-	     offer to save a newly created account password. See
-	     NookiOS/NookiOS.entitlements for why both deployments appear. -->
-	<key>com.apple.developer.associated-domains</key>
-	<array>
-		<string>webcredentials:nooker.app</string>
-		<string>webcredentials:staging.nooker.app?mode=developer</string>
-	</array>
 	<!-- Sparkle's installer/downloader XPC services communicate with the
 	     sandboxed app over these Mach service names. -->
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
