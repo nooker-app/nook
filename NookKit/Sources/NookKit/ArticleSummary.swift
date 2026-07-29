@@ -412,6 +412,7 @@ actor ArticleSummaryCache {
 @Observable
 public final class ArticleSummaryController {
     public private(set) var summary: String?
+    public private(set) var isLoading = false
     public private(set) var style: ArticleSummaryStyle = .concise
     public private(set) var provider: TranslationProvider = .appleIntelligence
     private var requestKey: String?
@@ -429,15 +430,19 @@ public final class ArticleSummaryController {
         guard key != requestKey else { return }
         requestKey = key
         summary = nil
+        isLoading = true
         style = request.style
         provider = request.provider
         let result = await ArticleSummarizer.summarize(request)
-        guard !Task.isCancelled, requestKey == key else { return }
+        guard requestKey == key else { return }
+        isLoading = false
+        guard !Task.isCancelled else { return }
         summary = result
     }
 
     public func reset() {
         requestKey = nil
         summary = nil
+        isLoading = false
     }
 }

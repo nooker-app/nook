@@ -158,6 +158,50 @@
         }
       }
     },
+    "Summarize" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要約する"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成摘要"
+          }
+        }
+      }
+    },
+    "Summarizing…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要約中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成摘要…"
+          }
+        }
+      }
+    },
     "Summaries use only the Markdown shown by the native reader and appear above the original article. They may be omitted when the content cannot be summarized reliably." : {
       "localizations" : {
         "ja" : {

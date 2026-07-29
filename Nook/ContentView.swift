@@ -1988,6 +1988,8 @@ private struct ReaderDetailView: View {
     @State private var isShowingTranslation = false
     @State private var confirmingDelete = false
     @State private var summaryController = ArticleSummaryController()
+    @State private var summaryRequestedArticleID: String?
+    @State private var summaryGenerationID = 0
 
     private var targetLanguage: Locale.Language {
         (appLanguage == .system ? Locale.current : appLanguage.locale).language
@@ -2149,6 +2151,10 @@ private struct ReaderDetailView: View {
                         provider: summaryController.provider
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    ArticleSummaryActionButton(isLoading: summaryController.isLoading) {
+                        requestSummary(for: article)
+                    }
                 }
 
                 Divider()
@@ -2226,7 +2232,7 @@ private struct ReaderDetailView: View {
             await markReadAfterDwell(article)
         }
         .task(id: summaryTaskKey(for: article)) {
-            guard summariesEnabled,
+            guard summariesEnabled || summaryRequestedArticleID == article.id,
                   let markdown = summaryMarkdown(for: article)
             else {
                 summaryController.reset()
@@ -2292,7 +2298,15 @@ private struct ReaderDetailView: View {
             summaryProviderRaw,
             targetLanguageName,
             contentState,
+            summaryRequestedArticleID == article.id ? "requested" : "automatic",
+            String(summaryGenerationID),
         ].joined(separator: "|")
+    }
+
+    private func requestSummary(for article: Article) {
+        summaryController.reset()
+        summaryRequestedArticleID = article.id
+        summaryGenerationID += 1
     }
 
     /// The reader body: reader-mode-extracted content when the experiment is on,

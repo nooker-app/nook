@@ -149,6 +149,8 @@ struct ReaderDetailView: View {
     /// `translatedBody` path above still handles plain-paragraph-only articles.
     @State private var nativeTranslator = NativeArticleTranslator()
     @State private var summaryController = ArticleSummaryController()
+    @State private var summaryRequestedArticleID: String?
+    @State private var summaryGenerationID = 0
 
     /// The language to translate into: the app's chosen language, or the system
     /// language when set to "System".
@@ -302,6 +304,10 @@ struct ReaderDetailView: View {
                             provider: summaryController.provider
                         )
                         .transition(.opacity.combined(with: .move(edge: .top)))
+                    } else {
+                        ArticleSummaryActionButton(isLoading: summaryController.isLoading) {
+                            requestSummary(for: article)
+                        }
                     }
 
                     Divider()
@@ -543,7 +549,7 @@ struct ReaderDetailView: View {
             if !Task.isCancelled { detectedLanguage = detected }
         }
         .task(id: summaryTaskKey(for: article)) {
-            guard summariesEnabled,
+            guard summariesEnabled || summaryRequestedArticleID == article.id,
                   let markdown = summaryMarkdown(for: article)
             else {
                 summaryController.reset()
@@ -648,7 +654,15 @@ struct ReaderDetailView: View {
             summaryProviderRaw,
             targetLanguageName,
             contentState,
+            summaryRequestedArticleID == article.id ? "requested" : "automatic",
+            String(summaryGenerationID),
         ].joined(separator: "|")
+    }
+
+    private func requestSummary(for article: Article) {
+        summaryController.reset()
+        summaryRequestedArticleID = article.id
+        summaryGenerationID += 1
     }
 
     /// Whether the last article change moved forward (next). Drives the push

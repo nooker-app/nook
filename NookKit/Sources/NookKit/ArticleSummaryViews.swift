@@ -105,3 +105,32 @@ public struct ArticleSummaryCard: View {
         )) ?? AttributedString(summary)
     }
 }
+
+public struct ArticleSummaryActionButton: View {
+    public let isLoading: Bool
+    public let action: () -> Void
+
+    public init(isLoading: Bool, action: @escaping () -> Void) {
+        self.isLoading = isLoading
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "apple.intelligence")
+                }
+                Text(isLoading ? "Summarizing…" : "Summarize", bundle: .module)
+            }
+        }
+        .buttonStyle(.bordered)
+        .disabled(isLoading)
+        .accessibilityLabel(
+            Text(isLoading ? "Summarizing…" : "Summarize", bundle: .module)
+        )
+    }
+}
