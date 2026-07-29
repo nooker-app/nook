@@ -389,9 +389,19 @@ private struct ReaderSettingsScreen: View {
         Binding { Color(hex: readerTextHex) } set: { readerTextHex = $0.hexString }
     }
 
+    private var previewTypography: ReaderTypography {
+        ReaderTypography(
+            font: readerFont,
+            fontSize: CGFloat(readerFontSize),
+            lineHeightMultiple: readerLineHeight,
+            letterSpacingEM: readerLetterSpacing
+        )
+    }
+
     var body: some View {
         List {
             Section {
+                ReaderTypographyPreview(previewTypography)
                 Picker("Font", selection: $readerFont) {
                     ForEach(ReaderFont.allCases) { Text($0.label).tag($0) }
                 }

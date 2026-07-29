@@ -4283,6 +4283,90 @@
           }
         }
       }
+    },
+    "The Quiet Craft of Reading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Quiet Craft of Reading"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "읽기라는 조용한 기술"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読むという静かな技術"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阅读这门安静的手艺"
+          }
+        }
+      }
+    },
+    "Good typography disappears: the right size, spacing, and rhythm let you forget the letters and follow the story. Adjust the controls and watch this paragraph take the shape your articles will have." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good typography disappears: the right size, spacing, and rhythm let you forget the letters and follow the story. Adjust the controls and watch this paragraph take the shape your articles will have."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "좋은 타이포그래피는 눈에 띄지 않습니다. 알맞은 크기와 간격, 리듬은 글자를 잊고 이야기를 따라가게 해 줍니다. 아래 설정을 조절하면 이 문단이 실제 글이 보일 모습으로 바뀝니다."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "優れたタイポグラフィは目立ちません。適切なサイズと間隔、リズムがあれば、文字を忘れて物語を追えます。下の設定を調整すると、この段落が実際の記事の見た目に変わります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好的排版是隐形的：合适的字号、间距和节奏让你忘记文字本身，专注于故事。调整下方设置，这段文字就会呈现你的文章将来的模样。"
+          }
+        }
+      }
+    },
+    "Typography preview" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typography preview"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "타이포그래피 미리보기"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タイポグラフィのプレビュー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排版预览"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
