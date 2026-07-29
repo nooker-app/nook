@@ -398,8 +398,60 @@ private struct ReaderSettingsScreen: View {
         )
     }
 
+    @State private var showingCalibration = false
+    @State private var calibrationRefresh = 0
+
     var body: some View {
         List {
+            Section {
+                Button {
+                    showingCalibration = true
+                } label: {
+                    HStack {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Reading Fit")
+                                    .foregroundStyle(.primary)
+                                if let lastRun = CalibrationSession.lastRunDate {
+                                    Text("Last fit: \(lastRun.formatted(date: .abbreviated, time: .omitted))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Find the type that fits your eyes in five minutes")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } icon: {
+                            Image(systemName: CalibrationSession.lastRunDate == nil ? "wand.and.sparkles" : "checkmark.seal")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        Spacer()
+                        Text(CalibrationSession.lastRunDate == nil ? "" : String(localized: "Re-fit"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .id(calibrationRefresh)
+                }
+                if CalibrationSession.revertSnapshot != nil {
+                    Button {
+                        CalibrationSession.revert()
+                        calibrationRefresh += 1
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Restore previous settings")
+                                .foregroundStyle(.primary)
+                            if let snapshot = CalibrationSession.revertSnapshot {
+                                Text("Settings from before the \(snapshot.date.formatted(date: .abbreviated, time: .omitted)) fit")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .warmRows()
+
             Section {
                 ReaderTypographyPreview(previewTypography)
                 Picker("Font", selection: $readerFont) {
@@ -469,6 +521,9 @@ private struct ReaderSettingsScreen: View {
         .warmListBackground()
         .navigationTitle("Reader")
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $showingCalibration, onDismiss: { calibrationRefresh += 1 }) {
+            CalibrationView(store: ReaderStore.shared)
+        }
     }
 }
 

@@ -22,7 +22,7 @@ public enum ReaderLinkBehavior: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-public enum ReaderFont: String, CaseIterable, Identifiable, Sendable {
+public enum ReaderFont: String, CaseIterable, Identifiable, Sendable, Codable {
     case system
     case serif
     case monospaced

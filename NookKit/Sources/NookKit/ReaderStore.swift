@@ -607,6 +607,10 @@ public final class ReaderStore {
     /// recomputed (off-main for large libraries) whenever a filter input changes.
     public var visibleArticles: [Article] { displayedArticles }
 
+    /// Read-only view of the full loaded library, for features that sample
+    /// article content (Reading Fit draws its test paragraphs from here).
+    public var libraryArticles: [Article] { articles }
+
     /// Recomputes `displayedArticles` from the current inputs.
     ///
     /// User-driven changes (source/feed selection, search) pass `debounced:

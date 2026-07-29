@@ -4367,6 +4367,34 @@
           }
         }
       }
+    },
+    "Nook's reading samples" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook's reading samples"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook의 읽기 샘플"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook の読書サンプル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook 的阅读样本"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
