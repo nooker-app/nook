@@ -105,6 +105,9 @@ public struct PlusOnboardingView: View {
     @State private var confirmPassword = ""
     /// Lets the user read what a generated password actually put in the field.
     @State private var passwordVisible = false
+    /// The handle, held in state because the username field it feeds has to be a
+    /// real editable text field for the system to read it.
+    @State private var handleForCredential = ""
 
     enum Availability: Equatable {
         case unknown
@@ -441,21 +444,28 @@ public struct PlusOnboardingView: View {
     /// The handle, shown as a real username field rather than static text.
     ///
     /// A password manager saves a pair, so without a `.username` field beside
-    /// the password fields there is nothing to file the password under. It is
-    /// not editable — the name was chosen and checked on the previous step — but
-    /// it has to be a laid-out text field for the system to see it at all.
+    /// the password fields there is nothing to file the password under.
+    ///
+    /// Blocked from interaction rather than disabled: the name was already
+    /// chosen and checked on the previous step, so it must not be editable here,
+    /// but a disabled field is not a candidate the system will read when it
+    /// looks for the username to save alongside the password.
     private var handleRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("You will sign in as", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            let field = TextField(text: .constant(store.fullHandle(for: label))) {
+            let field = TextField(text: $handleForCredential) {
                 Text("Handle", bundle: .module)
             }
             .textContentType(.username)
             .font(.callout.monospaced())
-            .disabled(true)
+            .foregroundStyle(.secondary)
+            .allowsHitTesting(false)
+            #if os(iOS)
+                .textInputAutocapitalization(.never)
+            #endif
 
             #if os(iOS)
                 field
@@ -466,6 +476,8 @@ public struct PlusOnboardingView: View {
                 field.textFieldStyle(.roundedBorder)
             #endif
         }
+        .onAppear { handleForCredential = store.fullHandle(for: label) }
+        .onChange(of: label) { _, _ in handleForCredential = store.fullHandle(for: label) }
     }
 
     /// A password row that can be read.
