@@ -81,6 +81,9 @@ harness.sh init                    # scaffold HARNESS_DIR with App.swift + .app 
 harness.sh shot <name> [delay]     # build, launch, capture <name>.png, quit
 harness.sh at <name> <t1> [t2 …]   # capture at several delays in ONE run
 harness.sh log <name> [seconds]    # run in foreground, grep stderr (HARNESS_GREP)
+
+harness.sh ios-init                # scaffold an iOS harness under HARNESS_DIR/ios
+harness.sh ios-shot <name> [frames] # build for the simulator, install, capture
 ```
 
 Every `*.swift` in `HARNESS_DIR` is compiled (except `winid.swift`). Set
@@ -121,11 +124,41 @@ rather than rendered once. Two separate `shot` runs cannot show that.
 - **zsh quirks** when scripting around it: quote `--include='*.swift'` for
   `grep`, and `sed -i ''` needs the empty argument on macOS.
 
+## iOS is a separate verification
+
+A macOS pass is not evidence about iPhone. A list-truncation bug in this repo was
+fixed and verified on macOS while remaining fully broken on iOS, because the two
+platforms resolve an ambiguous width differently. Any fix the user will see on
+iOS gets an `ios-shot`.
+
+Reproducing an iOS-only layout bug usually needs three things the macOS harness
+does not:
+
+- **Real volume.** `LazyVStack` only misbehaves once it actually virtualizes. A
+  three-item excerpt renders everything at once and looks perfect.
+- **An actual scroll.** Rows realized *mid-scroll* are the ones measured against
+  a stale width. Drive it with `ScrollViewReader` + `scrollTo` after the content
+  settles — `simctl` cannot send gestures. Without this the bug did not appear at
+  all, through four rounds of adding structure.
+- **Nothing run-loop-spinning inside a view body.** The WebKit
+  `NSAttributedString` HTML importer trips AttributeGraph
+  (`precondition failure: setting value during update`). Precompute into a cache
+  from `.task`, which is what the app itself does.
+
+`ios-shot` grabs several frames because the first few catch the launch
+animation; read the last one. If the app vanishes back to the home screen it
+crashed — check
+`xcrun simctl spawn booted log show --last 90s --predicate 'process == "Harness"'`.
+
+Getting the project's real parser into an iOS harness is worth the effort: pull
+self-contained types out of the source verbatim with a script rather than
+retyping them, and let the compiler tell you what else is missing.
+
 ## Scope and honesty
 
-This is a **macOS** harness. Shared code (anything in `NookKit`) tests directly;
-iOS-only surfaces need a macOS stand-in, and a stand-in only proves things about
-the shared layer — say so rather than implying the iOS screen was verified.
+Shared code (anything in `NookKit`) tests directly on either harness. A macOS
+stand-in for an iOS-only surface only proves things about the shared layer — say
+so rather than implying the iOS screen was verified.
 
 When the harness cannot reproduce a report (an intermittent, long-idle, or
 device-specific symptom), state that plainly, note which candidate causes the

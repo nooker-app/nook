@@ -6,14 +6,25 @@
 #   harness.sh log  <name> [seconds]      build, run in foreground, grep stderr
 #   harness.sh at   <name> <t1> [t2 ...]  capture at several delays in one run
 #
+#   harness.sh ios-init                   scaffold an iOS harness (needs a booted sim)
+#   harness.sh ios-shot <name> [frames]   build for the sim, install, capture
+#
 # Sources compiled = every *.swift in the harness dir except helper tools.
 # Screenshots and the .app live in the same dir.
+#
+# iOS matters on its own: a layout bug can be invisible on macOS and present on
+# iOS (a LazyVStack row realized mid-scroll gets a different width proposal), so
+# a macOS pass is not evidence about iPhone. `ios-shot` takes several frames in a
+# row because the first ones catch the launch animation.
 set -e
 
 DIR="${HARNESS_DIR:-$(pwd)/harness}"
 APP="$DIR/Harness.app"
 BIN="$APP/Contents/MacOS/Harness"
 TARGET="${HARNESS_TARGET:-arm64-apple-macos14.0}"
+IOS_APP="$DIR/HarnessIOS.app"
+IOS_SRC="$DIR/ios"
+IOS_TARGET="${HARNESS_IOS_TARGET:-arm64-apple-ios18.0-simulator}"
 
 skeleton() {
   mkdir -p "$APP/Contents/MacOS"
@@ -133,9 +144,71 @@ case "${1:-}" in
     name="${2:-}"; seconds="${3:-8}"
     build; quit
     # Run in the foreground so stderr (instrumentation) is capturable.
-    ("$BIN" 2>&1 >/dev/null | grep -E "${HARNESS_GREP:-.}" &) 
+    ("$BIN" 2>&1 >/dev/null | grep -E "${HARNESS_GREP:-.}" &)
     sleep "$seconds"; quit
     ;;
 
-  *) sed -n '2,12p' "$0" ;;
+  ios-init)
+    mkdir -p "$IOS_SRC" "$IOS_APP"
+    cat > "$IOS_APP/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>Harness</string>
+<key>CFBundleIdentifier</key><string>dev.harness.visual</string>
+<key>CFBundleExecutable</key><string>Harness</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>UILaunchScreen</key><dict/>
+<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
+</dict></plist>
+PLIST
+    if [[ ! -f "$IOS_SRC/App.swift" ]]; then
+      cat > "$IOS_SRC/App.swift" <<'SWIFT'
+import SwiftUI
+
+// Copy the project's real source files into this directory and use the real
+// types. Two things are usually needed to reproduce an iOS-only layout bug:
+//   * the article/list must be long enough that LazyVStack actually virtualizes
+//   * you must scroll — use ScrollViewReader + scrollTo, because rows realized
+//     mid-scroll are the ones measured against a stale width
+// Anything that spins the run loop (the WebKit HTML importer) must run OUTSIDE
+// the view body or AttributeGraph trips: precompute into a cache in `.task`.
+struct RootView: View {
+    var body: some View {
+        ScrollView { Text("Replace me").padding(16) }
+    }
+}
+
+@main struct HarnessApp: App {
+    var body: some Scene { WindowGroup { RootView() } }
+}
+SWIFT
+    fi
+    echo "iOS harness ready at $IOS_SRC — boot a simulator, then: $0 ios-shot first"
+    ;;
+
+  ios-shot)
+    name="${2:?usage: harness.sh ios-shot <name> [frames]}"; frames="${3:-10}"
+    xcrun simctl list devices booted | grep -q Booted \
+      || { echo "no booted simulator. create/boot one, e.g.:
+  xcrun simctl create HarnessPhone com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro <runtime>
+  xcrun simctl boot HarnessPhone" >&2; exit 1 }
+    [[ -f "$IOS_APP/Info.plist" ]] || { echo "run '$0 ios-init' first" >&2; exit 1 }
+    sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
+    files=("${(@f)$(find "$IOS_SRC" -maxdepth 1 -name '*.swift' | sort)}")
+    xcrun --sdk iphonesimulator swiftc -sdk "$sdk" -target "$IOS_TARGET" \
+      -parse-as-library -O "${files[@]}" -o "$IOS_APP/Harness"
+    xcrun simctl terminate booted dev.harness.visual >/dev/null 2>&1 || true
+    xcrun simctl install booted "$IOS_APP"
+    xcrun simctl launch booted dev.harness.visual >/dev/null
+    # Successive frames instead of a sleep: the early ones are the launch
+    # animation, and the last stable one is the settled layout.
+    for i in $(seq 1 "$frames"); do
+      xcrun simctl io booted screenshot "$DIR/${name}_$i.png" >/dev/null 2>&1 || true
+    done
+    echo "$DIR/${name}_${frames}.png"
+    ;;
+
+  *) sed -n '2,18p' "$0" ;;
 esac
