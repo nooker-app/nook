@@ -86,6 +86,10 @@ iOS controls the exact background refresh schedule, so notifications are best ef
 | Translation provider | Apple Intelligence | Selected independently for reader, list titles, and categorization | Gemini requires explicit selection and a device-local API key |
 | Automatic list-title translation | Off | Opt-in; only visible titles are translated and cached | Depends on the selected title provider |
 | Coherent long-article translation | Off | Experimental rolling-context mode for the Apple block path | Depends on the selected reader provider |
+| Article summaries | Off | Opt-in; once on, summarizing stays a manual reader action | Apple stays on-device; Gemini sends article text to Google |
+| Automatic summaries | Off | Second opt-in on top of summaries; summarizes on open instead of on request | Same as above, once per article |
+| Summary style | Concise | Local preference; concise, detailed, or expert | None |
+| Summary provider | Apple Intelligence | Selected separately from reader, title, and categorization providers | Gemini requires explicit selection and a device-local API key |
 | AI categorization | Off | Opt-in; keyword and manual categories work without AI | Apple stays on-device; Gemini sends title and summary to Google |
 | Category hiding and text filters | Off until configured | Rules sync as user state; matching articles remain recoverable under Filtered | None |
 | Offline full-article downloads | Manual selection | Device-local copies; default auto-expiry is two weeks | Fetches selected article pages |

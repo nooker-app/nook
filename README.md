@@ -49,9 +49,9 @@ There is no Nook account and no Nook sync server. Pick a folder in iCloud Drive,
 
 I did not add AI to Nook to borrow someone else's moment. It earns its place or it does not ship.
 
-In practice that is three things: translating an article without wrecking the shape of the original, optionally sorting what arrives into your own categories, and condensing a batch of new items into one notification instead of a wall of them. Small jobs that save you effort. It does not write for you, rank your reading, or decide what deserves your attention.
+In practice that is four things: translating an article without wrecking the shape of the original, summarizing one when you only need the gist, sorting what arrives into your own categories, and condensing a batch of new items into one notification instead of a wall of them. Small jobs that save you effort. It does not write for you, rank your reading, or decide what deserves your attention.
 
-If you want none of it, you can have none of it. Full-article translation runs only when you press Translate. Automatic list-title translation and AI categorization are off until you turn them on. Keyword rules, manual categories, and search all work with every AI feature disabled.
+If you want none of it, you can have none of it. Full-article translation runs only when you press Translate. Summaries, automatic list-title translation, and AI categorization are each off until you turn them on — and summaries stay manual after that unless you also ask for them automatically. Keyword rules, manual categories, and search all work with every AI feature disabled.
 
 A few things run without a switch of their own — the new-article notification digest, for one — and only where I judged the behavior to disappear into ordinary use. Those always use Apple Intelligence on-device, and they degrade quietly instead of failing: if the model is unavailable or slow, you get a plain list of titles.
 
@@ -64,6 +64,7 @@ Keeping this on your device instead of on my server is a tradeoff, and it is wor
 - **A real native reader.** Images, links, code, quotes, nested lists, and tables render without making the default reader a web view. Full-page and original-site modes remain available.
 - **Typography you can set, or measure.** Choose font, size, line height, and letter spacing, with a live specimen so you can see the change before you commit to it. On iOS, Reading Fit times how fast you actually read short standardized passages and recommends a size and spacing from that, rather than asking you to guess.
 - **Translation that keeps its shape.** Use Apple Intelligence on-device or opt into Gemini. Gemini translates the native reader as coherent Markdown, preserving the context of headings, lists, tables, links, and code while it streams.
+- **Summaries when you want the gist.** Opt in, then summarize an article on demand in the native reader — concise, detailed, or expert — with Apple Intelligence on-device by default. Automatic summarizing is a second, separate switch.
 - **Markdown in and out.** Copy the article body as Markdown or save it as a `.md` file. When a Gemini-translated Markdown article is visible, that translated version is exported.
 - **Rules you control.** Create categories, keyword filters, hidden sources, and optional AI classification. Automatic list-title translation and new-article notifications are opt-in.
 - **Offline-first reading.** Feed content is local, selected full articles can be downloaded, and automatic expiry is configurable.
