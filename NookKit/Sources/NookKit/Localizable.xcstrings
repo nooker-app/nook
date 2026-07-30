@@ -2202,6 +2202,34 @@
         }
       }
     },
+    "Delete the Text Too": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the Text Too"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "본문까지 삭제"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本文も削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时删除正文"
+          }
+        }
+      }
+    },
     "Delete this post": {
       "localizations": {
         "en": {
@@ -2361,6 +2389,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "开发者"
+          }
+        }
+      }
+    },
+    "Discard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버리기"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "破棄"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "丢弃"
           }
         }
       }
@@ -2529,6 +2585,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "已下载"
+          }
+        }
+      }
+    },
+    "Draft": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draft"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下書き"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "草稿"
+          }
+        }
+      }
+    },
+    "Drafts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drafts"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下書き"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "草稿"
+          }
+        }
+      }
+    },
+    "Drafts cannot be saved on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drafts cannot be saved on this device."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에서는 초안을 저장할 수 없습니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この端末では下書きを保存できません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法在此设备上保存草稿。"
+          }
+        }
+      }
+    },
+    "Edit post": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit post"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 수정"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "投稿を編集"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑文章"
           }
         }
       }
@@ -3648,6 +3816,34 @@
         }
       }
     },
+    "It stays on this device and is not published until you say so.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It stays on this device and is not published until you say so."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에만 남고, 직접 발행할 때까지 공개되지 않습니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この端末にのみ残り、あなたが公開するまで公開されません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅保留在此设备上，在你发布之前不会公开。"
+          }
+        }
+      }
+    },
     "Italic": {
       "localizations": {
         "en": {
@@ -3698,6 +3894,62 @@
         }
       }
     },
+    "Keep Writing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Writing"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계속 쓰기"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "書き続ける"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继续写"
+          }
+        }
+      }
+    },
+    "Keep as Draft": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep as Draft"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안으로 보관"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下書きとして保存"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存为草稿"
+          }
+        }
+      }
+    },
     "Keep pulling": {
       "localizations": {
         "en": {
@@ -3722,6 +3974,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "继续下拉"
+          }
+        }
+      }
+    },
+    "Keep this as a draft?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep this as a draft?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안으로 보관할까요?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下書きとして保存しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要保存为草稿吗？"
+          }
+        }
+      }
+    },
+    "Kept on this device only, and never published until you say so. Nook holds no copy.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept on this device only, and never published until you say so. Nook holds no copy."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에만 보관되며, 직접 발행할 때까지 공개되지 않습니다. Nook은 사본을 보관하지 않습니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この端末にのみ保存され、あなたが公開するまで公開されません。Nook は複製を保持しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅保存在此设备上，在你发布之前不会公开。Nook 不保留副本。"
           }
         }
       }
@@ -6982,6 +7290,62 @@
         }
       }
     },
+    "Take Down": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take Down"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내리기"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "公開停止"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下架"
+          }
+        }
+      }
+    },
+    "Take this post down?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take this post down?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글을 내릴까요?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この投稿を公開停止しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要下架这篇文章吗？"
+          }
+        }
+      }
+    },
     "Text": {
       "localizations": {
         "en": {
@@ -7038,6 +7402,34 @@
         }
       }
     },
+    "That article is missing the information needed to edit it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That article is missing the information needed to edit it."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글을 수정하는 데 필요한 정보가 없습니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この投稿を編集するために必要な情報がありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少编辑这篇文章所需的信息。"
+          }
+        }
+      }
+    },
     "That code or session is no longer valid. Request a new one, or sign in again.": {
       "localizations": {
         "en": {
@@ -7090,6 +7482,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "无法识别该代码。它可能已被使用或已过期。"
+          }
+        }
+      }
+    },
+    "That draft could not be saved. Copy your text somewhere safe before closing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That draft could not be saved. Copy your text somewhere safe before closing."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안을 저장하지 못했습니다. 닫기 전에 본문을 다른 곳에 복사해 두세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下書きを保存できませんでした。閉じる前に本文を安全な場所にコピーしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存草稿。关闭前请把正文复制到安全的地方。"
           }
         }
       }
@@ -8331,6 +8751,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "未知的解析错误"
+          }
+        }
+      }
+    },
+    "Unpublish and Keep a Draft": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unpublish and Keep a Draft"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내리고 초안으로 보관"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "公開停止して下書きに保存"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下架并保存为草稿"
+          }
+        }
+      }
+    },
+    "Unpublished": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unpublished"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행 취소됨"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "公開停止"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消发布"
           }
         }
       }
@@ -9696,6 +10172,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅整词"
+          }
+        }
+      }
+    },
+    "“%@” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "어느 쪽이든 “%@”은(는) 웹에서 내려갑니다. 초안으로 보관하면 본문이 이 기기에 남아 다시 발행할 수 있고, 본문까지 삭제하면 어디에도 사본이 남지 않습니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "どちらの場合も「%@」は Web から削除されます。下書きとして保存すると本文はこの端末に残り、再び公開できます。本文も削除すると、どこにも複製は残りません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无论选择哪种方式，“%@”都会从网络上移除。保存为草稿会将正文留在此设备上，以便再次发布；同时删除正文则不会在任何地方保留副本。"
           }
         }
       }

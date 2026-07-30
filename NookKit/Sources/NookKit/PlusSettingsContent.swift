@@ -15,13 +15,13 @@ public struct PlusSettingsContent: View {
     @Bindable var store: PlusStore
     let onSetUp: () -> Void
     let onSignIn: () -> Void
-    let onCompose: () -> Void
+    let onCompose: (PlusComposeTarget) -> Void
 
     init(
         store: PlusStore,
         onSetUp: @escaping () -> Void,
         onSignIn: @escaping () -> Void,
-        onCompose: @escaping () -> Void
+        onCompose: @escaping (PlusComposeTarget) -> Void
     ) {
         self.store = store
         self.onSetUp = onSetUp
@@ -79,6 +79,18 @@ public struct PlusSettingsContent: View {
         deleting = record.uri
         await store.delete(record)
         deleting = nil
+        reportFailure()
+    }
+
+    /// Takes a post off the web while keeping its text as a draft on this device.
+    private func unpublish(_ record: ATRecord<ArticleRecord>) async {
+        deleting = record.uri
+        await store.unpublish(record)
+        deleting = nil
+        reportFailure()
+    }
+
+    private func reportFailure() {
         if let failure = store.failure {
             deletionFailure = failure
             store.clearFailure()
@@ -171,7 +183,7 @@ public struct PlusSettingsContent: View {
 
             Section {
                 Button {
-                    onCompose()
+                    onCompose(.newPost)
                 } label: {
                     Label {
                         Text("Write a post", bundle: .module)
@@ -182,6 +194,20 @@ public struct PlusSettingsContent: View {
                 .disabled(!store.canPublish)
             } footer: {
                 Text("Writing opens its own screen. On iPhone there is a button for it beside the tabs, so publishing does not start in Settings.", bundle: .module)
+            }
+
+            // Drafts first: they are the things still waiting on the writer. A
+            // published post needs nothing from anybody.
+            if !store.drafts.isEmpty {
+                Section {
+                    ForEach(store.drafts) { draft in
+                        draftRow(draft)
+                    }
+                } header: {
+                    Text("Drafts", bundle: .module)
+                } footer: {
+                    Text("Kept on this device only, and never published until you say so. Nook holds no copy.", bundle: .module)
+                }
             }
 
             Section {
@@ -201,6 +227,64 @@ public struct PlusSettingsContent: View {
             } footer: {
                 Text("Read straight from your own repository, so this is what actually exists — not a copy Nook keeps.", bundle: .module)
             }
+        }
+    }
+
+    // MARK: - Drafts
+
+    /// A draft, and the two things to do with one.
+    ///
+    /// Tapping the row opens it, which is what a row of writing should do; publishing
+    /// and discarding are swipes, so the destructive one is never the default gesture.
+    @ViewBuilder
+    private func draftRow(_ draft: PlusDraft) -> some View {
+        Button {
+            onCompose(.draft(draft))
+        } label: {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if draft.displayTitle.isEmpty {
+                        Text("Untitled", bundle: .module).foregroundStyle(.secondary)
+                    } else {
+                        Text(verbatim: draft.displayTitle)
+                    }
+                    HStack(spacing: 4) {
+                        // Said plainly, because a draft that used to be public is a
+                        // different thing from one that never was: its old URL is dead.
+                        if draft.wasPublished {
+                            Text("Unpublished", bundle: .module)
+                        }
+                        Text(draft.updatedAt, format: .relative(presentation: .named))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) { store.discard(draft) } label: {
+                Label {
+                    Text("Discard", bundle: .module)
+                } icon: {
+                    Image(systemName: "trash")
+                }
+            }
+        }
+        .swipeActions(edge: .leading) {
+            Button { onCompose(.draft(draft)) } label: {
+                Label {
+                    Text("Publish", bundle: .module)
+                } icon: {
+                    Image(systemName: "paperplane")
+                }
+            }
+            .tint(PlusTheme.accent)
         }
     }
 
@@ -224,31 +308,49 @@ public struct PlusSettingsContent: View {
     /// screen going busy.
     @State private var deleting: String?
 
+    /// A published post: tap to edit, swipe to take it down.
+    ///
+    /// Editing is the row's own action because it is the safe one and the one wanted
+    /// most often. Taking a post down is a swipe, so it cannot be the thing that
+    /// happens when someone means to open it.
     @ViewBuilder
     private func articleRow(_ record: ATRecord<ArticleRecord>) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(record.value.title)
-                Text(record.value.slug)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        Button {
+            onCompose(.published(record))
+        } label: {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(record.value.title)
+                    Text(record.value.slug)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if deleting == record.uri {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
-            Spacer()
-            if deleting == record.uri {
-                ProgressView().controlSize(.small)
-            } else {
-                Button(role: .destructive) {
-                    pendingDeletion = record
-                } label: {
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isWorking)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                pendingDeletion = record
+            } label: {
+                Label {
+                    Text("Take Down", bundle: .module)
+                } icon: {
                     Image(systemName: "trash")
                 }
-                .buttonStyle(.borderless)
-                .disabled(store.isWorking)
-                .accessibilityLabel(Text("Delete this post", bundle: .module))
             }
         }
         .confirmationDialog(
-            Text("Delete this post?", bundle: .module),
+            Text("Take this post down?", bundle: .module),
             isPresented: Binding(
                 get: { pendingDeletion?.uri == record.uri },
                 set: { if !$0 { pendingDeletion = nil } }
@@ -256,18 +358,29 @@ public struct PlusSettingsContent: View {
             titleVisibility: .visible,
             presenting: pendingDeletion
         ) { target in
+            // Two different acts, and the difference is the text. Both remove the
+            // record — that is what makes a post not public — but one keeps what was
+            // written and the other does not.
+            if store.canKeepDrafts {
+                Button {
+                    pendingDeletion = nil
+                    Task { await unpublish(target) }
+                } label: {
+                    Text("Unpublish and Keep a Draft", bundle: .module)
+                }
+            }
             Button(role: .destructive) {
                 pendingDeletion = nil
                 Task { await delete(target) }
             } label: {
-                Text("Delete", bundle: .module)
+                Text("Delete the Text Too", bundle: .module)
             }
             Button(role: .cancel) { pendingDeletion = nil } label: {
                 Text("Cancel", bundle: .module)
             }
         } message: { target in
             Text(
-                "“\(target.value.title)” will be removed from your repository and from the web. This cannot be undone.",
+                "“\(target.value.title)” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere.",
                 bundle: .module)
         }
     }

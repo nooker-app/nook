@@ -1,4 +1,20 @@
+import NookPlusProtocol
 import SwiftUI
+
+/// What the composer was opened on.
+///
+/// One screen for all three, because they are the same act — writing — and a separate
+/// editor per case is how two of them end up subtly different. What changes is the
+/// button at the end and what it does.
+public enum PlusComposeTarget {
+    /// Nothing yet.
+    case newPost
+    /// Unpublished writing kept on this device. Publishing it removes the draft.
+    case draft(PlusDraft)
+    /// A post that is already public. Saving replaces the record, so its links keep
+    /// working.
+    case published(ATRecord<ArticleRecord>)
+}
 
 /// Writing and publishing a post.
 ///
@@ -10,12 +26,23 @@ import SwiftUI
 /// Shared by both platforms so there is one composer rather than two that drift.
 public struct PlusComposeView: View {
     @Bindable var store: PlusStore
+    let target: PlusComposeTarget
     let onFinished: () -> Void
 
-    public init(store: PlusStore, onFinished: @escaping () -> Void) {
+    public init(
+        store: PlusStore,
+        target: PlusComposeTarget = .newPost,
+        onFinished: @escaping () -> Void
+    ) {
         self.store = store
+        self.target = target
         self.onFinished = onFinished
     }
+
+    /// Whether this screen has loaded its target's text yet. The text lives in `@State`
+    /// so it survives every redraw, which means it must be filled once rather than on
+    /// each pass — otherwise every keystroke would be overwritten by the original.
+    @State private var loaded = false
 
     @State private var title = ""
     /// Follows the title until the writer takes it over. The rule lives in
@@ -34,18 +61,80 @@ public struct PlusComposeView: View {
     /// and selection machinery cannot reach.
     @State private var editor = PlusMarkdownEditorHandle()
 
+    /// Asked when leaving with writing that has never been published.
+    @State private var askAboutDraft = false
+
     /// Only the title. The body's focus lives in the text view, and a case here for it
     /// was a value that could be set but never took effect.
     private enum Field: Hashable {
         case title
     }
 
+    /// What the screen is called, so the writer knows whether they are about to change
+    /// something people can already read.
+    private var screenTitle: Text {
+        switch target {
+        case .newPost: Text("New post", bundle: .module)
+        case .draft: Text("Draft", bundle: .module)
+        case .published: Text("Edit post", bundle: .module)
+        }
+    }
+
+    /// Publishing and replacing are different acts and are named differently. A button
+    /// that says "Publish" on something already public says nothing about what it will
+    /// do to the version people are reading.
+    private var submitLabel: Text {
+        switch target {
+        case .newPost, .draft: Text("Publish", bundle: .module)
+        case .published: Text("Save", bundle: .module)
+        }
+    }
+
     public var body: some View {
         shell
+            // Once, before anything else: filling the fields on every pass would
+            // overwrite each keystroke with the original text.
+            .task { load() }
             // The fallback depends on what is already published, which arrives after
             // the screen does. Recomputed when it lands so a Korean title gets a
             // date that does not collide with an existing post.
             .task(id: store.articles.count) { refreshFallback() }
+    }
+
+    /// Fills the fields from whatever the composer was opened on.
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        switch target {
+        case .newPost:
+            break
+        case .draft(let draft):
+            title = draft.title
+            summary = draft.summary
+            markdown = draft.markdown
+            // Pinned: an address the writer already chose is not something to
+            // overwrite from the title on the next keystroke.
+            if !draft.slug.isEmpty { slugField.changed(to: draft.slug) }
+        case .published(let record):
+            title = record.value.title
+            summary = record.value.summary ?? ""
+            markdown = record.value.content
+            slugField.changed(to: record.value.slug)
+        }
+    }
+
+    /// True once the writer has something that is not what they started with.
+    private var hasUnsavedChanges: Bool {
+        switch target {
+        case .newPost:
+            return !PlusDraft(title: title, summary: summary, markdown: markdown).isEmpty
+        case .draft(let draft):
+            return title != draft.title || summary != draft.summary
+                || markdown != draft.markdown || slugField.value != draft.slug
+        case .published(let record):
+            return title != record.value.title || summary != (record.value.summary ?? "")
+                || markdown != record.value.content || slugField.value != record.value.slug
+        }
     }
 
     /// The address used when a title yields nothing.
@@ -66,18 +155,18 @@ public struct PlusComposeView: View {
                 writingSurface
                     .background(PlusTheme.canvas.ignoresSafeArea())
                     .tint(PlusTheme.accent)
-                    .navigationTitle(Text("New post", bundle: .module))
+                    .navigationTitle(screenTitle)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button { onFinished() } label: { Text("Cancel", bundle: .module) }
+                            Button { cancel() } label: { Text("Cancel", bundle: .module) }
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button { Task { await publish() } } label: {
                                 if store.isWorking {
                                     ProgressView().controlSize(.small)
                                 } else {
-                                    Text("Publish", bundle: .module).fontWeight(.semibold)
+                                    submitLabel.fontWeight(.semibold)
                                 }
                             }
                             .disabled(!canPublish)
@@ -89,22 +178,48 @@ public struct PlusComposeView: View {
                         // see PlusMarkdownAccessoryBar.
                     }
                     .sheet(isPresented: $showingDetails) { detailsSheet }
+                    .confirmationDialog(
+                        Text("Keep this as a draft?", bundle: .module),
+                        isPresented: $askAboutDraft,
+                        titleVisibility: .visible
+                    ) {
+                        Button { keepAsDraft() } label: { Text("Keep as Draft", bundle: .module) }
+                        Button(role: .destructive) { onFinished() } label: {
+                            Text("Discard", bundle: .module)
+                        }
+                        Button(role: .cancel) {} label: { Text("Keep Writing", bundle: .module) }
+                    } message: {
+                        Text("It stays on this device and is not published until you say so.", bundle: .module)
+                    }
             }
-            .onAppear { focus = .title }
+            .onAppear { if title.isEmpty { focus = .title } }
         #else
             VStack(alignment: .leading, spacing: 0) {
                 form
                 Divider()
                 HStack {
-                    Button { onFinished() } label: { Text("Cancel", bundle: .module) }
+                    Button { cancel() } label: { Text("Cancel", bundle: .module) }
                     Spacer()
-                    Button { Task { await publish() } } label: { Text("Publish", bundle: .module) }
+                    Button { Task { await publish() } } label: { submitLabel }
                         .keyboardShortcut(.defaultAction)
                         .disabled(!canPublish)
                 }
                 .padding(16)
             }
             .frame(minWidth: 520, minHeight: 460)
+            .confirmationDialog(
+                Text("Keep this as a draft?", bundle: .module),
+                isPresented: $askAboutDraft,
+                titleVisibility: .visible
+            ) {
+                Button { keepAsDraft() } label: { Text("Keep as Draft", bundle: .module) }
+                Button(role: .destructive) { onFinished() } label: {
+                    Text("Discard", bundle: .module)
+                }
+                Button(role: .cancel) {} label: { Text("Keep Writing", bundle: .module) }
+            } message: {
+                Text("It stays on this device and is not published until you say so.", bundle: .module)
+            }
         #endif
     }
 
@@ -444,8 +559,21 @@ public struct PlusComposeView: View {
     }
 
     private func publish() async {
-        await store.publish(
-            title: title, slug: slugField.value, markdown: markdown, summary: summary)
+        switch target {
+        case .newPost:
+            await store.publish(
+                title: title, slug: slugField.value, markdown: markdown, summary: summary)
+        case .draft(let draft):
+            await store.publish(
+                title: title, slug: slugField.value, markdown: markdown, summary: summary)
+            // Only once it is public. A draft discarded before the publish succeeded
+            // would be writing lost to a failed request.
+            if store.failure == nil { store.discard(draft) }
+        case .published(let record):
+            await store.update(
+                record, title: title, slug: slugField.value, markdown: markdown,
+                summary: summary)
+        }
         guard store.failure == nil else { return }
         // Cleared only on success, so a rejected post is not lost along with the
         // reason it was rejected.
@@ -453,6 +581,48 @@ public struct PlusComposeView: View {
         slugField.reset()
         summary = ""
         markdown = ""
+        onFinished()
+    }
+
+    /// Leaves the screen, deciding what happens to writing that was not published.
+    ///
+    /// Nothing is thrown away silently. Writing that has never been public is offered
+    /// as a draft, because the alternative is losing it to a mis-tap on Cancel; an edit
+    /// to something already published is discarded, because the post itself is
+    /// untouched and keeping a second copy of it as a draft would be two versions of
+    /// one thing with nothing to say which is current.
+    private func cancel() {
+        guard hasUnsavedChanges else {
+            onFinished()
+            return
+        }
+        switch target {
+        case .published:
+            onFinished()
+        case .newPost, .draft:
+            if store.canKeepDrafts {
+                askAboutDraft = true
+            } else {
+                onFinished()
+            }
+        }
+    }
+
+    /// Keeps what is on screen as a draft and leaves.
+    private func keepAsDraft() {
+        var draft: PlusDraft
+        if case .draft(let existing) = target {
+            draft = existing
+        } else {
+            draft = PlusDraft()
+            if case .published = target { draft.wasPublished = true }
+        }
+        draft.title = title
+        draft.slug = slugField.value
+        draft.summary = summary
+        draft.markdown = markdown
+        store.save(draft)
+        guard store.failure == nil else { return }
         onFinished()
     }
 }

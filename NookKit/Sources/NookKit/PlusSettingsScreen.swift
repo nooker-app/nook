@@ -18,7 +18,16 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     @State private var store = PlusStore()
     @State private var showingSetup = false
     @State private var showingSignIn = false
-    @State private var showingCompose = false
+
+    /// What the composer is open on, present only while it is open. Item-driven rather
+    /// than a flag beside a value: a sheet built from state set in the same update gets
+    /// the old value, which is how the composer once slid up empty.
+    @State private var composing: ComposeSession?
+
+    private struct ComposeSession: Identifiable {
+        let id = UUID()
+        let target: PlusComposeTarget
+    }
 
     public init(@ViewBuilder container: @escaping (PlusSettingsContent) -> Container) {
         self.container = container
@@ -30,10 +39,15 @@ public struct PlusSettingsScreenContent<Container: View>: View {
                 store: store,
                 onSetUp: { present(.setUp) },
                 onSignIn: { present(.signIn) },
-                onCompose: { present(.compose) }
+                onCompose: { target in present(.compose(target)) }
             )
         )
-        .task { openSetupIfInvited() }
+        .task {
+            openSetupIfInvited()
+            // Drafts are on disk, so they are there before any network call and must
+            // be listed whether or not the account can be reached.
+            store.loadDrafts()
+        }
         .onChange(of: PlusInviteInbox.shared.pendingCode) { _, code in
             if code != nil { openSetupIfInvited() }
         }
@@ -43,8 +57,8 @@ public struct PlusSettingsScreenContent<Container: View>: View {
         .sheet(isPresented: $showingSignIn) {
             PlusSignInView(store: store) { showingSignIn = false }
         }
-        .sheet(isPresented: $showingCompose) {
-            PlusComposeView(store: store) { showingCompose = false }
+        .sheet(item: $composing) { session in
+            PlusComposeView(store: store, target: session.target) { composing = nil }
         }
     }
 
@@ -57,9 +71,9 @@ public struct PlusSettingsScreenContent<Container: View>: View {
         present(.setUp)
     }
 
-    /// Opens one of the two sheets.
+    /// Opens one of the sheets.
     ///
-    /// The store outlives both, so a failure left by one would otherwise
+    /// The store outlives all of them, so a failure left by one would otherwise
     /// describe something the user is no longer doing. Cleared here rather than
     /// from inside the sheet: a write to observed state while a sheet is being
     /// presented invalidates the presenting view and dismisses it on the spot.
@@ -68,8 +82,8 @@ public struct PlusSettingsScreenContent<Container: View>: View {
         switch sheet {
         case .setUp: showingSetup = true
         case .signIn: showingSignIn = true
-        case .compose:
-            showingCompose = true
+        case .compose(let target):
+            composing = ComposeSession(target: target)
             // Re-reads the session and renews a token that expired while the app was
             // idle, so Publish is not disabled on a screen that looks signed in.
             Task { await store.prepareToCompose() }
@@ -79,6 +93,6 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     private enum Sheet {
         case setUp
         case signIn
-        case compose
+        case compose(PlusComposeTarget)
     }
 }

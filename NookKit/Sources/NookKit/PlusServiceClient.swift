@@ -182,6 +182,49 @@ public struct PlusServiceClient: Sendable {
         }
     }
 
+    /// Replaces a published article, conditioned on the CID the caller last read.
+    ///
+    /// The whole record is sent, not a patch: the record in the repository is the
+    /// article, and the service writes what it is given.
+    ///
+    /// The CID is worth more here than on a delete. Losing a conflict means silently
+    /// discarding an edit made somewhere else, so a caller that gets `recordConflict`
+    /// should re-read before offering to try again.
+    public func updateArticle(
+        recordKey: String,
+        cid: String?,
+        publication: String,
+        title: String,
+        slug: String,
+        markdown: String,
+        summary: String
+    ) async throws -> Components.Schemas.Article {
+        guard session() != nil else { throw PlusServiceError.sessionInvalid }
+        var input = Components.Schemas.ArticleInput(
+            publication: publication,
+            title: title,
+            content: markdown,
+            slug: slug
+        )
+        if !summary.isEmpty {
+            input.summary = summary
+        }
+        let body = input
+        let output = try await send({
+            try await client.updateArticle(
+                path: .init(rkey: recordKey),
+                headers: .init(If_hyphen_Match: cid.map(quoted)),
+                body: .json(body)
+            )
+        })
+        switch output {
+        case .ok(let updated):
+            return try updated.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
+        }
+    }
+
     /// Deletes an article, conditioned on the CID the caller last read.
     ///
     /// Passing the CID is what prevents deleting a revision the user has not seen.

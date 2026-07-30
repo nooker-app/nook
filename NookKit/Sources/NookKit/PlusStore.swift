@@ -507,6 +507,122 @@ public final class PlusStore {
         }
     }
 
+    /// Replaces a published article with an edited version.
+    ///
+    /// Separate from ``publish`` because it is a different act: the record keeps its
+    /// identity, so links to it keep working and the record-key alias is unchanged.
+    /// Changing the slug moves the readable URL and leaves the old one dead, which is
+    /// the writer's decision to make and the UI's job to say.
+    public func update(
+        _ record: ATRecord<ArticleRecord>,
+        title: String,
+        slug: String,
+        markdown: String,
+        summary: String
+    ) async {
+        guard let rkey = record.recordKey else {
+            failure = String(
+                localized: "That article is missing the information needed to edit it.",
+                bundle: .module)
+            return
+        }
+        let cid = record.cid?.trimmingCharacters(in: .whitespacesAndNewlines)
+        await perform {
+            let article = try await self.service.updateArticle(
+                recordKey: rkey,
+                cid: (cid?.isEmpty ?? true) ? nil : cid,
+                publication: record.value.publication,
+                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                slug: slug.trimmingCharacters(in: .whitespacesAndNewlines),
+                markdown: markdown,
+                summary: summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            self.lastPublishedURL = article.url
+            await self.loadContent()
+        }
+    }
+
+    // MARK: - Drafts
+
+    /// Unpublished writing on this device, newest first.
+    public private(set) var drafts: [PlusDraft] = []
+
+    /// Opened lazily and kept, so a reader who never writes pays nothing for it. Nil
+    /// when the directory could not be made, which leaves drafts unavailable rather
+    /// than crashing — the reader is unaffected either way.
+    private var draftStore: PlusDraftStore? = {
+        try? PlusDraftStore.default()
+    }()
+
+    /// Whether drafts can be kept at all. False only if the store could not be
+    /// opened, in which case the UI must not offer to keep one.
+    public var canKeepDrafts: Bool { draftStore != nil }
+
+    public func loadDrafts() {
+        guard let draftStore else { return }
+        drafts = draftStore.all()
+    }
+
+    /// Saves a draft, or removes it if there is nothing left in it.
+    ///
+    /// Deleting an emptied draft rather than keeping it: a list filling with blank
+    /// rows because a screen was opened and closed is worse than losing nothing.
+    public func save(_ draft: PlusDraft) {
+        guard let draftStore else {
+            failure = String(
+                localized: "Drafts cannot be saved on this device.", bundle: .module)
+            return
+        }
+        if draft.isEmpty {
+            draftStore.delete(draft.id)
+        } else {
+            do {
+                try draftStore.save(draft)
+            } catch {
+                // The only copy failed to write, and saying nothing would let the
+                // writer close the screen believing it was kept.
+                failure = String(
+                    localized: "That draft could not be saved. Copy your text somewhere safe before closing.",
+                    bundle: .module)
+                return
+            }
+        }
+        loadDrafts()
+    }
+
+    public func discard(_ draft: PlusDraft) {
+        draftStore?.delete(draft.id)
+        loadDrafts()
+    }
+
+    /// Removes a published post from the web while keeping its text as a draft.
+    ///
+    /// The record is deleted, which is what makes it not public — that is what a PDS
+    /// record means. The text is written locally first, so a failure to delete leaves
+    /// a draft rather than nothing, and the writer can try again.
+    ///
+    /// Republishing makes a *new* record, so the record-key alias changes. The slug is
+    /// carried over, so the readable URL is the one it had.
+    public func unpublish(_ record: ATRecord<ArticleRecord>) async {
+        guard canKeepDrafts else {
+            failure = String(
+                localized: "Drafts cannot be saved on this device.", bundle: .module)
+            return
+        }
+        save(
+            PlusDraft(
+                title: record.value.title,
+                slug: record.value.slug,
+                summary: record.value.summary ?? "",
+                markdown: record.value.content,
+                wasPublished: true
+            ))
+        // Only if the draft is safely on disk. Deleting first would risk removing the
+        // post and losing the text.
+        guard failure == nil else { return }
+        await delete(record)
+    }
+
     /// Deletes an article, conditioned on the CID last read where there is one, so a
     /// revision the user has not seen is not destroyed silently.
     ///
