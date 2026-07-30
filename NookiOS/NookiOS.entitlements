@@ -18,17 +18,21 @@
 	     no save offer and no strong-password suggestion, so the password has to
 	     be kept by the user; the setup screen says so, and offers to copy it.
 
-	     Both deployments are listed because the developer section can point a
-	     build at staging, and a credential saved for one must not be offered for
-	     the other. `?mode=developer` makes the device fetch the association file
-	     directly instead of through Apple's CDN, which also requires
-	     Settings > Developer > Associated Domains Development on the device. It
-	     is therefore inert in a Release build and must be removed before any
-	     public release. -->
+	     Production only. Staging was listed alongside it while this file was being
+	     worked out, with `?mode=developer` so the device would fetch the
+	     association file straight from the host instead of through Apple's CDN —
+	     a mode that needs Settings > Developer > Associated Domains Development
+	     switched on, and so means nothing in a shipped build. Both are gone: this
+	     file applies to Release alone and a release build has no developer section
+	     to point itself at staging with, so the entry was a claim on a domain no
+	     shipping build can reach — and a developer-mode association is not
+	     something to submit for review.
+
+	     Work that needs staging wants a Debug build, which carries no Associated
+	     Domains at all for the reason above. -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:nooker.app</string>
-		<string>webcredentials:staging.nooker.app?mode=developer</string>
 	</array>
 </dict>
 </plist>
