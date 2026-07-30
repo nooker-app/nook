@@ -6646,6 +6646,34 @@
         }
       }
     },
+    "That code or session is no longer valid. Request a new one, or sign in again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That code or session is no longer valid. Request a new one, or sign in again."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "해당 코드 또는 세션이 더 이상 유효하지 않습니다. 새로 요청하거나 다시 로그인해 주세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "そのコードまたはセッションは無効になりました。新しく発行するか、再度サインインしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该代码或会话已失效。请重新获取，或重新登录。"
+          }
+        }
+      }
+    },
     "That code was not recognised. It may have been used already or expired.": {
       "localizations": {
         "en": {
@@ -6902,28 +6930,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "密码强度不足。请使用更长的密码。"
-          }
-        }
-      }
-    },
-    "That reset code is not usable. Request a new one.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "その再設定コードは使えません。新しいコードを取得してください。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 재설정 코드는 사용할 수 없습니다. 새 코드를 요청하세요."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "该重设码不可用。请重新获取。"
           }
         }
       }
@@ -9080,6 +9086,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "会话已过期，请重新登录。"
+          }
+        }
+      }
+    },
+    "Your session has expired. Sign in again to continue.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your session has expired. Sign in again to continue."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "세션이 만료되었습니다. 계속하려면 다시 로그인해 주세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セッションの有効期限が切れました。続けるには再度サインインしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会话已过期。请重新登录以继续。"
           }
         }
       }

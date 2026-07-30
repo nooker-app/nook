@@ -801,6 +801,12 @@ private struct CompactShell: View {
                         }
                     }
             }
+            // A sheet does not inherit the root's tint (see the note at the app
+            // root: the asset-catalogue accent alone does not take), so it has to be
+            // set again here. Without it the reader's bottom bar drew its controls in
+            // the system blue: it tints itself, but then resolves
+            // `Color.accentColor` from the ambient environment, which was the default.
+            .tint(Color("AccentColor"))
             .onChange(of: current == nil) { _, cleared in
                 if cleared { onDone() }
             }
@@ -842,9 +848,6 @@ private struct CompactShell: View {
     /// that closure runs during a view update and assigning to @State there is
     /// undefined. It is kept afterwards, so a cancelled draft survives and a
     /// reader who never publishes never pays for one.
-    ///
-    /// Publications are loaded because publishing needs one, and the composer has
-    /// nothing to publish into until it has arrived.
     private func startComposing() {
         let store: PlusStore
         if let composeStore {
@@ -852,15 +855,15 @@ private struct CompactShell: View {
         } else {
             store = PlusStore()
             composeStore = store
-            // Publishing needs a publication, and the composer has nothing to
-            // publish into until this arrives. It does not gate the form: the fields
-            // are usable while it loads, and only the Publish button waits.
-            Task { await store.loadContent() }
         }
-        // A fresh draft, not the remains of the last one. The store is reused, so
-        // without this the previous publish's confirmation opened with the blank
-        // draft — as did a failure the writer had already dealt with.
-        store.startNewDraft()
+        // A fresh draft, and a session read again rather than assumed. The store is
+        // kept between openings, so without this the previous publish's confirmation
+        // opened with the blank draft, and a session replaced by signing in on
+        // another screen was never picked up — leaving Publish disabled with the
+        // writing already on screen.
+        //
+        // Not gating: the fields are usable while this runs, and only Publish waits.
+        Task { await store.prepareToCompose() }
         compose = ComposeSession(store: store)
     }
 
@@ -915,6 +918,15 @@ private struct CompactShell: View {
             }
             if let article = store.article(atPageURL: page) {
                 reveal = nil
+                // Route to My Nook underneath before opening the post. The reader's
+                // previous/next swipe walks the visible scope, so without this the
+                // writer swipes out of their own post and into whatever the last tab
+                // was showing; and closing the sheet lands them somewhere that has
+                // nothing to do with what they just published.
+                if let followed = store.followedFeed(at: feed) {
+                    selection = .feeds
+                    feedsPath = [.feed(followed.id)]
+                }
                 justPublished = PublishedPost(article: article)
                 return
             }

@@ -242,9 +242,17 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
             if kind == "AccountTakedown" {
                 return String(localized: "This account is not available.", bundle: .module)
             }
+            // A spent token, which the host reports the same way whether it was a
+            // reset code or a session. Session expiry is handled before a request is
+            // made (see `PlusStore.refreshSessionIfExpired`), so by the time this is
+            // read the token in question is one the user typed. Said generally enough
+            // to be true either way: claiming "reset code" was wrong every time a
+            // session reached here, and told the writer to request a code they had
+            // never asked for.
             if kind == "ExpiredToken" || kind == "InvalidToken" {
                 return String(
-                    localized: "That reset code is not usable. Request a new one.", bundle: .module)
+                    localized: "That code or session is no longer valid. Request a new one, or sign in again.",
+                    bundle: .module)
             }
             if status == 429 || kind == "RateLimitExceeded" {
                 return String(

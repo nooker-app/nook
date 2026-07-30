@@ -68,7 +68,11 @@ public struct PlusSettingsScreenContent<Container: View>: View {
         switch sheet {
         case .setUp: showingSetup = true
         case .signIn: showingSignIn = true
-        case .compose: showingCompose = true
+        case .compose:
+            showingCompose = true
+            // Re-reads the session and renews a token that expired while the app was
+            // idle, so Publish is not disabled on a screen that looks signed in.
+            Task { await store.prepareToCompose() }
         }
     }
 

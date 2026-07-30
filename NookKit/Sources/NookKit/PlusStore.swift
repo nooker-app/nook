@@ -75,7 +75,11 @@ public enum HandleCheck: Equatable, Sendable {
 @MainActor
 @Observable
 public final class PlusStore {
-    public private(set) var session: PlusSession?
+    /// A new session is proof the expiry has been dealt with, wherever it came
+    /// from — a refresh, a sign-in, or signing out.
+    public private(set) var session: PlusSession? {
+        didSet { if session != oldValue, sessionExpired { sessionExpired = false } }
+    }
     /// Mirrored into defaults on every change, so the Feeds screen can offer the
     /// writer their own publication without holding a store or making a call.
     /// Observed here rather than at each call site because signup, loading content,
@@ -390,15 +394,79 @@ public final class PlusStore {
         }
     }
 
+    /// Exchanges the refresh token when the access token is spent.
+    ///
+    /// The PDS issues an access token that lasts hours and a refresh token that lasts
+    /// months. Nook had `refresh` implemented and called it from nowhere, so the
+    /// first token's expiry looked like being signed out: a writer mid-draft was
+    /// asked for their password again, hours after signing in, with a valid refresh
+    /// token sitting in the Keychain the whole time.
+    ///
+    /// Failing to refresh is not treated as being signed out. The session is left in
+    /// place and the writer is told what happened, because clearing it here would
+    /// take a draft down with it for what may be a network problem.
+    private func refreshSessionIfExpired(now: Date = Date()) async {
+        guard let current = session, PlusJWT.isExpired(current.accessJWT, now: now) else { return }
+        do {
+            let renewed = try await pds.refresh(current)
+            // The Keychain is what the API client reads its token from, not this
+            // property, so a failed write means the next request still carries the
+            // spent token. Treated as an expiry rather than reported as success.
+            guard PlusCredential.store(renewed) else {
+                sessionExpired = true
+                return
+            }
+            session = renewed
+        } catch {
+            // A dead refresh token is the one case where signing in again really is
+            // the remedy, and saying so is more use than the host's prose.
+            sessionExpired = true
+        }
+    }
+
+    /// Set when the session could not be renewed, so a screen can ask for a sign-in
+    /// rather than reporting a failure the writer cannot act on.
+    public private(set) var sessionExpired = false
+
+    /// Re-reads the stored session and reloads what belongs to it.
+    ///
+    /// The composer keeps its own store so a cancelled draft survives, and that store
+    /// read the Keychain once when it was built. Signing in again happens on another
+    /// screen with another store, so the composer went on holding the dead session:
+    /// `canPublish` stayed false and Publish stayed disabled until the app was
+    /// relaunched, with the writing still on screen.
+    public func prepareToCompose() async {
+        startNewDraft()
+        let stored = PlusCredential.current
+        if stored != session {
+            session = stored
+            // They belong to the session that was replaced, not to this one.
+            if !publications.isEmpty { publications = [] }
+            if !articles.isEmpty { articles = [] }
+        }
+        guard isSignedIn else { return }
+        if publications.isEmpty {
+            await loadContent()
+        } else {
+            // Nothing to load, but the token may still have expired while the app sat
+            // in the background.
+            await refreshSessionIfExpired()
+        }
+    }
+
     /// Clears what belonged to the last publish, for a composer being opened
     /// again.
     ///
     /// The store outlives the composer sheet so a cancelled draft survives, which
     /// also meant the previous post's confirmation did: reopening the composer
     /// showed a link to something already published.
+    /// Writes only what has actually changed. This runs while the composer sheet is
+    /// being presented, and an unconditional write to observed state invalidates the
+    /// presenting view — which dismisses the sheet on the spot. Same reasoning as
+    /// ``clearFailure``.
     public func startNewDraft() {
-        lastPublishedURL = nil
-        failure = nil
+        if lastPublishedURL != nil { lastPublishedURL = nil }
+        clearFailure()
     }
 
     /// Publishes an article through the service, which writes the PDS record
@@ -439,6 +507,19 @@ public final class PlusStore {
     private func perform(_ work: @escaping () async throws -> Void) async {
         isWorking = true
         failure = nil
+        // Before the work, not as a retry after it fails. The work is not always
+        // idempotent — retrying a publish that had already been written would make a
+        // second post — so an expired token is replaced first and the work runs once.
+        await refreshSessionIfExpired()
+        if sessionExpired {
+            // Reported here rather than letting the work fail on its own: the host's
+            // answer to a spent token is "ExpiredToken", which reads as a bad
+            // password-reset code by the time it reaches a message.
+            failure = String(
+                localized: "Your session has expired. Sign in again to continue.", bundle: .module)
+            isWorking = false
+            return
+        }
         do {
             try await work()
         } catch PlusServiceError.rejected(let reason, _) {
