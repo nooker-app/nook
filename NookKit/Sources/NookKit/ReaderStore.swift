@@ -2729,7 +2729,13 @@ public final class ReaderStore {
 
         // Serve a synced/cached result first (from this device or a peer), so a
         // page already extracted anywhere isn't re-fetched.
-        if !forceRefresh, let cached = await readerContentStore?.value(for: article.id) {
+        // A cached failure from an older extractor is ignored, so improving
+        // extraction reaches articles that already failed. Without this the fix
+        // for short posts would never have been seen: the failure was cached and
+        // synced, and a cache hit never re-extracts.
+        if !forceRefresh, let cached = await readerContentStore?.value(for: article.id),
+            cached.isCurrent
+        {
             if cached.status == .success, let html = cached.html, !html.isEmpty {
                 await warmReaderContent(html: html, baseURL: article.url)
                 readerContentStates[article.id] = .ready(html)

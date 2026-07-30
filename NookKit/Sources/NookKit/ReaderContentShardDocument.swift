@@ -9,18 +9,46 @@ public struct ReaderContentValue: Codable, Sendable, Equatable {
         case failed
     }
 
+    /// What the extractor could do at the time. Bump it whenever the extraction
+    /// rules change, so a failure recorded under the old rules is retried instead
+    /// of being served forever.
+    ///
+    /// This is why it exists: the extractor used to refuse a page whose article
+    /// text was under eighty characters, which rejected any short post. Fixing
+    /// that reached no article that had already failed, because the failure was
+    /// cached and synced, and a cache hit never re-extracts. A reader could
+    /// install the fix and still be told the original could not be read.
+    ///
+    /// 2: an explicit `<article>` or `[itemprop="articleBody"]` is trusted
+    /// whatever its length.
+    public static let currentExtractorVersion = 2
+
     public var status: Status
     /// The extracted reader HTML for `.success`; `nil` for `.failed`.
     public var html: String?
+    /// The extractor that produced this. Absent in records written before this
+    /// was tracked, which are treated as older than any current version.
+    public var extractorVersion: Int?
 
-    public init(status: Status, html: String?) {
+    public init(status: Status, html: String?, extractorVersion: Int? = currentExtractorVersion) {
         self.status = status
         self.html = html
+        self.extractorVersion = extractorVersion
+    }
+
+    /// Whether this result still reflects what the extractor would do now.
+    ///
+    /// Success is always trusted: extracted content does not become wrong because
+    /// the extractor improved, and re-fetching every page after an update would
+    /// be a poor trade. Only a failure is worth reconsidering.
+    public var isCurrent: Bool {
+        status == .success || (extractorVersion ?? 0) >= Self.currentExtractorVersion
     }
 
     enum CodingKeys: String, CodingKey {
         case status = "s"
         case html = "h"
+        case extractorVersion = "v"
     }
 }
 

@@ -74,6 +74,16 @@ struct ReaderExtractionTests {
         #expect(outcome.ok == false, "a navigation-only page must not read as an article")
     }
 
+    /// The fallback path, with no Readability at all: still has to work, because
+    /// the script is written to survive the resource failing to load.
+    @Test("a short post extracts without Readability too")
+    func shortWithoutReadability() async throws {
+        let outcome = try await extract(
+            Self.publishedPage(body: "<p>Short.</p>"), withReadability: false)
+        #expect(outcome.ok)
+        #expect(outcome.content.contains("Short."))
+    }
+
     /// itemprop is the other way a page can declare its body, and it is honoured
     /// the same way.
     @Test("an itemprop body is treated as declared")
@@ -97,11 +107,19 @@ struct ReaderExtractionTests {
     }
 
     /// Loads markup into a real WKWebView with the real extraction script and
-    /// returns what it posted back. No Readability is injected, which exercises
-    /// the path a page with a declared body takes.
-    private func extract(_ html: String) async throws -> Extraction {
+    /// returns what it posted back.
+    ///
+    /// Readability is injected by default, because the app injects it: a harness
+    /// without it exercises only the fallback, which is how a failure on the
+    /// Readability path went unnoticed.
+    private func extract(_ html: String, withReadability: Bool = true) async throws -> Extraction {
         let handler = ExtractionHandler()
         let configuration = WKWebViewConfiguration()
+        if withReadability, let readability = ArticleWebView.readabilitySource {
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: readability, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
         configuration.userContentController.addUserScript(
             WKUserScript(
                 source: ExtractionSession.extractionScript,
