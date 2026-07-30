@@ -1962,6 +1962,34 @@
         }
       }
     },
+    "Couldn’t delete that post": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t delete that post"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글을 삭제하지 못했습니다"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "投稿を削除できませんでした"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法删除该文章"
+          }
+        }
+      }
+    },
     "Create Account": {
       "localizations": {
         "en": {

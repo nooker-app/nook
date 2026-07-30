@@ -51,8 +51,37 @@ public struct PlusSettingsContent: View {
         // colour visible instead of grey cards.
         .listRowBackground(Color.clear)
         .tint(PlusTheme.accent)
+        // Attached once here rather than per row: the same alert repeated down a list
+        // is N presentations racing to be the one that shows.
+        .alert(
+            Text("Couldn’t delete that post", bundle: .module),
+            isPresented: Binding(
+                get: { deletionFailure != nil },
+                set: { if !$0 { deletionFailure = nil } }
+            ),
+            presenting: deletionFailure
+        ) { _ in
+            Button { deletionFailure = nil } label: { Text("OK", bundle: .module) }
+        } message: { why in
+            Text(verbatim: why)
+        }
         .task {
             if store.isSignedIn { await store.loadContent() }
+        }
+    }
+
+    /// Deletes a post, reporting a failure where the writer is looking.
+    ///
+    /// The failure is taken off the store so it is told once, here, rather than also
+    /// appearing in the banner at the top of a screen the writer would have to scroll
+    /// back up to find.
+    private func delete(_ record: ATRecord<ArticleRecord>) async {
+        deleting = record.uri
+        await store.delete(record)
+        deleting = nil
+        if let failure = store.failure {
+            deletionFailure = failure
+            store.clearFailure()
         }
     }
 
@@ -182,6 +211,19 @@ public struct PlusSettingsContent: View {
     /// small icon did that, permanently, with nothing in between.
     @State private var pendingDeletion: ATRecord<ArticleRecord>?
 
+    /// A failed deletion, reported as an alert on the spot.
+    ///
+    /// The banner at the top of this screen is the right place for a failure the
+    /// writer is about to read anyway, but it is the wrong place for one caused by a
+    /// button several sections further down: they press Delete, the row stays, and the
+    /// explanation is off-screen behind a scroll. An alert cannot be missed and
+    /// arrives where the action was.
+    @State private var deletionFailure: String?
+
+    /// The post being deleted, so its own row can show it rather than the whole
+    /// screen going busy.
+    @State private var deleting: String?
+
     @ViewBuilder
     private func articleRow(_ record: ATRecord<ArticleRecord>) -> some View {
         HStack(alignment: .firstTextBaseline) {
@@ -192,14 +234,18 @@ public struct PlusSettingsContent: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(role: .destructive) {
-                pendingDeletion = record
-            } label: {
-                Image(systemName: "trash")
+            if deleting == record.uri {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(role: .destructive) {
+                    pendingDeletion = record
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .disabled(store.isWorking)
+                .accessibilityLabel(Text("Delete this post", bundle: .module))
             }
-            .buttonStyle(.borderless)
-            .disabled(store.isWorking)
-            .accessibilityLabel(Text("Delete this post", bundle: .module))
         }
         .confirmationDialog(
             Text("Delete this post?", bundle: .module),
@@ -212,7 +258,7 @@ public struct PlusSettingsContent: View {
         ) { target in
             Button(role: .destructive) {
                 pendingDeletion = nil
-                Task { await store.delete(target) }
+                Task { await delete(target) }
             } label: {
                 Text("Delete", bundle: .module)
             }
