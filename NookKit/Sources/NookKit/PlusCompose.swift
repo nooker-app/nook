@@ -160,6 +160,17 @@ public struct PlusComposeView: View {
                     Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
                         .foregroundStyle(.orange)
                         .font(.callout)
+                } else if store.publications.isEmpty {
+                    // Publish stays disabled until the publication arrives, and a
+                    // button that is dim for no stated reason reads as broken. The
+                    // fields are usable meanwhile; only publishing waits.
+                    Label {
+                        Text("Getting your publication ready. You can write in the meantime.", bundle: .module)
+                    } icon: {
+                        ProgressView().controlSize(.small)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
             .padding(20)

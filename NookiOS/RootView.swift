@@ -520,10 +520,25 @@ private struct CompactShell: View {
     @Environment(TabBarChrome.self) private var tabChrome
     @AppStorage(TourFlags.seenListHintKey) private var seenListHint = false
     @State private var selection: AppTab = .home
-    @State private var showingCompose = false
-    /// Built on first use, then kept: a reader who never publishes pays nothing
-    /// for it, and a draft survives a cancelled sheet.
+
+    /// The composer, present only while it is open.
+    ///
+    /// One piece of state rather than a flag plus an optional store. A sheet driven
+    /// by `isPresented` builds its content from state read in the same update that
+    /// set it, and got the old value: the sheet slid up empty and stayed empty until
+    /// something else happened to invalidate it. An item-driven sheet is handed the
+    /// value, so there is no window where it can be missing.
+    @State private var compose: ComposeSession?
+
+    /// The store outlives the sheet, so a cancelled draft is still there on the next
+    /// tap, and a reader who never publishes never builds one.
     @State private var composeStore: PlusStore?
+
+    /// Identifies one presentation of the composer.
+    private struct ComposeSession: Identifiable {
+        let id = UUID()
+        let store: PlusStore
+    }
     @State private var homeFilter: SmartSource = .unread
     @State private var feedsPath: [FeedTarget] = []
     /// Tutorial asked for the "tap a story" spotlight but it isn't shown yet
@@ -602,10 +617,8 @@ private struct CompactShell: View {
         // Settings. The store is built on first use so a reader who never
         // publishes does not pay for it, and it is kept so a cancelled draft is
         // not thrown away by the next tap.
-        .sheet(isPresented: $showingCompose) {
-            if let composeStore {
-                PlusComposeView(store: composeStore) { showingCompose = false }
-            }
+        .sheet(item: $compose) { session in
+            PlusComposeView(store: session.store) { compose = nil }
         }
         // The list spotlight is owned and drawn here at the shell — always mounted,
         // so unlike a TabView child it reliably reacts to the tutorial hand-off and
@@ -700,12 +713,18 @@ private struct CompactShell: View {
     /// Publications are loaded because publishing needs one, and the composer has
     /// nothing to publish into until it has arrived.
     private func startComposing() {
-        if composeStore == nil {
-            let store = PlusStore()
+        let store: PlusStore
+        if let composeStore {
+            store = composeStore
+        } else {
+            store = PlusStore()
             composeStore = store
+            // Publishing needs a publication, and the composer has nothing to
+            // publish into until this arrives. It does not gate the form: the fields
+            // are usable while it loads, and only the Publish button waits.
             Task { await store.loadContent() }
         }
-        showingCompose = true
+        compose = ComposeSession(store: store)
     }
 
     private func handleTabReselect(_ tab: AppTab) {
