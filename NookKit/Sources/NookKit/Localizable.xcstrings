@@ -502,6 +502,28 @@
         }
       }
     },
+    "An address is needed. One is suggested from your title.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アドレスが必要です。タイトルから候補を提案しています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "주소가 필요합니다. 제목에서 제안된 값이 채워집니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要一个地址。已根据标题给出建议。"
+          }
+        }
+      }
+    },
     "An invitation code. Publishing is limited to invited writers for now.": {
       "localizations": {
         "en": {
@@ -764,6 +786,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "最多 18 个字符。"
+          }
+        }
+      }
+    },
+    "At most 60 characters.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "60文字以内にしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "60자 이하여야 합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最多 60 个字符。"
           }
         }
       }
@@ -6279,6 +6323,28 @@
         }
       }
     },
+    "Suggested from your title. Edit it if you would rather choose.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイトルから提案しています。自分で決めたい場合は編集してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제목에서 제안한 값입니다. 직접 정하고 싶으면 수정하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "根据标题建议。想自己决定就直接修改。"
+          }
+        }
+      }
+    },
     "Summaries use only the Markdown shown by the native reader and appear above the original article. They may be omitted when the content cannot be summarized reliably.": {
       "localizations": {
         "ja": {
@@ -8146,6 +8212,28 @@
         }
       }
     },
+    "Use lowercase English letters, numbers, and hyphens. This is part of a web address, so it cannot contain Korean, Japanese, Chinese, spaces, or accented letters.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "英小文字・数字・ハイフンを使ってください。これはウェブアドレスの一部なので、日本語・韓国語・中国語・空白・アクセント付きの文字は使えません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "영문 소문자, 숫자, 하이픈을 사용하세요. 웹 주소의 일부이기 때문에 한글·일본어·한자·공백·악센트 문자는 쓸 수 없습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请使用小写英文字母、数字和连字符。这是网址的一部分，因此不能包含中文、日文、韩文、空格或带重音的字母。"
+          }
+        }
+      }
+    },
     "Use lowercase letters, numbers, and hyphens, at least three characters.": {
       "localizations": {
         "en": {
@@ -8170,6 +8258,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "请使用小写字母、数字和连字符，且至少三个字符。"
+          }
+        }
+      }
+    },
+    "Use suggestion": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "候補を使う"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제안값 사용"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用建议"
           }
         }
       }

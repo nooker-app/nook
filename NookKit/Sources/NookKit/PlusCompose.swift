@@ -32,6 +32,26 @@ public struct PlusComposeView: View {
     }
 
     public var body: some View {
+        shell
+            // The fallback depends on what is already published, which arrives after
+            // the screen does. Recomputed when it lands so a Korean title gets a
+            // date that does not collide with an existing post.
+            .task(id: store.articles.count) { refreshFallback() }
+    }
+
+    /// The address used when a title yields nothing.
+    ///
+    /// Dated rather than transliterated: a machine's reading of someone's words does
+    /// not belong in their permanent URL, and a date is at least honest and readable.
+    private func refreshFallback() {
+        let taken = Set(store.articles.map(\.value.slug))
+        slugField.fallback = PlusSlug.dated(Date(), avoiding: taken)
+        // Apply it now if the title already needs it.
+        slugField.titleChanged(to: title)
+    }
+
+    @ViewBuilder
+    private var shell: some View {
         #if os(iOS)
             NavigationStack {
                 form
@@ -101,31 +121,7 @@ public struct PlusComposeView: View {
                     .onChange(of: title) { _, latest in slugField.titleChanged(to: latest) }
                 }
 
-                field(Text("Web address", bundle: .module)) {
-                    HStack(spacing: 2) {
-                        if let base = store.publicationBaseURL {
-                            Text(verbatim: base + "/")
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.head)
-                        }
-                        TextField(
-                            text: Binding(
-                                get: { slugField.value },
-                                set: { slugField.changed(to: $0) }
-                            ),
-                            prompt: Text(verbatim: "my-first-post")
-                        ) {
-                            Text("Web address", bundle: .module)
-                        }
-                        .font(.caption.monospaced())
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                        #endif
-                    }
-                }
+                addressField
 
                 field(Text("One-line summary (optional)", bundle: .module)) {
                     TextField(text: $summary, prompt: Text(verbatim: "")) {
@@ -178,6 +174,97 @@ public struct PlusComposeView: View {
         .scrollDismissesKeyboard(.interactively)
     }
 
+    /// The web address, shown as the link it will become.
+    ///
+    /// Presented as a whole URL rather than a bare field, because that is what it is,
+    /// and because the writer needs to see the result to judge it. What is wrong with
+    /// it is said beside it: an address the service would reject used to be accepted
+    /// silently and fail after the writing was done.
+    private var addressField: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text("Web address", bundle: .module)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                // Only after an edit, and only when there is something else to go
+                // back to. Offering it while the field is already following would be
+                // a button that does nothing.
+                if slugField.isPinned, !slugField.suggestion.isEmpty,
+                    slugField.suggestion != slugField.value
+                {
+                    Button {
+                        slugField.useSuggestion()
+                    } label: {
+                        Text("Use suggestion", bundle: .module)
+                    }
+                    .font(.caption)
+                }
+            }
+
+            HStack(spacing: 0) {
+                if let base = store.publicationBaseURL {
+                    Text(verbatim: base + "/")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .layoutPriority(-1)
+                }
+                TextField(
+                    text: Binding(
+                        get: { slugField.value },
+                        set: { slugField.changed(to: $0) }
+                    ),
+                    prompt: Text(verbatim: "my-first-post")
+                ) {
+                    Text("Web address", bundle: .module)
+                }
+                .font(.caption.monospaced())
+                .autocorrectionDisabled()
+                #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                #endif
+            }
+            .padding(.vertical, 9)
+            .padding(.horizontal, 11)
+            .background(addressBackground)
+
+            if let problem = slugField.problem {
+                Label { Text(verbatim: problem.message) } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                }
+                .font(.caption)
+                .foregroundStyle(.orange)
+            } else if !slugField.isPinned && !slugField.value.isEmpty {
+                Text("Suggested from your title. Edit it if you would rather choose.", bundle: .module)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Outlined in orange while the address is one the service would refuse, so the
+    /// problem is visible without reading.
+    @ViewBuilder
+    private var addressBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        #if os(iOS)
+            shape.fill(PlusTheme.card)
+                .overlay(
+                    shape.strokeBorder(
+                        slugField.problem == nil ? AnyShapeStyle(.clear) : AnyShapeStyle(.orange),
+                        lineWidth: 1.5))
+        #else
+            shape.fill(.quaternary.opacity(0.25))
+                .overlay(
+                    shape.strokeBorder(
+                        slugField.problem == nil ? AnyShapeStyle(.clear) : AnyShapeStyle(.orange),
+                        lineWidth: 1.5))
+        #endif
+    }
+
     @ViewBuilder
     private func field<Content: View>(_ label: Text, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -203,7 +290,9 @@ public struct PlusComposeView: View {
 
     private var canPublish: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !slugField.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            // Validated rather than merely non-empty. An address the service refuses
+            // used to be accepted here and rejected after the writing was done.
+            && slugField.problem == nil
             && !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && store.canPublish
     }
@@ -219,40 +308,5 @@ public struct PlusComposeView: View {
         summary = ""
         markdown = ""
         onFinished()
-    }
-}
-
-/// Turns a title into a usable web address.
-///
-/// Exists so nobody has to invent one. The rules match what the service accepts
-/// for an article slug: lowercase, ASCII letters and digits, single hyphens
-/// between words.
-enum PlusSlug {
-    static let maximumLength = 60
-
-    static func derive(from title: String) -> String {
-        var out = ""
-        var pendingHyphen = false
-
-        for scalar in title.lowercased().unicodeScalars {
-            switch scalar {
-            case "a"..."z", "0"..."9":
-                let separator = pendingHyphen && !out.isEmpty
-                // Checked before appending, not after. Measuring the result of an
-                // append can only discover that the limit was already passed.
-                if out.utf8.count + (separator ? 2 : 1) > maximumLength { return out }
-                if separator { out.append("-") }
-                pendingHyphen = false
-                out.unicodeScalars.append(scalar)
-            default:
-                // Anything else, including a letter from another script, becomes a
-                // word break rather than being transliterated. A title with no
-                // ASCII at all yields nothing, and the writer types an address
-                // themselves; guessing at a romanisation would be worse than
-                // asking.
-                pendingHyphen = true
-            }
-        }
-        return out
     }
 }

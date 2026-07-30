@@ -85,19 +85,70 @@ struct PlusSlugFieldTests {
         #expect(field.value == "another-title")
     }
 
-    /// A title with no ASCII derives nothing, and the field is left empty rather
-    /// than holding a stale address from an earlier title.
-    @Test("a title in another script leaves the address empty")
-    func otherScripts() {
-        var field = PlusSlugField()
+    /// The reported case: a Korean title derives nothing, and without a fallback the
+    /// field sat empty while publishing stayed blocked on a value the writer had no
+    /// way to guess.
+    @Test("a title in another script falls back to a usable address")
+    func otherScriptsUseTheFallback() {
+        var field = PlusSlugField(fallback: "2026-07-30")
         typing("반가워요", into: &field)
-        #expect(field.value == "")
+
+        #expect(field.value == "2026-07-30")
+        #expect(field.problem == nil)
         #expect(field.isPinned == false)
     }
 
-    @Test("resetting returns to following the title")
+    /// Adding ASCII to the title takes over from the fallback, and removing it again
+    /// goes back.
+    @Test("the fallback yields to a title that can be derived from")
+    func fallbackYields() {
+        var field = PlusSlugField(fallback: "2026-07-30")
+        field.titleChanged(to: "반가워요")
+        #expect(field.value == "2026-07-30")
+
+        field.titleChanged(to: "반가워요 Hello")
+        #expect(field.value == "hello")
+
+        field.titleChanged(to: "반가워요")
+        #expect(field.value == "2026-07-30")
+    }
+
+    /// An edited address is validated, and the reason is available to show. Silently
+    /// accepting it meant publishing failed afterwards with nothing to point at.
+    @Test("an edited address reports what is wrong with it")
+    func editedAddressIsValidated() {
+        var field = PlusSlugField(fallback: "2026-07-30")
+        field.titleChanged(to: "My Post")
+        #expect(field.problem == nil)
+
+        field.changed(to: "반가워요")
+        #expect(field.problem == .unsupportedCharacters)
+
+        field.changed(to: "fine-again")
+        #expect(field.problem == nil)
+    }
+
+    /// A way back after an edit, so a writer who changed their mind does not have to
+    /// retype what the title already suggests.
+    @Test("the suggestion can be taken back up")
+    func suggestionCanBeRestored() {
+        var field = PlusSlugField(fallback: "2026-07-30")
+        field.titleChanged(to: "My Post")
+        field.changed(to: "something-else")
+        #expect(field.isPinned)
+        #expect(field.suggestion == "my-post")
+
+        field.useSuggestion()
+        #expect(field.value == "my-post")
+        #expect(field.isPinned == false)
+
+        field.titleChanged(to: "A New Title")
+        #expect(field.value == "a-new-title")
+    }
+
+    @Test("resetting returns to following the title and keeps the fallback")
     func reset() {
-        var field = PlusSlugField()
+        var field = PlusSlugField(fallback: "2026-07-30")
         field.titleChanged(to: "My Post")
         field.changed(to: "pinned")
         #expect(field.isPinned)
@@ -105,6 +156,8 @@ struct PlusSlugFieldTests {
         field.reset()
         #expect(field.value == "")
         #expect(field.isPinned == false)
+        // The fallback belongs to the account, not to one draft.
+        #expect(field.fallback == "2026-07-30")
 
         field.titleChanged(to: "New Post")
         #expect(field.value == "new-post")

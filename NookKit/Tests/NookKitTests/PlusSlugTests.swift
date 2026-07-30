@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import NookKit
@@ -54,5 +55,58 @@ struct PlusSlugTests {
     func empty() {
         #expect(PlusSlug.derive(from: "") == "")
         #expect(PlusSlug.derive(from: "   ") == "")
+    }
+
+    // MARK: - Validation
+
+    /// The rules mirror the service's, so anything accepted here is accepted there.
+    /// A mismatch shows up as a rejected publish after the writing is done.
+    @Test("validation matches what the service accepts")
+    func validation() {
+        #expect(PlusSlug.problem(with: "my-post") == nil)
+        #expect(PlusSlug.problem(with: "2026-07-30") == nil)
+        #expect(PlusSlug.problem(with: "a") == nil)
+        #expect(PlusSlug.problem(with: "") == .empty)
+        #expect(PlusSlug.problem(with: "   ") == .empty)
+        #expect(PlusSlug.problem(with: "-leading") == .hyphenAtEdge)
+        #expect(PlusSlug.problem(with: "trailing-") == .hyphenAtEdge)
+        #expect(PlusSlug.problem(with: String(repeating: "a", count: 61)) == .tooLong)
+    }
+
+    /// The case the writer reported: typing Korean into the address field said
+    /// nothing at all, and publishing failed later with no explanation.
+    @Test("an address in another script is refused with a reason")
+    func otherScriptsAreRefused() {
+        for slug in ["반가워요", "テスト", "测试", "café", "my post", "My-Post", "under_score"] {
+            #expect(
+                PlusSlug.problem(with: slug) == .unsupportedCharacters,
+                "\(slug) should be refused")
+        }
+    }
+
+    @Test("every reason has something to show")
+    func messages() {
+        for problem: PlusSlug.Problem in [.empty, .tooLong, .unsupportedCharacters, .hyphenAtEdge] {
+            #expect(problem.message.isEmpty == false)
+        }
+    }
+
+    // MARK: - The dated default
+
+    /// What a title with no ASCII falls back to.
+    @Test("a date makes a readable address")
+    func datedDefault() {
+        let date = DateComponents(calendar: .current, year: 2026, month: 7, day: 30).date!
+        #expect(PlusSlug.dated(date, avoiding: []) == "2026-07-30")
+        #expect(PlusSlug.isUsable(PlusSlug.dated(date, avoiding: [])))
+    }
+
+    /// A second post on the same day counts up, so somebody reading the URL can make
+    /// sense of it. A random suffix would be unique and meaningless.
+    @Test("a second post on the same day counts up")
+    func datedAvoidsCollisions() {
+        let date = DateComponents(calendar: .current, year: 2026, month: 7, day: 30).date!
+        #expect(PlusSlug.dated(date, avoiding: ["2026-07-30"]) == "2026-07-30-2")
+        #expect(PlusSlug.dated(date, avoiding: ["2026-07-30", "2026-07-30-2"]) == "2026-07-30-3")
     }
 }
