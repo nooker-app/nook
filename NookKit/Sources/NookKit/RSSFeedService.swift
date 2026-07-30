@@ -382,7 +382,11 @@ private extension URL {
     }
 }
 
-private final class FeedXMLParser: NSObject, XMLParserDelegate {
+/// Internal rather than private so its parsing decisions can be tested against
+/// real feed shapes. Telling a feed's own title from one nested inside it was
+/// getting decided here, untested, and getting it wrong renamed people's
+/// subscriptions.
+final class FeedXMLParser: NSObject, XMLParserDelegate {
     private enum FeedFormat {
         case unknown
         case rss
@@ -548,7 +552,10 @@ private final class FeedXMLParser: NSObject, XMLParserDelegate {
     }
 
     private func handleRSSEndElement(key: String, text: String) {
-        if currentArticle != nil {
+        // A direct child of <item>, for the same reason as <channel> below: RSS
+        // nests <title> and <link> inside an item's <source> and <enclosure>
+        // siblings, and accepting those appends someone else's title to the post's.
+        if currentArticle != nil, parentElement == "item" {
             switch key {
             case "title":
                 currentArticle?.title += text
@@ -567,7 +574,11 @@ private final class FeedXMLParser: NSObject, XMLParserDelegate {
             default:
                 break
             }
-        } else if elementStack.contains("channel") {
+        } else if parentElement == "channel" {
+            // A direct child of <channel>, not merely something inside it. RSS puts
+            // a <title> and a <link> inside <channel><image> too, and accepting
+            // those appended the icon's title to the feed's — a feed called "tim"
+            // arrived as "timtim". <textinput> and <cloud> nest the same names.
             switch key {
             case "title":
                 feedTitle += text
@@ -581,8 +592,19 @@ private final class FeedXMLParser: NSObject, XMLParserDelegate {
         }
     }
 
+    /// The element containing the one that just ended.
+    ///
+    /// At `didEndElement` the stack still holds the ending element, so its parent
+    /// is one below the top.
+    private var parentElement: String? {
+        elementStack.count >= 2 ? elementStack[elementStack.count - 2] : nil
+    }
+
     private func handleAtomEndElement(key: String, text: String) {
-        if currentArticle != nil {
+        // Atom entries nest <title> inside <source> — an aggregator naming where it
+        // republished from — and inside <author> and <link>. Only the entry's own
+        // children describe the entry.
+        if currentArticle != nil, parentElement == "entry" {
             switch key {
             case "title":
                 currentArticle?.title += text
@@ -599,7 +621,9 @@ private final class FeedXMLParser: NSObject, XMLParserDelegate {
             default:
                 break
             }
-        } else {
+        } else if parentElement == "feed" {
+            // Same reasoning as RSS: Atom nests <title> inside <author>, <source>,
+            // and <link>, and a feed-level <logo> sits beside them.
             switch key {
             case "title":
                 feedTitle += text
