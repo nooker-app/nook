@@ -47,10 +47,32 @@ public struct PlusEnvironment: Sendable, Hashable {
 
     static let selectionKey = "nookPlusEnvironment"
 
-    /// The selected environment, production unless a developer changed it.
+    /// The deployment a build talks to when nobody has chosen one.
+    ///
+    /// Release is production, and has no way to be anything else: the developer
+    /// section that calls ``select(_:)`` is compiled out.
+    ///
+    /// Debug is staging, which matters now that production exists. Until it was
+    /// deployed, a Debug build aimed at production simply failed to resolve a host
+    /// — harmless. Today the same tap creates a real account on the real service
+    /// and spends a real invitation, during ordinary development, and there is no
+    /// undo: a DID cannot be un-signed and an invitation use cannot be returned.
+    ///
+    /// A developer who genuinely wants production from a Debug build can still
+    /// pick it; the choice persists, so this only decides where an install with no
+    /// stored preference points.
+    static var fallback: PlusEnvironment {
+        #if DEBUG
+            staging
+        #else
+            production
+        #endif
+    }
+
+    /// The selected environment, or the build's default.
     public static var current: PlusEnvironment {
         let name = UserDefaults.standard.string(forKey: selectionKey)
-        return all.first { $0.handleDomain == name } ?? production
+        return all.first { $0.handleDomain == name } ?? fallback
     }
 
     /// Switches deployments. Exposed only through the developer section: a
@@ -867,11 +889,27 @@ public final class PlusStore {
     private func unreachableMessage(_ error: any Error) -> String {
         let url = error as? URLError
         if url?.code == .cannotFindHost || url?.code == .dnsLookupFailed {
-            return String(
-                localized:
-                    "The \(environment.name) server is not reachable: there is no such host as \(environment.pdsHost). Check the server in Developer settings.",
-                bundle: .module
-            )
+            // Two different situations wearing the same error.
+            //
+            // In a development build it is almost always a build pointed at a
+            // deployment that does not exist, and naming the server makes it a
+            // one-tap fix. In a release build there is no server to choose — the
+            // developer section is compiled out — so telling somebody to check it
+            // would be an instruction they cannot follow. Both hosts exist, so a
+            // name that will not resolve there is the reader's own DNS.
+            #if DEBUG
+                return String(
+                    localized:
+                        "The \(environment.name) server is not reachable: there is no such host as \(environment.pdsHost). Check the server in Developer settings.",
+                    bundle: .module
+                )
+            #else
+                return String(
+                    localized:
+                        "Could not reach \(environment.pdsHost). Your network cannot look up that name — check your connection or DNS and try again.",
+                    bundle: .module
+                )
+            #endif
         }
         if url?.code == .notConnectedToInternet || url?.code == .networkConnectionLost {
             return String(localized: "No network connection.", bundle: .module)

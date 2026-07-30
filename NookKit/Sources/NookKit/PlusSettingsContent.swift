@@ -396,7 +396,12 @@ public struct PlusSettingsContent: View {
                     Text("Server", bundle: .module)
                 }
                 if store.currentEnvironment == .production {
-                    Text("The production server is not running yet, so publishing cannot work on this setting. Choose the test server below.", bundle: .module)
+                    // This used to say the production server was not running, which
+                    // stopped being true the day it was deployed. The warning it
+                    // needs now is the opposite one: everything here is real. An
+                    // account created from a development build is a real account, it
+                    // spends a real invitation, and neither can be undone.
+                    Text("This is the real service. Anything you create here is real: a signup spends an invitation and cannot be undone.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }

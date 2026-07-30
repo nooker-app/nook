@@ -1800,6 +1800,34 @@
         }
       }
     },
+    "Could not reach %@. Your network cannot look up that name — check your connection or DNS and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not reach %@. Your network cannot look up that name — check your connection or DNS and try again."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 연결할 수 없습니다. 네트워크가 이 이름을 찾지 못합니다 — 연결이나 DNS를 확인한 뒤 다시 시도해 주세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ に接続できません。ネットワークがこの名前を解決できません。接続または DNS を確認してもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接 %@。你的网络无法解析该名称——请检查网络连接或 DNS 后重试。"
+          }
+        }
+      }
+    },
     "Could not reach the server that stores your posts.": {
       "localizations": {
         "ja": {
@@ -1970,16 +1998,16 @@
             "value": "Couldn’t take that post down"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "글을 내리지 못했습니다"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "投稿を公開停止できませんでした"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글을 내리지 못했습니다"
           }
         },
         "zh-Hans": {
@@ -2544,16 +2572,16 @@
             "value": "Download a Copy of Your Writing"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "내 글 사본 내려받기"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "自分の文章のコピーをダウンロード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 글 사본 내려받기"
           }
         },
         "zh-Hans": {
@@ -2868,16 +2896,16 @@
             "value": "Every publication and article, exactly as your repository holds them."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "발행물과 글 전부, 내 저장소가 담고 있는 그대로입니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "パブリケーションと投稿のすべてを、リポジトリが保持しているそのままの形で。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행물과 글 전부, 내 저장소가 담고 있는 그대로입니다."
           }
         },
         "zh-Hans": {
@@ -4157,16 +4185,16 @@
             "value": "Leave"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "탈퇴"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "退会"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탈퇴"
           }
         },
         "zh-Hans": {
@@ -4185,16 +4213,16 @@
             "value": "Leave Nook Plus"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nook Plus 탈퇴"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "Nook Plus を退会"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus 탈퇴"
           }
         },
         "zh-Hans": {
@@ -4213,16 +4241,16 @@
             "value": "Leave Nook Plus?"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nook Plus를 탈퇴할까요?"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "Nook Plus を退会しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus를 탈퇴할까요?"
           }
         },
         "zh-Hans": {
@@ -4241,16 +4269,16 @@
             "value": "Leaving"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "탈퇴"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "退会"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탈퇴"
           }
         },
         "zh-Hans": {
@@ -5776,16 +5804,16 @@
             "value": "Preparing your copy…"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사본을 준비하는 중…"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コピーを準備中…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 준비하는 중…"
           }
         },
         "zh-Hans": {
@@ -6833,16 +6861,16 @@
             "value": "Show in Finder"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Finder에서 보기"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "Finder に表示"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder에서 보기"
           }
         },
         "zh-Hans": {
@@ -8103,16 +8131,16 @@
             "value": "The copy is a file of your own records — every publication and article, exactly as your repository holds them."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사본은 내 레코드를 담은 파일입니다 — 발행물과 글 전부, 내 저장소가 담고 있는 그대로입니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コピーは自分のレコードを収めたファイルです。パブリケーションと投稿のすべてを、リポジトリが保持しているそのままの形で。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본은 내 레코드를 담은 파일입니다 — 발행물과 글 전부, 내 저장소가 담고 있는 그대로입니다."
           }
         },
         "zh-Hans": {
@@ -8291,29 +8319,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "页面仍然存在，但没能提取出正文。下方显示的是已保存的副本。"
-          }
-        }
-      }
-    },
-    "The production server is not running yet, so publishing cannot work on this setting. Choose the test server below.": {
-      "extractionState": "stale",
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本番サーバーはまだ稼働していないため、この設定では発行できません。下のテストサーバーを選んでください。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "production 서버는 아직 운영되지 않으므로 이 설정으로는 발행할 수 없습니다. 아래에서 테스트 서버를 선택하세요."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "生产服务器尚未运行，此设置下无法发布。请在下方选择测试服务器。"
           }
         }
       }
@@ -8712,22 +8717,50 @@
             "value": "This is not the same as signing out, and not the same as deleting your account. Coming back needs a new invitation."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "로그아웃과 다르고, 계정 삭제와도 다릅니다. 다시 시작하려면 새 초대가 필요합니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "サインアウトとも、アカウント削除とも異なります。再開するには新しい招待が必要です。"
           }
         },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그아웃과 다르고, 계정 삭제와도 다릅니다. 다시 시작하려면 새 초대가 필요합니다."
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "这既不同于退出登录，也不同于删除账户。若要重新加入，需要新的邀请。"
+          }
+        }
+      }
+    },
+    "This is the real service. Anything you create here is real: a signup spends an invitation and cannot be undone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is the real service. Anything you create here is real: a signup spends an invitation and cannot be undone."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실제 서비스입니다. 여기서 만드는 것은 모두 실제이며, 가입은 초대를 소모하고 되돌릴 수 없습니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本番サービスです。ここで作成したものはすべて実物で、サインアップは招待を消費し、取り消せません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这是正式服务。你在此创建的一切都是真实的：注册会消耗一次邀请，且无法撤销。"
           }
         }
       }
@@ -9902,16 +9935,16 @@
             "value": "You have left Nook Plus"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nook Plus를 탈퇴했습니다"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "Nook Plus を退会しました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus를 탈퇴했습니다"
           }
         },
         "zh-Hans": {
@@ -10052,16 +10085,16 @@
             "value": "Your copy is ready"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사본이 준비되었습니다"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コピーの準備ができました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본이 준비되었습니다"
           }
         },
         "zh-Hans": {
@@ -10080,16 +10113,16 @@
             "value": "Your export could not be downloaded (%@). Try again."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사본을 내려받지 못했습니다 (%@). 다시 시도해 주세요."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コピーをダウンロードできませんでした (%@)。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 내려받지 못했습니다 (%@). 다시 시도해 주세요."
           }
         },
         "zh-Hans": {
@@ -10100,6 +10133,7 @@
         }
       }
     },
+    "Your export could not be downloaded (%lld). Try again.": {},
     "Your export could not be prepared. Try again in a few minutes.": {
       "localizations": {
         "en": {
@@ -10108,16 +10142,16 @@
             "value": "Your export could not be prepared. Try again in a few minutes."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사본을 준비하지 못했습니다. 몇 분 후 다시 시도해 주세요."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コピーを準備できませんでした。数分後にもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 준비하지 못했습니다. 몇 분 후 다시 시도해 주세요."
           }
         },
         "zh-Hans": {
@@ -10136,16 +10170,16 @@
             "value": "Your export is still being prepared. Try again in a moment."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사본을 아직 준비하는 중입니다. 잠시 후 다시 시도해 주세요."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コピーはまだ準備中です。少し待ってからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 아직 준비하는 중입니다. 잠시 후 다시 시도해 주세요."
           }
         },
         "zh-Hans": {
@@ -10164,16 +10198,16 @@
             "value": "Your export was prepared but could not be downloaded. Try again."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "사본은 준비되었지만 내려받지 못했습니다. 다시 시도해 주세요."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コピーは準備できましたが、ダウンロードできませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본은 준비되었지만 내려받지 못했습니다. 다시 시도해 주세요."
           }
         },
         "zh-Hans": {
@@ -10321,16 +10355,16 @@
             "value": "Your pages are coming down. Everything you wrote is still in your repository, and your drafts are still on this device."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "공개 페이지가 내려가는 중입니다. 작성한 글은 모두 내 저장소에 그대로 있고, 초안도 이 기기에 남아 있습니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "公開ページは削除中です。書いたものはすべてリポジトリに残っており、下書きもこの端末に残っています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "공개 페이지가 내려가는 중입니다. 작성한 글은 모두 내 저장소에 그대로 있고, 초안도 이 기기에 남아 있습니다."
           }
         },
         "zh-Hans": {
@@ -10473,16 +10507,16 @@
             "value": "Your posts stay in your repository and your account is untouched. Nook stops publishing your pages and forgets your membership, and coming back needs a new invitation."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "글은 내 저장소에 그대로 남고 계정도 건드리지 않습니다. Nook은 공개 페이지 발행을 중단하고 멤버십을 잊으며, 다시 시작하려면 새 초대가 필요합니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "投稿はリポジトリにそのまま残り、アカウントには触れません。Nook はページの公開を停止してメンバーシップを忘れ、再開には新しい招待が必要です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글은 내 저장소에 그대로 남고 계정도 건드리지 않습니다. Nook은 공개 페이지 발행을 중단하고 멤버십을 잊으며, 다시 시작하려면 새 초대가 필요합니다."
           }
         },
         "zh-Hans": {
@@ -10501,16 +10535,16 @@
             "value": "Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "발행물과 글은 내 저장소에 그대로 남고, 이름과 계정도 건드리지 않습니다. 없어지는 것은 멤버십과 Nook이 발행해 주는 공개 페이지입니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "パブリケーションと投稿はリポジトリにそのまま残り、名前とアカウントにも触れません。なくなるのはメンバーシップと、Nook が公開しているページです。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행물과 글은 내 저장소에 그대로 남고, 이름과 계정도 건드리지 않습니다. 없어지는 것은 멤버십과 Nook이 발행해 주는 공개 페이지입니다."
           }
         },
         "zh-Hans": {
