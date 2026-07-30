@@ -184,15 +184,16 @@ public struct PlusServiceClient: Sendable {
 
     /// Deletes an article, conditioned on the CID the caller last read.
     ///
-    /// Passing the CID is what prevents deleting a revision the user has not
-    /// seen. Omitting it makes the delete unconditional, which is why `cid` is
-    /// not optional here even though the API allows it.
-    public func deleteArticle(recordKey: String, cid: String) async throws {
+    /// Passing the CID is what prevents deleting a revision the user has not seen.
+    /// It is optional because the API says so, and because a client that cannot
+    /// produce one still has to be able to delete: the record key identifies the
+    /// record on its own.
+    public func deleteArticle(recordKey: String, cid: String?) async throws {
         guard session() != nil else { throw PlusServiceError.sessionInvalid }
         let output = try await send({
             try await client.deleteArticle(
                 path: .init(rkey: recordKey),
-                headers: .init(If_hyphen_Match: quoted(cid))
+                headers: .init(If_hyphen_Match: cid.map(quoted))
             )
         })
         switch output {

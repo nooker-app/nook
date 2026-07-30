@@ -507,15 +507,27 @@ public final class PlusStore {
         }
     }
 
-    /// Deletes an article, conditioned on the CID last read so a revision the
-    /// user has not seen cannot be destroyed.
+    /// Deletes an article, conditioned on the CID last read where there is one, so a
+    /// revision the user has not seen is not destroyed silently.
+    ///
+    /// A missing or empty CID no longer refuses the deletion. The record key is what
+    /// identifies the record, and the service treats an absent `If-Match` as an
+    /// unconditional delete by design; refusing instead left the writer unable to
+    /// remove their own post at all, which is worse than the edge case the condition
+    /// guards against — a revision made on another device between the list being read
+    /// and the delete being tapped.
+    ///
+    /// An empty string mattered as much as nil: it passed a `let cid` binding and then
+    /// went out as `If-Match: ""`, which the service rejects as malformed.
     public func delete(_ record: ATRecord<ArticleRecord>) async {
-        guard let rkey = record.recordKey, let cid = record.cid else {
+        guard let rkey = record.recordKey else {
             failure = String(localized: "That article is missing the information needed to delete it safely.", bundle: .module)
             return
         }
+        let cid = record.cid?.trimmingCharacters(in: .whitespacesAndNewlines)
         await perform {
-            try await self.service.deleteArticle(recordKey: rkey, cid: cid)
+            try await self.service.deleteArticle(
+                recordKey: rkey, cid: (cid?.isEmpty ?? true) ? nil : cid)
             await self.loadContent()
         }
     }
