@@ -133,24 +133,24 @@ public struct PlusComposeView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    TextEditor(text: $markdown)
-                        .font(.body)
-                        .frame(minHeight: 260)
-                        .scrollContentBackground(.hidden)
-                        .focused($focus, equals: .body)
+                    // Renders while it is being typed, and never rewrites what was
+                    // typed. See PlusMarkdownEditor for why that distinction is the
+                    // whole design.
+                    PlusMarkdownEditor(text: $markdown)
+                        .frame(minHeight: 300)
                         .overlay(alignment: .topLeading) {
                             if markdown.isEmpty {
                                 Text("Write here. **Bold**, *italic*, and [links](https://example.com) work.", bundle: .module)
                                     .foregroundStyle(.tertiary)
                                     .padding(.top, 8)
-                                    .padding(.leading, 5)
+                                    .padding(.leading, 4)
                                     .allowsHitTesting(false)
                             }
                         }
                         .padding(8)
                         .background(cardBackground)
 
-                    Text("Markdown. Headings, lists, links, quotes, and code all work; images are not supported yet.", bundle: .module)
+                    Text("Markdown, styled as you type. Headings, lists, links, quotes, and code all work; images are not supported yet.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
