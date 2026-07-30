@@ -133,6 +133,13 @@ struct PlusSignInView: View {
                         .padding(20)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                // Every other Plus screen sets both, and this one set neither. A sheet
+                // does not inherit the app's tint, so its controls came out in the
+                // system blue on the cool grouped background: exactly the bolted-on
+                // look PlusTheme exists to avoid, on the screen someone locked out of
+                // their account is looking at.
+                .background(PlusTheme.canvas.ignoresSafeArea())
+                .tint(PlusTheme.accent)
                 .navigationTitle(Text("Sign in", bundle: .module))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

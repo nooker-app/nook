@@ -36,9 +36,46 @@ struct PlusMarkdownEditor: View {
     @Binding var text: String
     /// Shown when the document is empty, in place of the text.
     var placeholder: String = ""
+    /// Lets the composer's formatting buttons act on the live selection.
+    var handle: PlusMarkdownEditorHandle? = nil
 
     var body: some View {
-        Representable(text: $text, placeholder: placeholder)
+        Representable(text: $text, placeholder: placeholder, handle: handle)
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty, !placeholder.isEmpty {
+                    Text(verbatim: placeholder)
+                        .foregroundStyle(.tertiary)
+                        // Lines up with the text container's inset rather than being
+                        // eyeballed, so the first character does not jump when it
+                        // replaces this.
+                        .padding(.top, 8)
+                        .padding(.leading, 4)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+/// The composer's way to act on the text view's selection.
+///
+/// A formatting button has to know what is selected, and SwiftUI does not expose that
+/// for a text view it does not own. Rather than mirror the selection into SwiftUI —
+/// which would mean writing observed state on every caret move, for a value only these
+/// buttons read — the composer hands this down and the editor attaches itself to it.
+///
+/// The edit itself is decided by ``PlusMarkdownEdit``, which is pure and tested. All
+/// that happens here is handing it the current text and selection, and applying what
+/// comes back through the text view's own editing API so undo records one step.
+@MainActor
+final class PlusMarkdownEditorHandle {
+    fileprivate var attachment: ((@escaping (String, NSRange) -> PlusMarkdownEdit.Edit) -> Void)?
+
+    /// Whether an editor is attached. False before the editor appears, which is when a
+    /// button would otherwise look enabled and do nothing.
+    var isReady: Bool { attachment != nil }
+
+    func perform(_ edit: @escaping (String, NSRange) -> PlusMarkdownEdit.Edit) {
+        attachment?(edit)
     }
 }
 
@@ -60,29 +97,44 @@ enum MarkdownAttributes {
         #endif
     }
 
-    static func attributed(_ text: String, accent: PlatformColor) -> NSMutableAttributedString {
-        let body = PlatformFont.systemFont(ofSize: bodySize)
+    /// What every character starts as, before the styler's spans are laid over it.
+    static func baseAttributes() -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 3
         paragraph.paragraphSpacing = bodySize * 0.45
+        return [
+            .font: PlatformFont.systemFont(ofSize: bodySize),
+            .foregroundColor: PlatformColor.labelCompat,
+            .paragraphStyle: paragraph,
+        ]
+    }
 
-        let result = NSMutableAttributedString(
-            string: text,
-            attributes: [
-                .font: body,
-                .foregroundColor: PlatformColor.labelCompat,
-                .paragraphStyle: paragraph,
-            ])
+    static func attributed(_ text: String, accent: PlatformColor) -> NSMutableAttributedString {
+        let result = NSMutableAttributedString(string: text)
+        restyle(result, accent: accent)
+        return result
+    }
+
+    /// Restyles storage in place, touching only attributes.
+    ///
+    /// The characters are never replaced, which is what makes this safe to run on a
+    /// live text view: replacing them takes the undo stack, the selection, and any
+    /// in-progress input-method composition down with it. Both platforms go through
+    /// here so neither can drift from the other, and so the behaviour can be tested
+    /// without a text view.
+    static func restyle(_ storage: NSMutableAttributedString, accent: PlatformColor) {
+        let text = storage.string
+        let whole = NSRange(location: 0, length: storage.length)
+        storage.setAttributes(baseAttributes(), range: whole)
 
         let full = text.startIndex..<text.endIndex
         for span in PlusMarkdownStyler.spans(in: text) {
             guard span.range.clamped(to: full) == span.range, !span.range.isEmpty else { continue }
             let range = NSRange(span.range, in: text)
             for (key, value) in attributes(for: span.kind, accent: accent) {
-                result.addAttribute(key, value: value, range: range)
+                storage.addAttribute(key, value: value, range: range)
             }
         }
-        return result
     }
 
     static func attributes(
@@ -183,6 +235,7 @@ extension PlatformColor {
         fileprivate struct Representable: UIViewRepresentable {
             @Binding var text: String
             let placeholder: String
+            let handle: PlusMarkdownEditorHandle?
             @Environment(\.self) private var environment
 
             func makeUIView(context: Context) -> UITextView {
@@ -200,7 +253,14 @@ extension PlatformColor {
                 view.smartDashesType = .no
                 view.autocorrectionType = .yes
                 view.spellCheckingType = .yes
-                context.coordinator.apply(text, to: view)
+                context.coordinator.replace(text, in: view)
+                // Weakly, so the handle outliving the view cannot keep it alive, and a
+                // button pressed after the editor is gone does nothing rather than
+                // acting on a detached view.
+                handle?.attachment = { [weak view] makeEdit in
+                    guard let view else { return }
+                    context.coordinator.apply(makeEdit, to: view)
+                }
                 return view
             }
 
@@ -210,7 +270,7 @@ extension PlatformColor {
                 // Only when the text differs from what the view holds. Restyling on
                 // every SwiftUI update would fight the keyboard.
                 if view.text != text {
-                    context.coordinator.apply(text, to: view)
+                    context.coordinator.replace(text, in: view)
                 }
                 view.tintColor = accentColor
             }
@@ -233,31 +293,72 @@ extension PlatformColor {
                 self.accent = accent
             }
 
-            /// Replaces the styled text, keeping the selection where it was.
-            ///
-            /// Assigning to `attributedText` collapses the selection to the end, so
-            /// it is captured first and put back. Without this the caret leaves the
-            /// middle of a sentence on every keystroke.
-            func apply(_ source: String, to view: UITextView) {
-                let selection = view.selectedRange
+            /// Replaces the whole document, for text that came from outside the view.
+            func replace(_ source: String, in view: UITextView) {
                 view.attributedText = MarkdownAttributes.attributed(source, accent: accent)
-                // Clamped, because the text may be shorter than it was.
-                let limit = (view.text as NSString).length
-                view.selectedRange = NSRange(
-                    location: min(selection.location, limit),
-                    length: min(selection.length, limit - min(selection.location, limit)))
-                // Typing attributes are separate from the storage, and left alone
-                // they carry the last styled run into whatever is typed next: a
-                // caret after a heading would keep typing at heading size.
-                view.typingAttributes = [
-                    .font: UIFont.systemFont(ofSize: MarkdownAttributes.bodySize),
-                    .foregroundColor: UIColor.label,
-                ]
+                restyle(view)
+            }
+
+            /// Restyles what the view already holds, in place.
+            ///
+            /// Through the text storage rather than by assigning `attributedText`.
+            /// Assigning it replaces every character, which on each keystroke:
+            /// collapsed the selection to the end of the document, discarded the undo
+            /// stack so undo could not step back through an edit, and ended any
+            /// in-progress input-method composition — the last of which matters most
+            /// for anyone writing in Korean, Japanese, or Chinese, where a syllable is
+            /// assembled over several keypresses and this threw the assembly away.
+            ///
+            /// Nothing here changes a character, so the view does not consider it an
+            /// edit at all.
+            func restyle(_ view: UITextView) {
+                // Never mid-composition. The marked text belongs to the keyboard until
+                // it commits, and attributes applied over it are both discarded and
+                // disruptive. The commit itself reports another change, which styles it.
+                guard view.markedTextRange == nil, let storage = view.textStorage as NSTextStorage? else {
+                    return
+                }
+                let selection = view.selectedRange
+                storage.beginEditing()
+                MarkdownAttributes.restyle(storage, accent: accent)
+                storage.endEditing()
+                // Attribute-only edits should leave the selection alone, but the text
+                // system is not required to, and a caret that jumps mid-sentence is
+                // the worst thing an editor can do. Cheap to be certain.
+                if view.selectedRange != selection {
+                    view.selectedRange = selection
+                }
+                // Typing attributes are separate from the storage, and left alone they
+                // carry the last styled run into whatever is typed next: a caret after
+                // a heading would keep typing at heading size.
+                view.typingAttributes = MarkdownAttributes.baseAttributes()
             }
 
             func textViewDidChange(_ view: UITextView) {
                 text.wrappedValue = view.text
-                apply(view.text, to: view)
+                restyle(view)
+            }
+
+            /// Runs a formatting edit against the live selection.
+            ///
+            /// Through `replace(_:withText:)` rather than by assigning the text, so the
+            /// text view records one undo step for one button press, reports the change
+            /// to this delegate (which restyles and updates the binding), and leaves
+            /// the rest of the document untouched.
+            func apply(
+                _ makeEdit: (String, NSRange) -> PlusMarkdownEdit.Edit, to view: UITextView
+            ) {
+                let edit = makeEdit(view.text, view.selectedRange)
+                guard
+                    let start = view.position(from: view.beginningOfDocument, offset: edit.range.location),
+                    let end = view.position(from: start, offset: edit.range.length),
+                    let range = view.textRange(from: start, to: end)
+                else { return }
+                view.replace(range, withText: edit.replacement)
+                view.selectedRange = edit.selection
+                // `replace` reports the change, but only for a non-empty replacement on
+                // some paths; keeping the binding in step is cheap and unconditional.
+                text.wrappedValue = view.text
             }
         }
     }
@@ -270,6 +371,7 @@ extension PlatformColor {
         fileprivate struct Representable: NSViewRepresentable {
             @Binding var text: String
             let placeholder: String
+            let handle: PlusMarkdownEditorHandle?
 
             func makeNSView(context: Context) -> NSScrollView {
                 let scroll = NSTextView.scrollableTextView()
@@ -286,7 +388,11 @@ extension PlatformColor {
                 view.isAutomaticDashSubstitutionEnabled = false
                 view.isAutomaticTextReplacementEnabled = false
                 view.isContinuousSpellCheckingEnabled = true
-                context.coordinator.apply(text, to: view)
+                context.coordinator.replace(text, in: view)
+                handle?.attachment = { [weak view] makeEdit in
+                    guard let view else { return }
+                    context.coordinator.apply(makeEdit, to: view)
+                }
                 return scroll
             }
 
@@ -294,7 +400,7 @@ extension PlatformColor {
                 guard let view = scroll.documentView as? NSTextView else { return }
                 context.coordinator.text = $text
                 if view.string != text {
-                    context.coordinator.apply(text, to: view)
+                    context.coordinator.replace(text, in: view)
                 }
             }
 
@@ -312,41 +418,57 @@ extension PlatformColor {
                 self.accent = accent
             }
 
-            /// Restyles in place through the text storage, so the undo stack and the
-            /// selection both survive. Replacing the string instead would collapse
-            /// the selection and record an undo step for a change nobody made.
-            func apply(_ source: String, to view: NSTextView) {
+            /// Replaces the whole document, for text that came from outside the view.
+            func replace(_ source: String, in view: NSTextView) {
                 guard let storage = view.textStorage else { return }
-                let selection = view.selectedRange()
-                let styled = MarkdownAttributes.attributed(source, accent: accent)
+                storage.setAttributedString(MarkdownAttributes.attributed(source, accent: accent))
+                restyle(view)
+            }
 
+            /// Restyles in place through the text storage, so the undo stack and the
+            /// selection both survive. Replacing the string instead would collapse the
+            /// selection and record an undo step for a change nobody made.
+            func restyle(_ view: NSTextView) {
+                // Same rule as iOS: the marked text belongs to the input method until
+                // it commits, and the commit reports its own change.
+                guard view.markedRange().length == 0, let storage = view.textStorage else { return }
+                let selection = view.selectedRange()
                 storage.beginEditing()
-                if storage.string == source {
-                    let whole = NSRange(location: 0, length: storage.length)
-                    storage.setAttributes(nil, range: whole)
-                    styled.enumerateAttributes(in: whole) { attributes, range, _ in
-                        storage.setAttributes(attributes, range: range)
-                    }
-                } else {
-                    storage.setAttributedString(styled)
-                }
+                MarkdownAttributes.restyle(storage, accent: accent)
                 storage.endEditing()
 
-                let limit = storage.length
-                view.setSelectedRange(
-                    NSRange(
-                        location: min(selection.location, limit),
-                        length: min(selection.length, limit - min(selection.location, limit))))
-                view.typingAttributes = [
-                    .font: NSFont.systemFont(ofSize: MarkdownAttributes.bodySize),
-                    .foregroundColor: NSColor.labelColor,
-                ]
+                if view.selectedRange() != selection {
+                    let limit = storage.length
+                    view.setSelectedRange(
+                        NSRange(
+                            location: min(selection.location, limit),
+                            length: min(selection.length, limit - min(selection.location, limit))))
+                }
+                view.typingAttributes = MarkdownAttributes.baseAttributes()
             }
 
             func textDidChange(_ notification: Notification) {
                 guard let view = notification.object as? NSTextView else { return }
                 text.wrappedValue = view.string
-                apply(view.string, to: view)
+                restyle(view)
+            }
+
+            /// See the iOS coordinator: routed through the text view's own editing API
+            /// so one button press is one undo step.
+            func apply(
+                _ makeEdit: (String, NSRange) -> PlusMarkdownEdit.Edit, to view: NSTextView
+            ) {
+                let edit = makeEdit(view.string, view.selectedRange())
+                // The documented order for a programmatic edit: ask, change the
+                // storage, then report. `shouldChangeText` is what opens the undo
+                // grouping, so one button press stays one undo step.
+                guard view.shouldChangeText(in: edit.range, replacementString: edit.replacement) else {
+                    return
+                }
+                view.textStorage?.replaceCharacters(in: edit.range, with: edit.replacement)
+                view.didChangeText()
+                view.setSelectedRange(edit.selection)
+                text.wrappedValue = view.string
             }
         }
     }

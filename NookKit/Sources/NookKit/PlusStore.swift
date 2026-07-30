@@ -405,8 +405,13 @@ public final class PlusStore {
     /// Failing to refresh is not treated as being signed out. The session is left in
     /// place and the writer is told what happened, because clearing it here would
     /// take a draft down with it for what may be a network problem.
-    private func refreshSessionIfExpired(now: Date = Date()) async {
-        guard let current = session, PlusJWT.isExpired(current.accessJWT, now: now) else { return }
+    ///
+    /// Returns whether the session is fit to make a request with, having set a
+    /// message when it is not.
+    @discardableResult
+    private func refreshSessionIfExpired(now: Date = Date()) async -> Bool {
+        guard let current = session else { return false }
+        guard PlusJWT.isExpired(current.accessJWT, now: now) else { return true }
         do {
             let renewed = try await pds.refresh(current)
             // The Keychain is what the API client reads its token from, not this
@@ -414,13 +419,26 @@ public final class PlusStore {
             // spent token. Treated as an expiry rather than reported as success.
             guard PlusCredential.store(renewed) else {
                 sessionExpired = true
-                return
+                return false
             }
             session = renewed
-        } catch {
-            // A dead refresh token is the one case where signing in again really is
-            // the remedy, and saying so is more use than the host's prose.
+            return true
+        } catch let error as PlusPDSError {
+            if case .transport(let cause) = error {
+                // Being unable to reach the host is not an expired session. Asking
+                // for a password because the network is down would be a lie, and
+                // signing in is the one thing that cannot be done offline.
+                failure = unreachableMessage(cause)
+                return false
+            }
+            // The host rejected the refresh token itself. This is the only case where
+            // signing in again really is the remedy, and saying so is more use than
+            // the host's prose.
             sessionExpired = true
+            return false
+        } catch {
+            failure = message(for: error)
+            return false
         }
     }
 
@@ -507,16 +525,22 @@ public final class PlusStore {
     private func perform(_ work: @escaping () async throws -> Void) async {
         isWorking = true
         failure = nil
-        // Before the work, not as a retry after it fails. The work is not always
+        // Renewed before the work, not retried after it fails. The work is not always
         // idempotent — retrying a publish that had already been written would make a
-        // second post — so an expired token is replaced first and the work runs once.
-        await refreshSessionIfExpired()
-        if sessionExpired {
-            // Reported here rather than letting the work fail on its own: the host's
-            // answer to a spent token is "ExpiredToken", which reads as a bad
-            // password-reset code by the time it reaches a message.
-            failure = String(
-                localized: "Your session has expired. Sign in again to continue.", bundle: .module)
+        // second post — so a spent token is replaced first and the work runs once.
+        //
+        // Only when there is a session to renew: signing up and signing in come
+        // through here too, and they are how a session comes to exist.
+        if session != nil, await !refreshSessionIfExpired() {
+            if sessionExpired {
+                // Said here rather than letting the work fail on its own: the host
+                // answers a spent token with "ExpiredToken", which by the time it
+                // reaches a message reads as a bad password-reset code.
+                failure = String(
+                    localized: "Your session has expired. Sign in again to continue.", bundle: .module)
+            }
+            // Any other reason already left its own message, and it is a better one
+            // than "sign in again" — a network that is down is not an expiry.
             isWorking = false
             return
         }

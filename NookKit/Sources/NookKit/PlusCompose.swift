@@ -25,6 +25,12 @@ public struct PlusComposeView: View {
     @State private var summary = ""
     @State private var markdown = ""
     @FocusState private var focus: Field?
+    /// The address and summary, which are set once and then not thought about. They
+    /// used to sit between the title and the body, pushing writing a third of the way
+    /// down the screen for two values most posts never change.
+    @State private var showingDetails = false
+    /// Lets the formatting buttons act on the body's selection.
+    @State private var editor = PlusMarkdownEditorHandle()
 
     private enum Field: Hashable {
         case title
@@ -54,7 +60,7 @@ public struct PlusComposeView: View {
     private var shell: some View {
         #if os(iOS)
             NavigationStack {
-                form
+                writingSurface
                     .background(PlusTheme.canvas.ignoresSafeArea())
                     .tint(PlusTheme.accent)
                     .navigationTitle(Text("New post", bundle: .module))
@@ -73,7 +79,14 @@ public struct PlusComposeView: View {
                             }
                             .disabled(!canPublish)
                         }
+                        // Only while the body has focus. A formatting bar over the
+                        // title would act on the wrong field, and the keyboard bar is
+                        // prime space to spend on something inapplicable.
+                        if focus == .body {
+                            ToolbarItemGroup(placement: .keyboard) { formattingBar }
+                        }
                     }
+                    .sheet(isPresented: $showingDetails) { detailsSheet }
             }
             .onAppear { focus = .title }
         #else
@@ -93,14 +106,226 @@ public struct PlusComposeView: View {
         #endif
     }
 
+    // MARK: - iOS: the body is the screen
+
+    #if os(iOS)
+        /// Title, then the body, and nothing between them.
+        ///
+        /// The composer used to be a form: a scroll view holding a title field, the
+        /// address, a summary, and then the body in a 300-point box. Two problems, both
+        /// of which made writing feel like filling something in rather than writing.
+        ///
+        /// Writing began a third of the way down the screen, behind two fields that are
+        /// set once and then never thought about. Those now live behind the address
+        /// line, which stays visible because it is also where a rejected address is
+        /// reported.
+        ///
+        /// And the text view scrolls, so it was a scroll view inside a scroll view.
+        /// Which one moved depended on where a finger landed, and the outer one knew
+        /// nothing about the caret, so the line being typed could sit under the
+        /// keyboard. Now there is one scrolling surface: the body, which keeps its own
+        /// caret in view because that is what a text view does.
+        private var writingSurface: some View {
+            VStack(alignment: .leading, spacing: 0) {
+                TextField(text: $title, prompt: Text("Title", bundle: .module)) {
+                    Text("Title", bundle: .module)
+                }
+                .font(.title2.weight(.semibold))
+                .focused($focus, equals: .title)
+                // Enter moves to the body rather than doing nothing, so a title and its
+                // first sentence are one continuous action.
+                .submitLabel(.next)
+                .onSubmit { focus = .body }
+                .onChange(of: title) { _, latest in slugField.titleChanged(to: latest) }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
+                addressLine
+
+                if let note = statusNote {
+                    note
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
+                }
+
+                // Renders while it is being typed, and never rewrites what was typed.
+                // See PlusMarkdownEditor for why that distinction is the whole design.
+                PlusMarkdownEditor(
+                    text: $markdown,
+                    placeholder: String(localized: "Write here. Markdown works.", bundle: .module),
+                    handle: editor
+                )
+                .focused($focus, equals: .body)
+                .padding(.horizontal, 16)
+                .frame(maxHeight: .infinity)
+            }
+        }
+
+        /// One line: the address as the URL it will become, and a way into the rest.
+        ///
+        /// Tappable across its width, because a writer looking for the summary looks
+        /// here — this is the only thing on screen that is about the post rather than
+        /// in it. Turns orange and states the problem when the address is one the
+        /// service would refuse, so moving it out of the form did not hide it.
+        private var addressLine: some View {
+            Button {
+                showingDetails = true
+            } label: {
+                HStack(spacing: 6) {
+                    if let problem = slugField.problem {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(verbatim: problem.message)
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    } else {
+                        Text(verbatim: fullAddress)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
+                        .imageScale(.small)
+                }
+                .font(.caption.monospaced())
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(alignment: .bottom) {
+                PlusTheme.hairline.frame(height: 0.5)
+            }
+            .accessibilityLabel(Text("Web address and summary", bundle: .module))
+            .accessibilityValue(Text(verbatim: slugField.problem?.message ?? fullAddress))
+        }
+
+        private var fullAddress: String {
+            guard let base = store.publicationBaseURL else { return slugField.value }
+            return base + "/" + slugField.value
+        }
+
+        /// Markdown that would otherwise be typed character by character on a keyboard
+        /// where `*`, `#`, `[`, and a backtick are each two taps deep, mid-sentence.
+        ///
+        /// Scrollable rather than compressed: eight fixed buttons across the narrowest
+        /// phone leaves each one too small to hit, and the ones past the edge are the
+        /// ones used least.
+        private var formattingBar: some View {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    formatButton("bold", label: Text("Bold", bundle: .module)) {
+                        editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "**") }
+                    }
+                    formatButton("italic", label: Text("Italic", bundle: .module)) {
+                        editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "*") }
+                    }
+                    formatButton("link", label: Text("Link", bundle: .module)) {
+                        editor.perform { PlusMarkdownEdit.link($0, selection: $1) }
+                    }
+                    Divider().frame(height: 20).padding(.horizontal, 4)
+                    formatButton("number", label: Text("Heading", bundle: .module)) {
+                        editor.perform {
+                            PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "## ")
+                        }
+                    }
+                    formatButton("list.bullet", label: Text("List", bundle: .module)) {
+                        editor.perform {
+                            PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "- ")
+                        }
+                    }
+                    formatButton("text.quote", label: Text("Quote", bundle: .module)) {
+                        editor.perform {
+                            PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "> ")
+                        }
+                    }
+                    formatButton("chevron.left.forwardslash.chevron.right", label: Text("Code", bundle: .module)) {
+                        editor.perform { PlusMarkdownEdit.codeBlock($0, selection: $1) }
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+            // The bar owns the keyboard's width; without this the group is centred and
+            // the first button sits in the middle of the screen.
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        private func formatButton(
+            _ symbol: String, label: Text, action: @escaping () -> Void
+        ) -> some View {
+            Button(action: action) {
+                Image(systemName: symbol)
+                    .frame(width: 40, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(label)
+        }
+
+        /// The two values a post is given once.
+        private var detailsSheet: some View {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        addressField
+                        field(Text("One-line summary (optional)", bundle: .module)) {
+                            TextField(text: $summary, prompt: Text(verbatim: "")) {
+                                Text("One-line summary (optional)", bundle: .module)
+                            }
+                        }
+                        Text("Markdown, styled as you type. Headings, lists, links, quotes, and code all work; images are not supported yet.", bundle: .module)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(20)
+                }
+                .background(PlusTheme.canvas.ignoresSafeArea())
+                .tint(PlusTheme.accent)
+                .navigationTitle(Text("Post details", bundle: .module))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showingDetails = false } label: { Text("Done", bundle: .module) }
+                            .fontWeight(.semibold)
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+    #endif
+
+    /// What is stopping publishing, or what is being waited for. Nil when there is
+    /// nothing to say.
+    @ViewBuilder
+    private var statusNote: (some View)? {
+        if let failure = store.failure {
+            Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
+                .foregroundStyle(.orange)
+                .font(.callout)
+        } else if store.publications.isEmpty {
+            // Publish stays disabled until the publication arrives, and a button that
+            // is dim for no stated reason reads as broken. The fields are usable
+            // meanwhile; only publishing waits.
+            Label {
+                Text("Getting your publication ready. You can write in the meantime.", bundle: .module)
+            } icon: {
+                ProgressView().controlSize(.small)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The Mac composer, which stays a form.
+    ///
+    /// A window has the room for one, and a pointer makes a scroll view inside a scroll
+    /// view merely untidy rather than unusable. The phone's problem was that neither of
+    /// those is true there.
     private var form: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                // No "view your post" link here. Publishing dismisses this screen,
-                // so the link was only ever visible on a *later* opening, where it
-                // pointed at the previous post: a stale link on a blank draft. The
-                // post is shown in the reader instead, which is where reading
-                // belongs.
                 field(Text("Title", bundle: .module)) {
                     TextField(text: $title, prompt: Text(verbatim: "")) {
                         Text("Title", bundle: .module)
@@ -125,41 +350,23 @@ public struct PlusComposeView: View {
                     // Renders while it is being typed, and never rewrites what was
                     // typed. See PlusMarkdownEditor for why that distinction is the
                     // whole design.
-                    PlusMarkdownEditor(text: $markdown)
-                        .frame(minHeight: 300)
-                        .overlay(alignment: .topLeading) {
-                            if markdown.isEmpty {
-                                Text("Write here. **Bold**, *italic*, and [links](https://example.com) work.", bundle: .module)
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.top, 8)
-                                    .padding(.leading, 4)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                        .padding(8)
-                        .background(cardBackground)
+                    PlusMarkdownEditor(
+                        text: $markdown,
+                        placeholder: String(
+                            localized: "Write here. **Bold**, *italic*, and [links](https://example.com) work.",
+                            bundle: .module),
+                        handle: editor
+                    )
+                    .frame(minHeight: 300)
+                    .padding(8)
+                    .background(cardBackground)
 
                     Text("Markdown, styled as you type. Headings, lists, links, quotes, and code all work; images are not supported yet.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                if let failure = store.failure {
-                    Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
-                        .foregroundStyle(.orange)
-                        .font(.callout)
-                } else if store.publications.isEmpty {
-                    // Publish stays disabled until the publication arrives, and a
-                    // button that is dim for no stated reason reads as broken. The
-                    // fields are usable meanwhile; only publishing waits.
-                    Label {
-                        Text("Getting your publication ready. You can write in the meantime.", bundle: .module)
-                    } icon: {
-                        ProgressView().controlSize(.small)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
+                statusNote
             }
             .padding(20)
         }

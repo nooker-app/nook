@@ -145,6 +145,52 @@ struct PlusMarkdownEditorTests {
         #expect(styled.length == (source as NSString).length)
     }
 
+    // MARK: - Restyling in place
+
+    /// The live text view is restyled through its storage rather than by being handed
+    /// a new attributed string, because replacing the characters took the undo stack,
+    /// the selection, and any in-progress input-method composition with it. These pin
+    /// the properties that makes that safe.
+    @Test("restyling in place never changes a character")
+    func restyleKeepsCharacters() {
+        for source in ["# Heading\n\n**bold** text", "반가워요 **굵게** 🎉", "", "no markup here"] {
+            let storage = NSMutableAttributedString(string: source)
+            MarkdownAttributes.restyle(storage, accent: accent)
+            #expect(storage.string == source, "the characters changed for \(source.debugDescription)")
+        }
+    }
+
+    /// Styling the same text twice must land in the same place. Attributes that
+    /// accumulated would drift further from the source with every keystroke.
+    @Test("restyling twice is the same as restyling once")
+    func restyleIsIdempotent() {
+        let source = "# Title\n\nSome **bold** and `code`.\n\n- one\n- two"
+        let once = NSMutableAttributedString(string: source)
+        MarkdownAttributes.restyle(once, accent: accent)
+        let twice = NSMutableAttributedString(string: source)
+        MarkdownAttributes.restyle(twice, accent: accent)
+        MarkdownAttributes.restyle(twice, accent: accent)
+        #expect(once == twice)
+    }
+
+    /// The case in-place styling gets wrong if it only adds: text that used to be a
+    /// heading and is not any more has to stop being drawn as one. Deleting the `#`
+    /// left the line large and bold for the rest of the session.
+    @Test("styling that no longer applies is cleared")
+    func staleStylingIsCleared() throws {
+        let storage = NSMutableAttributedString(string: "# Title")
+        MarkdownAttributes.restyle(storage, accent: accent)
+        let asHeading = try #require(storage.attribute(.font, at: 2, effectiveRange: nil) as? PlatformFont)
+
+        // The writer deletes the marker, as the text view would report it.
+        storage.replaceCharacters(in: NSRange(location: 0, length: 2), with: "")
+        MarkdownAttributes.restyle(storage, accent: accent)
+        let asBody = try #require(storage.attribute(.font, at: 0, effectiveRange: nil) as? PlatformFont)
+
+        #expect(asBody.pointSize < asHeading.pointSize)
+        #expect(!asBody.isBold)
+    }
+
     /// Multi-byte text is where a byte-counting range conversion would slice a
     /// character in half and trap.
     @Test("multi-byte text styles without trapping")
