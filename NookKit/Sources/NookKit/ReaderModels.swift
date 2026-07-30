@@ -309,11 +309,12 @@ public struct Feed: Identifiable, Codable, Hashable, Sendable {
 }
 
 extension URL {
-    /// A normalized key for comparing feed/site URLs so trivial differences don't
-    /// split one feed into duplicates. Only scheme and host are case-folded (they
-    /// are case-insensitive); the path and query keep their case (they can be
-    /// case-sensitive on the server). Default ports, the fragment, and a trailing
-    /// slash on the path are dropped.
+    /// A normalized key for comparing feed, site, and page URLs so trivial
+    /// differences don't split one thing into two. Only scheme and host are
+    /// case-folded (they are case-insensitive); the path and query keep their case
+    /// (they can be case-sensitive on the server). Default ports, the fragment, and
+    /// a trailing slash on the path are dropped, and percent-escapes are levelled to
+    /// upper case, since `%ed` and `%ED` are the same octet.
     public var feedIdentityKey: String {
         guard var comps = URLComponents(url: self, resolvingAgainstBaseURL: false), comps.scheme != nil else {
             var value = absoluteString
@@ -329,7 +330,33 @@ extension URL {
         var path = comps.percentEncodedPath
         while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
         comps.percentEncodedPath = path
-        return comps.string ?? absoluteString
+        return (comps.string ?? absoluteString).levellingPercentEscapes
+    }
+}
+
+extension String {
+    /// Upper-cases the hex in every well-formed percent-escape, leaving the rest of
+    /// the string alone. A bare `%` is not an escape and is left as it is; nothing is
+    /// decoded, because `%2F` is not a path separator.
+    fileprivate var levellingPercentEscapes: String {
+        guard contains("%") else { return self }
+        var result = ""
+        result.reserveCapacity(count)
+        var remaining = Substring(self)
+        while let percent = remaining.firstIndex(of: "%") {
+            result += remaining[remaining.startIndex..<percent]
+            let afterPercent = remaining.index(after: percent)
+            let digits = remaining[afterPercent...].prefix(2)
+            if digits.count == 2, digits.allSatisfy(\.isHexDigit) {
+                result += "%" + digits.uppercased()
+                remaining = remaining[remaining.index(afterPercent, offsetBy: 2)...]
+            } else {
+                result += "%"
+                remaining = remaining[afterPercent...]
+            }
+        }
+        result += remaining
+        return result
     }
 }
 

@@ -17,7 +17,7 @@ import SwiftUI
 /// `AccentColor.colorset`. They exist because the Plus screens were the only
 /// ones in the app drawn on the cool system grouped background, which made a
 /// feature that is part of Nook look bolted on.
-enum PlusTheme {
+public enum PlusTheme {
     /// The page behind everything, matching the reader's own list background.
     static let canvas = Color(
         light: (0.984, 0.960, 0.898),
@@ -35,7 +35,10 @@ enum PlusTheme {
     )
 
     /// The brown the rest of the app tints controls with.
-    static let accent = Color(
+    ///
+    /// Public because the app shell tints its compose button and its "My Nook" entry
+    /// with it, and those had a hand-copied duplicate of these numbers.
+    public static let accent = Color(
         light: (0.545, 0.353, 0.176),
         dark: (0.835, 0.639, 0.400)
     )

@@ -3182,6 +3182,21 @@ public final class ReaderStore {
         articles.first { $0.id == id }
     }
 
+    /// The article at a page URL, searched across every feed rather than the
+    /// visible scope. Lets something that knows a URL but not an id — a writer who
+    /// has just published — open that exact page in the reader.
+    public func article(atPageURL url: URL) -> Article? {
+        let key = url.feedIdentityKey
+        return articles.first { $0.url.feedIdentityKey == key }
+    }
+
+    /// The followed feed at this URL, matched the way `addFeed` matches, so a
+    /// trailing slash or a different spelling of the same URL still finds it.
+    public func followedFeed(at url: URL) -> Feed? {
+        let key = url.feedIdentityKey
+        return feeds.first { $0.feedURL.feedIdentityKey == key || $0.siteURL.feedIdentityKey == key }
+    }
+
     /// The article shown right after `id` in the current visible list, or nil if
     /// `id` is the last one. Lets the UI preview what "next" would open.
     public func article(after id: Article.ID) -> Article? {

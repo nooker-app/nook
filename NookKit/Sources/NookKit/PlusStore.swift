@@ -76,12 +76,21 @@ public enum HandleCheck: Equatable, Sendable {
 @Observable
 public final class PlusStore {
     public private(set) var session: PlusSession?
-    public private(set) var publications: [ATRecord<PublicationRecord>] = []
+    /// Mirrored into defaults on every change, so the Feeds screen can offer the
+    /// writer their own publication without holding a store or making a call.
+    /// Observed here rather than at each call site because signup, loading content,
+    /// and signing out all change it, and one of them would eventually be missed.
+    public private(set) var publications: [ATRecord<PublicationRecord>] = [] {
+        didSet { PlusOwnFeed.remember(publicationURL: publicationURL) }
+    }
     public private(set) var articles: [ATRecord<ArticleRecord>] = []
     public private(set) var isWorking = false
     /// User-facing message for the last failure, if any.
     public private(set) var failure: String?
-    /// Set after a successful publish so the UI can confirm it.
+    /// The post just published, for the caller that shows it in the reader.
+    /// Belongs to one publish rather than to the store's lifetime, so opening the
+    /// composer again clears it: it used to survive, and the next draft opened with
+    /// a link to the previous post still on screen.
     public private(set) var lastPublishedURL: String?
     /// Whether the last checked invitation code was usable.
     public private(set) var invitationAccepted = false
@@ -379,6 +388,17 @@ public final class PlusStore {
             self.publications = try await self.pds.publications(did: did)
             self.articles = try await self.pds.articles(did: did)
         }
+    }
+
+    /// Clears what belonged to the last publish, for a composer being opened
+    /// again.
+    ///
+    /// The store outlives the composer sheet so a cancelled draft survives, which
+    /// also meant the previous post's confirmation did: reopening the composer
+    /// showed a link to something already published.
+    public func startNewDraft() {
+        lastPublishedURL = nil
+        failure = nil
     }
 
     /// Publishes an article through the service, which writes the PDS record

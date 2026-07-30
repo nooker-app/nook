@@ -96,19 +96,11 @@ public struct PlusComposeView: View {
     private var form: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if let published = store.lastPublishedURL, let url = URL(string: published) {
-                    // Kept on screen after publishing so the writer can see the
-                    // thing they just made, rather than being returned to a list
-                    // and told it worked.
-                    Label {
-                        Link(destination: url) { Text("View your post", bundle: .module) }
-                    } icon: {
-                        Image(systemName: "checkmark.circle.fill")
-                    }
-                    .foregroundStyle(.green)
-                    .font(.callout)
-                }
-
+                // No "view your post" link here. Publishing dismisses this screen,
+                // so the link was only ever visible on a *later* opening, where it
+                // pointed at the previous post: a stale link on a blank draft. The
+                // post is shown in the reader instead, which is where reading
+                // belongs.
                 field(Text("Title", bundle: .module)) {
                     TextField(text: $title, prompt: Text(verbatim: "")) {
                         Text("Title", bundle: .module)

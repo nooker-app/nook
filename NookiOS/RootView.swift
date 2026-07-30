@@ -534,6 +534,35 @@ private struct CompactShell: View {
     /// tap, and a reader who never publishes never builds one.
     @State private var composeStore: PlusStore?
 
+    /// The post just published, shown in the reader.
+    @State private var justPublished: PublishedPost?
+
+    /// One presentation of the reader over a just-published post.
+    ///
+    /// The identity is the presentation, not the article: swiping to the previous or
+    /// next post inside the reader changes which article is shown, and if that were
+    /// the sheet's identity the sheet would dismiss and re-present itself mid-swipe.
+    private struct PublishedPost: Identifiable {
+        let id = UUID()
+        let article: Article
+    }
+
+    /// Progress of fetching a just-published post, which is worth showing: the
+    /// public page is built after the record is written, so there is a short wait
+    /// where nothing would otherwise be on screen.
+    @State private var reveal: RevealPhase?
+
+    private enum RevealPhase: Equatable {
+        /// Following the writer's feed and waiting for the post to appear in it.
+        case fetching
+        /// Published, but not in the feed yet. Not a failure, and said as such.
+        /// Carries what it was looking for, so the writer can ask again without
+        /// republishing anything.
+        case notInFeedYet(page: URL, feed: URL)
+        /// The feed itself could not be reached.
+        case failed(String)
+    }
+
     /// Identifies one presentation of the composer.
     private struct ComposeSession: Identifiable {
         let id = UUID()
@@ -617,8 +646,57 @@ private struct CompactShell: View {
         // Settings. The store is built on first use so a reader who never
         // publishes does not pay for it, and it is kept so a cancelled draft is
         // not thrown away by the next tap.
-        .sheet(item: $compose) { session in
+        .sheet(item: $compose, onDismiss: revealPublishedPost) { session in
             PlusComposeView(store: session.store) { compose = nil }
+        }
+        // The post that was just published, shown in the reader rather than handed
+        // to Safari. Presented after the composer has gone (from its onDismiss),
+        // because presenting a second sheet in the same update that dismisses the
+        // first one loses it.
+        .sheet(item: $justPublished) { session in
+            PublishedPostReader(store: store, first: session.article) { justPublished = nil }
+        }
+        // Fetching it takes a moment, and a moment with nothing on screen reads as
+        // nothing happening.
+        .overlay(alignment: .top) {
+            if reveal == .fetching {
+                FetchingPostBanner()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: reveal == .fetching)
+        // Published but not in the feed yet. Not a failure, and not reported as one:
+        // the record is written and the page is built. The feed is cached for up to
+        // half a minute, which is longer than it is reasonable to hold a writer at a
+        // spinner, so looking again is offered rather than waited out.
+        .alert(
+            "Your Post Is Published",
+            isPresented: Binding(
+                get: { if case .notInFeedYet = reveal { true } else { false } },
+                set: { if !$0 { reveal = nil } }
+            ),
+            presenting: { if case .notInFeedYet(let page, let feed) = reveal { (page, feed) } else { nil } }()
+        ) { target in
+            Button("Look Again") {
+                reveal = .fetching
+                Task { await open(target.0, from: target.1) }
+            }
+            Button("OK", role: .cancel) { reveal = nil }
+        } message: { _ in
+            Text("Your feed hasn't picked it up yet. Feeds are cached for up to half a minute, so it will appear in My Nook shortly.")
+        }
+        // Following the feed failed, which is a real failure and says why.
+        .alert(
+            "Couldn't Open Your Post",
+            isPresented: Binding(
+                get: { if case .failed = reveal { true } else { false } },
+                set: { if !$0 { reveal = nil } }
+            ),
+            presenting: { if case .failed(let why) = reveal { why } else { nil } }()
+        ) { _ in
+            Button("OK") { reveal = nil }
+        } message: { why in
+            Text("Your post is published. Nook couldn't reach your feed to show it: \(why)")
         }
         // The list spotlight is owned and drawn here at the shell — always mounted,
         // so unlike a TabView child it reliably reacts to the tutorial hand-off and
@@ -697,12 +775,67 @@ private struct CompactShell: View {
         }
     }
 
-    /// Native tab-bar re-tap semantics: a drilled-in Feeds tab pops to its
-    /// root; everything else scrolls the visible list back to the top. On the
-    /// Home tab, a quick second re-tap (double-tap) cycles the segment
-    /// (Unread → Today → All) instead — and each further tap inside the window
-    /// keeps cycling. Only re-taps count, so arriving from another tab (a
-    /// selection change) can never trigger it.
+    /// The reader over a just-published post.
+    ///
+    /// Owns which article is showing so previous/next swipes stay inside the sheet
+    /// instead of changing its identity. Clearing it is how the reader says it is
+    /// done, which here means dismissing.
+    private struct PublishedPostReader: View {
+        var store: ReaderStore
+        var onDone: () -> Void
+
+        @State private var current: Article?
+
+        init(store: ReaderStore, first: Article, onDone: @escaping () -> Void) {
+            self.store = store
+            self.onDone = onDone
+            _current = State(initialValue: first)
+        }
+
+        var body: some View {
+            NavigationStack {
+                ReaderDetailView(store: store, articleOverride: $current)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { onDone() } label: { Text("Done") }
+                        }
+                    }
+            }
+            .onChange(of: current == nil) { _, cleared in
+                if cleared { onDone() }
+            }
+        }
+    }
+
+    /// Shown while a just-published post is fetched into the reader. A capsule at
+    /// the top rather than a blocking overlay: the wait is short, and nothing about
+    /// it should stop the writer from doing something else.
+    private struct FetchingPostBanner: View {
+        var body: some View {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Getting your post")
+                    .font(.subheadline.weight(.medium))
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(background)
+            .padding(.top, 8)
+        }
+
+        @ViewBuilder
+        private var background: some View {
+            if #available(iOS 26, *) {
+                // Decorative, so .regular rather than .interactive().
+                Capsule(style: .continuous).fill(.clear).glassEffect(.regular, in: .capsule)
+            } else {
+                Capsule(style: .continuous)
+                    .fill(.background)
+                    .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+            }
+        }
+    }
+
     /// Opens the composer, building its store on first use.
     ///
     /// The store is created here rather than inside the sheet's content, because
@@ -724,9 +857,78 @@ private struct CompactShell: View {
             // are usable while it loads, and only the Publish button waits.
             Task { await store.loadContent() }
         }
+        // A fresh draft, not the remains of the last one. The store is reused, so
+        // without this the previous publish's confirmation opened with the blank
+        // draft — as did a failure the writer had already dealt with.
+        store.startNewDraft()
         compose = ComposeSession(store: store)
     }
 
+    /// Shows the post the writer just published, in the reader.
+    ///
+    /// Called as the composer goes away. Their publication is followed like any
+    /// other feed, which is what makes the reader — offline, reader mode, starring —
+    /// work on their own writing, and what puts it in the Feeds list for later.
+    private func revealPublishedPost() {
+        guard let composeStore, let published = composeStore.lastPublishedURL,
+            let page = URL(string: published),
+            let publication = composeStore.publicationURL.flatMap(URL.init(string:))
+        else { return }
+        // Consumed: one publish, one reveal.
+        composeStore.startNewDraft()
+        reveal = .fetching
+        Task { await open(page, from: PlusOwnFeed.feedURL(for: publication)) }
+    }
+
+    /// Follows the writer's feed if it is not already followed, then opens the page.
+    ///
+    /// The public page is generated after the record is written, so the post can be
+    /// missing from the feed for a moment. Refreshed a few times rather than once,
+    /// and if it still has not arrived the writer is told so plainly instead of being
+    /// left waiting on a sheet that never appears.
+    private func open(_ page: URL, from feed: URL) async {
+        do {
+            // `addFeed` reuses a feed already followed at the same URL, so this is
+            // safe to call on every publish.
+            try await store.addFeed(urlString: feed.absoluteString)
+        } catch {
+            reveal = .failed(error.localizedDescription)
+            return
+        }
+
+        // Adding a feed leaves its first article selected; that belongs to a reader
+        // tapping a row, not to publishing.
+        store.selectedArticleID = nil
+
+        // Every wait is followed by a refresh and then another look, so the last
+        // refresh is never thrown away unexamined.
+        for wait in [Duration.seconds(0), .seconds(1), .seconds(3), .seconds(3)] {
+            if wait > .zero {
+                guard let followed = store.followedFeed(at: feed) else { break }
+                do {
+                    try await Task.sleep(for: wait)
+                } catch {
+                    reveal = nil  // Cancelled: the writer moved on.
+                    return
+                }
+                await store.refreshFeedsAndWait(ids: [followed.id])
+            }
+            if let article = store.article(atPageURL: page) {
+                reveal = nil
+                justPublished = PublishedPost(article: article)
+                return
+            }
+        }
+
+        reveal = .notInFeedYet(page: page, feed: feed)
+    }
+
+    /// Native tab-bar re-tap semantics: a drilled-in Feeds tab pops to its
+    /// root; everything else scrolls the visible list back to the top. On the
+    /// Home tab, a quick second re-tap (double-tap) cycles the segment
+    /// (Unread → Today → All) instead — and each further tap inside the window
+    /// keeps cycling. Only re-taps count, so arriving from another tab (a
+    /// selection change) can never trigger it.
     private func handleTabReselect(_ tab: AppTab) {
         if tab == .home {
             let now = ContinuousClock.now
@@ -980,13 +1182,9 @@ private struct LiquidGlassTabBar: View {
         .accessibilityLabel(Text("Write a post"))
     }
 
-    /// Nook's brown, matching the app tint and the published pages.
-    private static let accent = Color(
-        uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.835, green: 0.639, blue: 0.400, alpha: 1)
-                : UIColor(red: 0.545, green: 0.353, blue: 0.176, alpha: 1)
-        })
+    /// Nook's brown, matching the app tint and the published pages. Shared with the
+    /// Plus screens rather than copied, so the signature cannot drift in one place.
+    fileprivate static let accent = PlusTheme.accent
 
     private var tabRow: some View {
         Group {
@@ -1326,6 +1524,10 @@ private struct FeedsTab: View {
     @State private var renameFolderName = ""
     @State private var feedPendingRename: Feed.ID?
     @State private var renameFeedName = ""
+    /// The writer's own publication, mirrored out of the Plus store so this screen
+    /// needs neither a session nor a network call to offer it.
+    @AppStorage(PlusOwnFeed.publicationURLKey) private var ownPublicationURL = ""
+    @State private var isFollowingOwnFeed = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -1338,6 +1540,16 @@ private struct FeedsTab: View {
                 }
                 .listRowBackground(Rectangle().fill(.ultraThinMaterial))
                 .id("feedsTop")
+
+                // What the writer published, where they already look for something to
+                // read. Their own publication is a feed like any other, so this is a
+                // way in rather than a second kind of screen.
+                if let publication = URL(string: ownPublicationURL) {
+                    Section {
+                        ownNookRow(publication: publication)
+                    }
+                    .listRowBackground(Rectangle().fill(.ultraThinMaterial))
+                }
 
                 if store.hasCategories {
                     Section("Categories") {
@@ -1573,6 +1785,74 @@ private struct FeedsTab: View {
     private func dismissAddHint() {
         seenFeedsAddHint = true
         withAnimation { showAddHint = false }
+    }
+
+    /// The way into the writer's own publication.
+    ///
+    /// Drills straight in once the feed is followed; follows it first if it is not,
+    /// which is the case for a writer who signed in but has not published from this
+    /// device yet. One row either way, so it always means the same thing.
+    @ViewBuilder
+    private func ownNookRow(publication: URL) -> some View {
+        if let feed = store.followedFeed(at: PlusOwnFeed.feedURL(for: publication)) {
+            NavigationLink(value: FeedTarget.feed(feed.id)) {
+                ownNookLabel(unread: store.unreadCount(feedID: feed.id))
+            }
+        } else {
+            Button {
+                Task { await followOwnFeed(publication: publication) }
+            } label: {
+                ownNookLabel(unread: 0)
+            }
+            .buttonStyle(.plain)
+            .disabled(isFollowingOwnFeed)
+        }
+    }
+
+    private func ownNookLabel(unread: Int) -> some View {
+        HStack {
+            Label {
+                Text("My Nook")
+            } icon: {
+                // The compose button's symbol and signature tint, so the place the
+                // writing goes is recognisably the same thing as the place it is made.
+                if isFollowingOwnFeed {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "square.and.pencil")
+                        .foregroundStyle(PlusTheme.accent)
+                }
+            }
+            Spacer()
+            if unread > 0 {
+                Text(unread, format: .number).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Follows the publication, then opens it. Failure is reported: a row that does
+    /// nothing when tapped is indistinguishable from a broken app.
+    private func followOwnFeed(publication: URL) async {
+        isFollowingOwnFeed = true
+        defer { isFollowingOwnFeed = false }
+        let feedURL = PlusOwnFeed.feedURL(for: publication)
+        do {
+            try await store.addFeed(urlString: feedURL.absoluteString)
+        } catch {
+            store.errorMessage = error.localizedDescription
+            return
+        }
+        // Adding a feed leaves its first article selected; that belongs to a reader
+        // tapping a row.
+        store.selectedArticleID = nil
+        guard let feed = store.followedFeed(at: feedURL) else {
+            // Added, but not findable at the URL it was added with — a redirect, most
+            // likely. Saying so beats a tap that appears to do nothing.
+            store.errorMessage = String(
+                localized: "Your publication was followed but couldn't be opened. It is in your feed list.")
+            return
+        }
+        path.append(.feed(feed.id))
     }
 
     @ViewBuilder
