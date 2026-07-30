@@ -84,6 +84,25 @@ struct ReaderExtractionTests {
         #expect(outcome.content.contains("Short."))
     }
 
+    /// The real thing: a page captured from a live publication, extracted with
+    /// Readability present, as the app does it.
+    ///
+    /// Checks what made a post look clumsy in reader mode. The reader draws the
+    /// title and the date in its own chrome, so finding them again inside the
+    /// extracted body showed each of them twice, with the date left over as a
+    /// stray line.
+    @Test("a real published page yields the body and nothing else")
+    func realPublishedPage() async throws {
+        let outcome = try await extract(ReaderExtractionFixture.publishedArticle)
+
+        #expect(outcome.ok)
+        #expect(outcome.content.contains("반가워요"), "the article text should be there")
+        #expect(!outcome.content.contains("<h1"), "the title belongs to the reader's chrome")
+        #expect(!outcome.content.contains("byline"), "the byline belongs to the reader's chrome")
+        #expect(!outcome.content.contains("30 July 2026"), "the date belongs to the reader's chrome")
+        #expect(!outcome.content.contains("class=\"site\""), "the page's own header and footer are not the article")
+    }
+
     /// itemprop is the other way a page can declare its body, and it is honoured
     /// the same way.
     @Test("an itemprop body is treated as declared")

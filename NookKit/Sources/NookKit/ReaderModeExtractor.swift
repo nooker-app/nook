@@ -189,8 +189,24 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
          article. */
       var MINIMUM_GUESSED_TEXT = 80;
 
+      /* Tried in order of how specific each one is. A comma-separated
+         querySelector would not do: it returns the first match in *document*
+         order, not the first selector that matches, so an <article> wrapping a
+         marked-up body won every time and brought the heading and byline with
+         it. */
       function declaredBody() {
-        return document.querySelector('article .article-content, article [itemprop="articleBody"], [itemprop="articleBody"], article');
+        var selectors = [
+          'article [itemprop="articleBody"]',
+          '[itemprop="articleBody"]',
+          'article .article-content',
+          '.article-content',
+          'article'
+        ];
+        for (var i = 0; i < selectors.length; i += 1) {
+          var found = document.querySelector(selectors[i]);
+          if (found) return found;
+        }
+        return null;
       }
 
       function packaged(element) {
@@ -205,30 +221,30 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
       }
 
       function extractedArticle() {
+        /* A declared body wins over Readability, and is checked first.
+           Readability reads the whole document and picks the biggest candidate,
+           which on a well-marked-up page sweeps the heading and byline back in —
+           so the reader drew the title twice and left the date as a stray line,
+           having already shown both in its own chrome. When the markup says where
+           the article is, there is nothing to guess at. */
         var declared = declaredBody();
+        if (declared && (declared.innerText || '').trim().length > 0) {
+          return packaged(declared);
+        }
 
+        /* Nothing declared: Readability is the best available guess, and the floor
+           applies because a guess can pick navigation. */
         if (typeof Readability !== 'undefined') {
           var clone = document.cloneNode(true);
           normalizeMedia(clone);
           var allowedEmbeds = /\\/\\/(www\\.)?((dailymotion|youtube|youtube-nocookie|player\\.vimeo|v\\.qq|codepen)\\.(com|io)|(archive|upload\\.wikimedia)\\.org|player\\.twitch\\.tv)/i;
           var parsed = new Readability(clone, { allowedVideoRegex: allowedEmbeds }).parse();
-          if (parsed && parsed.content && parsed.textContent) {
-            var text = parsed.textContent.trim();
-            /* Readability's own result is trusted without a floor when the page
-               declared its body: the two agree on what the article is, so a short
-               one is short rather than suspect. */
-            if (text.length > MINIMUM_GUESSED_TEXT || (declared && text.length > 0)) {
-              return parsed;
-            }
+          if (parsed && parsed.content && parsed.textContent
+              && parsed.textContent.trim().length > MINIMUM_GUESSED_TEXT) {
+            return parsed;
           }
         }
 
-        /* Declared body, whatever its length. */
-        if (declared && (declared.innerText || '').trim().length > 0) {
-          return packaged(declared);
-        }
-
-        /* Nothing declared, so this is a guess, and the floor applies. */
         var guessed = document.querySelector('main');
         if (!guessed || (guessed.innerText || '').trim().length < MINIMUM_GUESSED_TEXT) return null;
         return packaged(guessed);
