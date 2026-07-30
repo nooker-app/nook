@@ -520,6 +520,10 @@ private struct CompactShell: View {
     @Environment(TabBarChrome.self) private var tabChrome
     @AppStorage(TourFlags.seenListHintKey) private var seenListHint = false
     @State private var selection: AppTab = .home
+    @State private var showingCompose = false
+    /// Built on first use, then kept: a reader who never publishes pays nothing
+    /// for it, and a draft survives a cancelled sheet.
+    @State private var composeStore: PlusStore?
     @State private var homeFilter: SmartSource = .unread
     @State private var feedsPath: [FeedTarget] = []
     /// Tutorial asked for the "tap a story" spotlight but it isn't shown yet
@@ -587,7 +591,22 @@ private struct CompactShell: View {
         // solid (no-glass) sliding pill under the selected item, shrinking in
         // place while the list scrolls down and popping away when the reader
         // opens. Below iOS 26 the native bar stays.
-        .modifier(LiquidGlassTabBarHost(selection: $selection, onReselect: handleTabReselect))
+        .modifier(
+            LiquidGlassTabBarHost(
+                selection: $selection,
+                onReselect: handleTabReselect,
+                onCompose: startComposing
+            )
+        )
+        // Writing gets a screen of its own, reached from the bar rather than from
+        // Settings. The store is built on first use so a reader who never
+        // publishes does not pay for it, and it is kept so a cancelled draft is
+        // not thrown away by the next tap.
+        .sheet(isPresented: $showingCompose) {
+            if let composeStore {
+                PlusComposeView(store: composeStore) { showingCompose = false }
+            }
+        }
         // The list spotlight is owned and drawn here at the shell — always mounted,
         // so unlike a TabView child it reliably reacts to the tutorial hand-off and
         // renders on top. Keep it showing as long as we're on Home (don't tie the
@@ -671,6 +690,24 @@ private struct CompactShell: View {
     /// (Unread → Today → All) instead — and each further tap inside the window
     /// keeps cycling. Only re-taps count, so arriving from another tab (a
     /// selection change) can never trigger it.
+    /// Opens the composer, building its store on first use.
+    ///
+    /// The store is created here rather than inside the sheet's content, because
+    /// that closure runs during a view update and assigning to @State there is
+    /// undefined. It is kept afterwards, so a cancelled draft survives and a
+    /// reader who never publishes never pays for one.
+    ///
+    /// Publications are loaded because publishing needs one, and the composer has
+    /// nothing to publish into until it has arrived.
+    private func startComposing() {
+        if composeStore == nil {
+            let store = PlusStore()
+            composeStore = store
+            Task { await store.loadContent() }
+        }
+        showingCompose = true
+    }
+
     private func handleTabReselect(_ tab: AppTab) {
         if tab == .home {
             let now = ContinuousClock.now
@@ -815,7 +852,13 @@ struct TabBarInset: ViewModifier {
 private struct LiquidGlassTabBarHost: ViewModifier {
     @Binding var selection: AppTab
     var onReselect: (AppTab) -> Void
+    var onCompose: () -> Void
     @Environment(TabBarChrome.self) private var chrome
+    /// Whether a Plus session exists. Read from the flag PlusCredential keeps in
+    /// defaults rather than from the Keychain, so the shell does not unlock the
+    /// Keychain to lay out a tab bar, and via AppStorage so signing in or out
+    /// moves the button without a relaunch.
+    @AppStorage(PlusCredential.configuredKey) private var signedInToPlus = false
 
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
@@ -826,7 +869,8 @@ private struct LiquidGlassTabBarHost: ViewModifier {
                             selection: $selection,
                             collapsed: chrome.collapsed,
                             onExpand: { chrome.expand() },
-                            onReselect: onReselect
+                            onReselect: onReselect,
+                            onCompose: signedInToPlus ? onCompose : nil
                         )
                         .transition(
                             .move(edge: .bottom)
@@ -854,6 +898,9 @@ private struct LiquidGlassTabBar: View {
     let collapsed: Bool
     var onExpand: () -> Void
     var onReselect: (AppTab) -> Void
+    /// Nil for a reader with no publishing account, which is most people. They
+    /// get the bar exactly as it was.
+    var onCompose: (() -> Void)?
 
     /// Bumped on taps that aren't a selection change (restoring the minimized
     /// bar, re-tap scroll-to-top) so they get their own impact haptic.
@@ -869,6 +916,61 @@ private struct LiquidGlassTabBar: View {
 
     var body: some View {
         GlassEffectContainer {
+            HStack(spacing: 8) {
+                tabRow
+                if let onCompose {
+                    composeButton(onCompose)
+                }
+            }
+        }
+        // Scroll-down minimizes the bar in place (the whole capsule scales,
+        // nothing rearranges); any touch or scroll-up restores it.
+        .scaleEffect(collapsed ? 0.72 : 1, anchor: .bottom)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.top, 2)
+        // Hug the home indicator: sit right on the bottom safe-area edge.
+        .padding(.bottom, 0)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: collapsed)
+        // Haptics: crisp selection tick on tab changes; a light impact for the
+        // non-selection taps (restore, re-tap scroll-to-top).
+        .sensoryFeedback(.selection, trigger: selection)
+        .sensoryFeedback(.impact(weight: .light), trigger: tapFeedback)
+    }
+
+    /// Writing sits outside the tab row on purpose. The four tabs are places to
+    /// be; this is a thing to do, and giving it its own capsule keeps the
+    /// selection pill from ever sliding under it.
+    private func composeButton(_ action: @escaping () -> Void) -> some View {
+        Button {
+            if collapsed { onExpand() }
+            tapFeedback &+= 1
+            action()
+        } label: {
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Self.accent)
+                .frame(width: Self.itemHeight + 6, height: Self.itemHeight + 6)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        // A tint this faint reads as warmth in the glass rather than as a
+        // coloured button: the point is to look like the same material as the bar,
+        // with Nook's colour behind it.
+        .glassEffect(.regular.tint(Self.accent.opacity(0.14)).interactive(), in: Circle())
+        .accessibilityLabel(Text("Write a post"))
+    }
+
+    /// Nook's brown, matching the app tint and the published pages.
+    private static let accent = Color(
+        uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.835, green: 0.639, blue: 0.400, alpha: 1)
+                : UIColor(red: 0.545, green: 0.353, blue: 0.176, alpha: 1)
+        })
+
+    private var tabRow: some View {
+        Group {
             HStack(spacing: Self.itemSpacing) {
                 tabButton(.home, label: Text("Home"))
                 tabButton(.feeds, label: Text("Feeds"))
@@ -890,19 +992,6 @@ private struct LiquidGlassTabBar: View {
             .padding(4)
             .glassEffect(.regular, in: Capsule())
         }
-        // Scroll-down minimizes the bar in place (the whole capsule scales,
-        // nothing rearranges); any touch or scroll-up restores it.
-        .scaleEffect(collapsed ? 0.72 : 1, anchor: .bottom)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 16)
-        .padding(.top, 2)
-        // Hug the home indicator: sit right on the bottom safe-area edge.
-        .padding(.bottom, 0)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: collapsed)
-        // Haptics: crisp selection tick on tab changes; a light impact for the
-        // non-selection taps (restore, re-tap scroll-to-top).
-        .sensoryFeedback(.selection, trigger: selection)
-        .sensoryFeedback(.impact(weight: .light), trigger: tapFeedback)
     }
 
     private func tabButton(_ tab: AppTab, label: Text) -> some View {

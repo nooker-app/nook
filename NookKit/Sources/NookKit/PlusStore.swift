@@ -276,6 +276,16 @@ public final class PlusStore {
         isWorking = false
     }
 
+    /// Whether a post can be published right now: signed in, with a publication
+    /// to publish into, and nothing else in flight.
+    public var canPublish: Bool {
+        isSignedIn && !publications.isEmpty && !isWorking
+    }
+
+    /// The publication's public URL without a trailing slash, for showing what an
+    /// address will become. Nil until the publication is known.
+    public var publicationBaseURL: String? { publicationURL }
+
     /// The publication's public URL, once known.
     public var publicationURL: String? {
         guard let slug = publications.first?.value.slug else { return nil }
@@ -295,13 +305,23 @@ public final class PlusStore {
         do {
             try await pds.requestPasswordReset(email: email)
             passwordResetRequested = true
-        } catch PlusPDSError.upstream(let status, _) where status >= 500 {
-            // The host answers 500 when it cannot send the mail, which says
-            // nothing about why. The reachable causes are all on the sending
-            // side, so the message points there rather than at the address the
-            // user just typed correctly.
+        } catch PlusPDSError.upstream(let status, _, _) where status == 400 {
+            // A 400 from this endpoint means the host found no account for the
+            // address. Its own wording is "account does not have an email
+            // address", which describes the row it looked at rather than the
+            // thing the user needs to know. Decided by status and endpoint rather
+            // than by matching that prose, which is not ours to depend on.
             failure = String(
-                localized: "The server could not send the email. It may not be able to send to this address yet — ask whoever runs the server.",
+                localized: "No publishing account uses this email address. Check it for typos, or set up publishing first.",
+                bundle: .module
+            )
+        } catch PlusPDSError.upstream(let status, _, _) where status >= 500 {
+            // The host answers 500 when it cannot send the mail, which says
+            // nothing about why. Every reachable cause is on the sending side, so
+            // the message points there rather than at the address the user just
+            // typed correctly.
+            failure = String(
+                localized: "The server could not send the email. It may not be able to send to this address yet. Ask whoever runs the server.",
                 bundle: .module
             )
         } catch {
@@ -451,11 +471,15 @@ public final class PlusStore {
                 return String(localized: "Your session expired. Sign in again.", bundle: .module)
             case .recordConflict:
                 return String(localized: "This article changed elsewhere. Reload before saving again.", bundle: .module)
-            case .problem:
-                // `detail` is deliberately not shown: the contract documents it
-                // as English prose for whoever reads a log, so relaying it puts
-                // an untranslated sentence in front of the user. A cause worth
-                // showing arrives as a `reason` instead.
+            case .problem(_, _, let detail):
+                // A cause the user can act on arrives as a `reason` and is
+                // translated above. This is what is left: a type this build does
+                // not recognise. Showing the service's own sentence is untidy —
+                // it is English, written for a log — but it names what happened,
+                // and "could not complete that request" names nothing at all.
+                if let detail, !detail.isEmpty {
+                    return detail
+                }
                 return String(localized: "The service could not complete that request.", bundle: .module)
             case .rejected(let reason, _):
                 return PlusStore.message(for: reason)
@@ -484,12 +508,20 @@ public final class PlusStore {
         if url?.code == .cannotFindHost || url?.code == .dnsLookupFailed {
             return String(
                 localized:
-                    "The \(environment.name) server is not reachable — no such host as \(environment.pdsHost). Check the server in Developer settings.",
+                    "The \(environment.name) server is not reachable: there is no such host as \(environment.pdsHost). Check the server in Developer settings.",
                 bundle: .module
             )
         }
         if url?.code == .notConnectedToInternet || url?.code == .networkConnectionLost {
             return String(localized: "No network connection.", bundle: .module)
+        }
+        // Names the reason the system gave. It is not always graceful, but a user
+        // looking at a failure needs to know whether it was a timeout, a refused
+        // connection, or a certificate, and a single sentence covering all three
+        // tells them none of it.
+        if let url {
+            return String(
+                localized: "Could not reach the service: \(url.localizedDescription)", bundle: .module)
         }
         return String(localized: "Could not reach the service.", bundle: .module)
     }

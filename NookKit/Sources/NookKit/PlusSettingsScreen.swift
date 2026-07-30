@@ -18,6 +18,7 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     @State private var store = PlusStore()
     @State private var showingSetup = false
     @State private var showingSignIn = false
+    @State private var showingCompose = false
 
     public init(@ViewBuilder container: @escaping (PlusSettingsContent) -> Container) {
         self.container = container
@@ -28,7 +29,8 @@ public struct PlusSettingsScreenContent<Container: View>: View {
             PlusSettingsContent(
                 store: store,
                 onSetUp: { present(.setUp) },
-                onSignIn: { present(.signIn) }
+                onSignIn: { present(.signIn) },
+                onCompose: { present(.compose) }
             )
         )
         .task { openSetupIfInvited() }
@@ -40,6 +42,9 @@ public struct PlusSettingsScreenContent<Container: View>: View {
         }
         .sheet(isPresented: $showingSignIn) {
             PlusSignInView(store: store) { showingSignIn = false }
+        }
+        .sheet(isPresented: $showingCompose) {
+            PlusComposeView(store: store) { showingCompose = false }
         }
     }
 
@@ -63,11 +68,13 @@ public struct PlusSettingsScreenContent<Container: View>: View {
         switch sheet {
         case .setUp: showingSetup = true
         case .signIn: showingSignIn = true
+        case .compose: showingCompose = true
         }
     }
 
     private enum Sheet {
         case setUp
         case signIn
+        case compose
     }
 }

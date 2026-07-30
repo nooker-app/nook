@@ -41,14 +41,16 @@ public struct PlusPDSClient: Sendable {
                 "com.atproto.server.createSession",
                 body: ["identifier": identifier, "password": password]
             )
-        } catch PlusPDSError.upstream(let status, let kind) where isRejected(status: status, kind: kind) {
+        } catch PlusPDSError.upstream(let status, let kind, let message)
+            where isRejected(status: status, kind: kind)
+        {
             // A handle this host does not have an account for looks exactly like
             // a wrong password from here, so the distinguishable case — a handle
             // that plainly belongs elsewhere — is named.
             if belongsElsewhere(identifier) {
                 throw PlusPDSError.foreignHandle(host: host)
             }
-            throw PlusPDSError.upstream(status: status, kind: kind)
+            throw PlusPDSError.upstream(status: status, kind: kind, message: message)
         }
         return PlusSession(
             did: response.did,
@@ -198,9 +200,15 @@ public struct PlusPDSClient: Sendable {
             // not shown to users verbatim.
             struct Failure: Decodable {
                 let error: String?
+                let message: String?
             }
-            let kind = (try? JSONDecoder().decode(Failure.self, from: data))?.error
-            throw PlusPDSError.upstream(status: http.statusCode, kind: kind)
+            let failure = try? JSONDecoder().decode(Failure.self, from: data)
+            // The prose is kept, not discarded. When nothing here recognises the
+            // kind, the host's own sentence is the only thing that explains what
+            // happened, and a screen that says "something went wrong" instead
+            // leaves the user with nowhere to go.
+            throw PlusPDSError.upstream(
+                status: http.statusCode, kind: failure?.error, message: failure?.message)
         }
     }
 }
@@ -214,7 +222,7 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
     case transport(any Error)
     /// The handle belongs to a server other than the one Nook talks to.
     case foreignHandle(host: String)
-    case upstream(status: Int, kind: String?)
+    case upstream(status: Int, kind: String?, message: String?)
 
     public var errorDescription: String? {
         switch self {
@@ -227,7 +235,7 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
                 localized: "That handle belongs to a different server. Nook can only sign in to accounts on its own server.",
                 bundle: .module
             )
-        case .upstream(let status, let kind):
+        case .upstream(let status, let kind, let message):
             if status == 401 || kind == "AuthenticationRequired" || kind == "InvalidPassword" {
                 return String(localized: "That handle and password did not match.", bundle: .module)
             }
@@ -237,6 +245,17 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
             if kind == "ExpiredToken" || kind == "InvalidToken" {
                 return String(
                     localized: "That reset code is not usable. Request a new one.", bundle: .module)
+            }
+            if status == 429 || kind == "RateLimitExceeded" {
+                return String(
+                    localized: "Too many attempts. Wait a few minutes and try again.", bundle: .module)
+            }
+            // Falls back to the host's wording rather than a sentence that says
+            // nothing. It is English, which is a real shortcoming, but a user who
+            // can read what the server actually objected to can act on it; one
+            // told only that a request failed cannot.
+            if let message, !message.isEmpty {
+                return message
             }
             return String(localized: "The server could not complete that request.", bundle: .module)
         }

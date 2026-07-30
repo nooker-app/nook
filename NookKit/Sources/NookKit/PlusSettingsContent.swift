@@ -15,11 +15,18 @@ public struct PlusSettingsContent: View {
     @Bindable var store: PlusStore
     let onSetUp: () -> Void
     let onSignIn: () -> Void
+    let onCompose: () -> Void
 
-    init(store: PlusStore, onSetUp: @escaping () -> Void, onSignIn: @escaping () -> Void) {
+    init(
+        store: PlusStore,
+        onSetUp: @escaping () -> Void,
+        onSignIn: @escaping () -> Void,
+        onCompose: @escaping () -> Void
+    ) {
         self.store = store
         self.onSetUp = onSetUp
         self.onSignIn = onSignIn
+        self.onCompose = onCompose
     }
 
     public var body: some View {
@@ -88,10 +95,6 @@ public struct PlusSettingsContent: View {
 
     // MARK: - Signed in
 
-    @State private var title = ""
-    @State private var slug = ""
-    @State private var summary = ""
-    @State private var markdown = ""
 
     private var signedIn: some View {
         Group {
@@ -120,63 +123,18 @@ public struct PlusSettingsContent: View {
             }
 
             Section {
-                TextField(text: $title) { Text("Title", bundle: .module) }
-                TextField(text: $slug, prompt: Text(verbatim: "my-first-post")) {
-                    Text("Web address", bundle: .module)
-                }
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                    #endif
-                TextField(text: $summary) { Text("One-line summary (optional)", bundle: .module) }
-
-                TextEditor(text: $markdown)
-                    .font(.body)
-                    .frame(minHeight: 150)
-                    .overlay(alignment: .topLeading) {
-                        if markdown.isEmpty {
-                            Text("Write here. **Bold**, *italic*, and [links](https://example.com) work.", bundle: .module)
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, 8)
-                                .padding(.leading, 5)
-                                .allowsHitTesting(false)
-                        }
-                    }
-
                 Button {
-                    Task {
-                        await store.publish(title: title, slug: slug, markdown: markdown, summary: summary)
-                        if store.failure == nil {
-                            title = ""
-                            slug = ""
-                            summary = ""
-                            markdown = ""
-                        }
-                    }
+                    onCompose()
                 } label: {
-                    if store.isWorking {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Text("Publish", bundle: .module)
+                    Label {
+                        Text("Write a post", bundle: .module)
+                    } icon: {
+                        Image(systemName: "square.and.pencil")
                     }
                 }
-                .disabled(!canPublish)
-
-                if let failure = store.failure {
-                    Label(failure, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                }
-                if let url = store.lastPublishedURL {
-                    Link(destination: URL(string: url) ?? URL(string: "https://example.com")!) {
-                        Label { Text("View your post", bundle: .module) } icon: { Image(systemName: "safari") }
-                    }
-                    .font(.callout)
-                }
-            } header: {
-                Text("Write a post", bundle: .module)
+                .disabled(!store.canPublish)
             } footer: {
-                Text("The web address becomes the last part of the link to this post. Lowercase letters, numbers, and hyphens.", bundle: .module)
+                Text("Writing opens its own screen. On iPhone there is a button for it beside the tabs, so publishing does not start in Settings.", bundle: .module)
             }
 
             Section {
@@ -199,10 +157,6 @@ public struct PlusSettingsContent: View {
         }
     }
 
-    private var canPublish: Bool {
-        !title.isEmpty && !slug.isEmpty && !markdown.isEmpty
-            && !store.publications.isEmpty && !store.isWorking
-    }
 
     @ViewBuilder
     private func articleRow(_ record: ATRecord<ArticleRecord>) -> some View {

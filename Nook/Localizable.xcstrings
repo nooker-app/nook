@@ -6693,6 +6693,28 @@
         }
       }
     },
+    "Write a post": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "投稿を書く"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 쓰기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写文章"
+          }
+        }
+      }
+    },
     "You're All Caught Up": {
       "localizations": {
         "ja": {

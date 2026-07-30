@@ -1749,6 +1749,28 @@
         }
       }
     },
+    "Could not reach the service: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サービスに接続できませんでした: %@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서비스에 연결할 수 없습니다: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接服务：%@"
+          }
+        }
+      }
+    },
     "Couldn't add %lld feeds": {
       "localizations": {
         "en": {
@@ -2080,6 +2102,7 @@
       }
     },
     "Developer": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3485,6 +3508,28 @@
         }
       }
     },
+    "Markdown. Headings, lists, links, quotes, and code all work; images are not supported yet.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown です。見出し・リスト・リンク・引用・コードが使えます。画像はまだ対応していません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마크다운입니다. 제목, 목록, 링크, 인용, 코드를 쓸 수 있습니다. 이미지는 아직 지원하지 않습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Markdown。标题、列表、链接、引用和代码都可用；暂不支持图片。"
+          }
+        }
+      }
+    },
     "Match Appearance": {
       "localizations": {
         "en": {
@@ -3769,6 +3814,28 @@
         }
       }
     },
+    "New post": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい投稿"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 글"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新文章"
+          }
+        }
+      }
+    },
     "No Gemini API key saved yet.": {
       "localizations": {
         "ja": {
@@ -3977,6 +4044,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "还没有可发布到的刊物。"
+          }
+        }
+      }
+    },
+    "No publishing account uses this email address. Check it for typos, or set up publishing first.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このメールアドレスを使っている発行アカウントはありません。入力に誤りがないか確認するか、先に発行を設定してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 이메일 주소를 사용하는 발행 계정이 없습니다. 오타를 확인하거나, 먼저 발행을 설정하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有发布账户使用此邮箱地址。请检查拼写，或先设置发布。"
           }
         }
       }
@@ -4400,6 +4489,7 @@
       }
     },
     "Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out.": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5468,6 +5558,7 @@
       }
     },
     "Server": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6236,6 +6327,7 @@
       }
     },
     "Switch to": {
+      "extractionState": "stale",
       "localizations": {
         "ja": {
           "stringUnit": {
@@ -6679,24 +6771,24 @@
         }
       }
     },
-    "The %1$@ server is not reachable — no such host as %2$@. Check the server in Developer settings.": {
+    "The %@ server is not reachable: there is no such host as %@. Check the server in Developer settings.": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ サーバーに接続できません — %2$@ というホストは存在しません。開発者設定でサーバーを確認してください。"
+            "value": "%1$@ サーバーに接続できません: %2$@ というホストは存在しません。開発者設定でサーバーを確認してください。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ 서버에 연결할 수 없습니다 — %2$@ 라는 호스트가 없습니다. 개발자 설정에서 서버를 확인하세요."
+            "value": "%1$@ 서버에 연결할 수 없습니다: %2$@ 라는 호스트가 없습니다. 개발자 설정에서 서버를 확인하세요."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法连接 %1$@ 服务器 —— 不存在名为 %2$@ 的主机。请在开发者设置中检查服务器。"
+            "value": "无法连接 %1$@ 服务器：不存在名为 %2$@ 的主机。请在开发者设置中检查服务器。"
           }
         }
       }
@@ -6930,6 +7022,7 @@
       }
     },
     "The production server is not running yet, so publishing cannot work on this setting. Choose the test server below.": {
+      "extractionState": "stale",
       "localizations": {
         "ja": {
           "stringUnit": {
@@ -7058,6 +7151,29 @@
       }
     },
     "The server could not send the email. It may not be able to send to this address yet — ask whoever runs the server.": {
+      "extractionState": "stale",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーがメールを送信できませんでした。まだこの宛先に送れない可能性があります。サーバーの運営者に確認してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 이메일을 보내지 못했습니다. 아직 이 주소로는 발송할 수 없을 수 있습니다. 서버 운영자에게 확인하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器无法发送邮件。它可能还不能向此地址发送。请联系服务器的运营者。"
+          }
+        }
+      }
+    },
+    "The server could not send the email. It may not be able to send to this address yet. Ask whoever runs the server.": {
       "localizations": {
         "ja": {
           "stringUnit": {
@@ -7158,6 +7274,7 @@
       }
     },
     "The web address becomes the last part of the link to this post. Lowercase letters, numbers, and hyphens.": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7393,6 +7510,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "今天"
+          }
+        }
+      }
+    },
+    "Too many attempts. Wait a few minutes and try again.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "試行回数が多すぎます。数分待ってからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시도가 너무 많습니다. 몇 분 뒤에 다시 시도하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尝试次数过多。请等几分钟后重试。"
           }
         }
       }
@@ -7772,6 +7911,7 @@
       }
     },
     "Use This Server": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8226,6 +8366,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "在这里写作。支持 **粗体**、*斜体* 和 [链接](https://example.com)。"
+          }
+        }
+      }
+    },
+    "Writing opens its own screen. On iPhone there is a button for it beside the tabs, so publishing does not start in Settings.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作成は専用の画面で行います。iPhone ではタブの横にボタンがあるので、発行を設定画面から始める必要はありません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글쓰기는 전용 화면에서 합니다. iPhone에서는 탭 옆에 버튼이 있어서, 발행을 설정에서 시작하지 않아도 됩니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写作有独立的界面。在 iPhone 上标签栏旁有一个按钮，因此发布无需从设置开始。"
           }
         }
       }
