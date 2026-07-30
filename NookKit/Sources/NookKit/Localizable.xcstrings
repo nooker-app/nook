@@ -998,16 +998,16 @@
             "value": "Bold"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "굵게"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "太字"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "굵게"
           }
         },
         "zh-Hans": {
@@ -1646,16 +1646,16 @@
             "value": "Code"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "코드"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "コード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "코드"
           }
         },
         "zh-Hans": {
@@ -1962,30 +1962,30 @@
         }
       }
     },
-    "Couldn’t delete that post": {
+    "Couldn’t take that post down": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn’t delete that post"
+            "value": "Couldn’t take that post down"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "글을 삭제하지 못했습니다"
+            "value": "글을 내리지 못했습니다"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "投稿を削除できませんでした"
+            "value": "投稿を公開停止できませんでした"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法删除该文章"
+            "value": "无法下架该文章"
           }
         }
       }
@@ -2097,6 +2097,7 @@
       }
     },
     "Delete": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2104,16 +2105,16 @@
             "value": "Delete"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "삭제"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "削除"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삭제"
           }
         },
         "zh-Hans": {
@@ -2210,16 +2211,16 @@
             "value": "Delete the Text Too"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "본문까지 삭제"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "本文も削除"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "본문까지 삭제"
           }
         },
         "zh-Hans": {
@@ -2231,6 +2232,7 @@
       }
     },
     "Delete this post": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2238,16 +2240,16 @@
             "value": "Delete this post"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 글 삭제"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "この投稿を削除"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글 삭제"
           }
         },
         "zh-Hans": {
@@ -2259,6 +2261,7 @@
       }
     },
     "Delete this post?": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2266,16 +2269,16 @@
             "value": "Delete this post?"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 글을 삭제할까요?"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "この投稿を削除しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글을 삭제할까요?"
           }
         },
         "zh-Hans": {
@@ -2401,16 +2404,16 @@
             "value": "Discard"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "버리기"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "破棄"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버리기"
           }
         },
         "zh-Hans": {
@@ -2429,16 +2432,16 @@
             "value": "Dismiss"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "닫기"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "閉じる"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "닫기"
           }
         },
         "zh-Hans": {
@@ -2597,16 +2600,16 @@
             "value": "Draft"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "초안"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "下書き"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안"
           }
         },
         "zh-Hans": {
@@ -2625,16 +2628,16 @@
             "value": "Drafts"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "초안"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "下書き"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안"
           }
         },
         "zh-Hans": {
@@ -2653,16 +2656,16 @@
             "value": "Drafts cannot be saved on this device."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 기기에서는 초안을 저장할 수 없습니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "この端末では下書きを保存できません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에서는 초안을 저장할 수 없습니다."
           }
         },
         "zh-Hans": {
@@ -2681,16 +2684,16 @@
             "value": "Edit post"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "글 수정"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "投稿を編集"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 수정"
           }
         },
         "zh-Hans": {
@@ -3393,16 +3396,16 @@
             "value": "Heading"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "제목"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "見出し"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제목"
           }
         },
         "zh-Hans": {
@@ -3527,16 +3530,16 @@
             "value": "Hide the keyboard"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "키보드 숨기기"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "キーボードを隠す"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "키보드 숨기기"
           }
         },
         "zh-Hans": {
@@ -3824,16 +3827,16 @@
             "value": "It stays on this device and is not published until you say so."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 기기에만 남고, 직접 발행할 때까지 공개되지 않습니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "この端末にのみ残り、あなたが公開するまで公開されません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에만 남고, 직접 발행할 때까지 공개되지 않습니다."
           }
         },
         "zh-Hans": {
@@ -3852,16 +3855,16 @@
             "value": "Italic"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "기울임"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "斜体"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기울임"
           }
         },
         "zh-Hans": {
@@ -3902,16 +3905,16 @@
             "value": "Keep Writing"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "계속 쓰기"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "書き続ける"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계속 쓰기"
           }
         },
         "zh-Hans": {
@@ -3930,16 +3933,16 @@
             "value": "Keep as Draft"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "초안으로 보관"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "下書きとして保存"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안으로 보관"
           }
         },
         "zh-Hans": {
@@ -3986,16 +3989,16 @@
             "value": "Keep this as a draft?"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "초안으로 보관할까요?"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "下書きとして保存しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안으로 보관할까요?"
           }
         },
         "zh-Hans": {
@@ -4014,16 +4017,16 @@
             "value": "Kept on this device only, and never published until you say so. Nook holds no copy."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 기기에만 보관되며, 직접 발행할 때까지 공개되지 않습니다. Nook은 사본을 보관하지 않습니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "この端末にのみ保存され、あなたが公開するまで公開されません。Nook は複製を保持しません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기에만 보관되며, 직접 발행할 때까지 공개되지 않습니다. Nook은 사본을 보관하지 않습니다."
           }
         },
         "zh-Hans": {
@@ -4098,16 +4101,16 @@
             "value": "Link"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "링크"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "リンク"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "링크"
           }
         },
         "zh-Hans": {
@@ -4126,16 +4129,16 @@
             "value": "List"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "목록"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "リスト"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "목록"
           }
         },
         "zh-Hans": {
@@ -5577,16 +5580,16 @@
             "value": "Post details"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "글 세부 정보"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "投稿の詳細"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 세부 정보"
           }
         },
         "zh-Hans": {
@@ -5790,16 +5793,16 @@
             "value": "Quote"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "인용"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "引用"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인용"
           }
         },
         "zh-Hans": {
@@ -7298,16 +7301,16 @@
             "value": "Take Down"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "내리기"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "公開停止"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내리기"
           }
         },
         "zh-Hans": {
@@ -7326,16 +7329,16 @@
             "value": "Take this post down?"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 글을 내릴까요?"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "この投稿を公開停止しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글을 내릴까요?"
           }
         },
         "zh-Hans": {
@@ -7410,16 +7413,16 @@
             "value": "That article is missing the information needed to edit it."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이 글을 수정하는 데 필요한 정보가 없습니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "この投稿を編集するために必要な情報がありません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글을 수정하는 데 필요한 정보가 없습니다."
           }
         },
         "zh-Hans": {
@@ -7438,16 +7441,16 @@
             "value": "That code or session is no longer valid. Request a new one, or sign in again."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "해당 코드 또는 세션이 더 이상 유효하지 않습니다. 새로 요청하거나 다시 로그인해 주세요."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "そのコードまたはセッションは無効になりました。新しく発行するか、再度サインインしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "해당 코드 또는 세션이 더 이상 유효하지 않습니다. 새로 요청하거나 다시 로그인해 주세요."
           }
         },
         "zh-Hans": {
@@ -7494,16 +7497,16 @@
             "value": "That draft could not be saved. Copy your text somewhere safe before closing."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "초안을 저장하지 못했습니다. 닫기 전에 본문을 다른 곳에 복사해 두세요."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "下書きを保存できませんでした。閉じる前に本文を安全な場所にコピーしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안을 저장하지 못했습니다. 닫기 전에 본문을 다른 곳에 복사해 두세요."
           }
         },
         "zh-Hans": {
@@ -8763,16 +8766,16 @@
             "value": "Unpublish and Keep a Draft"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "내리고 초안으로 보관"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "公開停止して下書きに保存"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내리고 초안으로 보관"
           }
         },
         "zh-Hans": {
@@ -8791,16 +8794,16 @@
             "value": "Unpublished"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "발행 취소됨"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "公開停止"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행 취소됨"
           }
         },
         "zh-Hans": {
@@ -9251,16 +9254,16 @@
             "value": "Web address and summary"
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "웹 주소와 요약"
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "Web アドレスと概要"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹 주소와 요약"
           }
         },
         "zh-Hans": {
@@ -9519,16 +9522,16 @@
             "value": "Write here. Markdown works."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "여기에 쓰세요. 마크다운을 지원합니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "ここに書いてください。Markdown が使えます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여기에 쓰세요. 마크다운을 지원합니다."
           }
         },
         "zh-Hans": {
@@ -10022,16 +10025,16 @@
             "value": "Your session has expired. Sign in again to continue."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "세션이 만료되었습니다. 계속하려면 다시 로그인해 주세요."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "セッションの有効期限が切れました。続けるには再度サインインしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "세션이 만료되었습니다. 계속하려면 다시 로그인해 주세요."
           }
         },
         "zh-Hans": {
@@ -10184,16 +10187,16 @@
             "value": "“%@” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "어느 쪽이든 “%@”은(는) 웹에서 내려갑니다. 초안으로 보관하면 본문이 이 기기에 남아 다시 발행할 수 있고, 본문까지 삭제하면 어디에도 사본이 남지 않습니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "どちらの場合も「%@」は Web から削除されます。下書きとして保存すると本文はこの端末に残り、再び公開できます。本文も削除すると、どこにも複製は残りません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "어느 쪽이든 “%@”은(는) 웹에서 내려갑니다. 초안으로 보관하면 본문이 이 기기에 남아 다시 발행할 수 있고, 본문까지 삭제하면 어디에도 사본이 남지 않습니다."
           }
         },
         "zh-Hans": {
@@ -10205,6 +10208,7 @@
       }
     },
     "“%@” will be removed from your repository and from the web. This cannot be undone.": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -10212,16 +10216,16 @@
             "value": "“%@” will be removed from your repository and from the web. This cannot be undone."
           }
         },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“%@”이(가) 내 저장소와 웹에서 제거됩니다. 되돌릴 수 없습니다."
-          }
-        },
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "「%@」がリポジトリと Web から削除されます。取り消せません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”이(가) 내 저장소와 웹에서 제거됩니다. 되돌릴 수 없습니다."
           }
         },
         "zh-Hans": {

@@ -16,17 +16,27 @@ public struct PlusSettingsContent: View {
     let onSetUp: () -> Void
     let onSignIn: () -> Void
     let onCompose: (PlusComposeTarget) -> Void
+    /// Asks the host to confirm taking a post down. The dialog cannot live here: see
+    /// the note above about presentations inside a `List`.
+    let onTakeDown: (ATRecord<ArticleRecord>) -> Void
+    /// The post currently being removed, so its row can show it. Owned by the host,
+    /// which is where the work is run from.
+    let removing: String?
 
     init(
         store: PlusStore,
         onSetUp: @escaping () -> Void,
         onSignIn: @escaping () -> Void,
-        onCompose: @escaping (PlusComposeTarget) -> Void
+        onCompose: @escaping (PlusComposeTarget) -> Void,
+        onTakeDown: @escaping (ATRecord<ArticleRecord>) -> Void,
+        removing: String?
     ) {
         self.store = store
         self.onSetUp = onSetUp
         self.onSignIn = onSignIn
         self.onCompose = onCompose
+        self.onTakeDown = onTakeDown
+        self.removing = removing
     }
 
     public var body: some View {
@@ -51,49 +61,8 @@ public struct PlusSettingsContent: View {
         // colour visible instead of grey cards.
         .listRowBackground(Color.clear)
         .tint(PlusTheme.accent)
-        // Attached once here rather than per row: the same alert repeated down a list
-        // is N presentations racing to be the one that shows.
-        .alert(
-            Text("Couldn’t delete that post", bundle: .module),
-            isPresented: Binding(
-                get: { deletionFailure != nil },
-                set: { if !$0 { deletionFailure = nil } }
-            ),
-            presenting: deletionFailure
-        ) { _ in
-            Button { deletionFailure = nil } label: { Text("OK", bundle: .module) }
-        } message: { why in
-            Text(verbatim: why)
-        }
         .task {
             if store.isSignedIn { await store.loadContent() }
-        }
-    }
-
-    /// Deletes a post, reporting a failure where the writer is looking.
-    ///
-    /// The failure is taken off the store so it is told once, here, rather than also
-    /// appearing in the banner at the top of a screen the writer would have to scroll
-    /// back up to find.
-    private func delete(_ record: ATRecord<ArticleRecord>) async {
-        deleting = record.uri
-        await store.delete(record)
-        deleting = nil
-        reportFailure()
-    }
-
-    /// Takes a post off the web while keeping its text as a draft on this device.
-    private func unpublish(_ record: ATRecord<ArticleRecord>) async {
-        deleting = record.uri
-        await store.unpublish(record)
-        deleting = nil
-        reportFailure()
-    }
-
-    private func reportFailure() {
-        if let failure = store.failure {
-            deletionFailure = failure
-            store.clearFailure()
         }
     }
 
@@ -289,25 +258,6 @@ public struct PlusSettingsContent: View {
     }
 
 
-    /// The post the writer has asked to delete, held until they confirm.
-    ///
-    /// Deleting removes the authoritative record from their repository. One tap on a
-    /// small icon did that, permanently, with nothing in between.
-    @State private var pendingDeletion: ATRecord<ArticleRecord>?
-
-    /// A failed deletion, reported as an alert on the spot.
-    ///
-    /// The banner at the top of this screen is the right place for a failure the
-    /// writer is about to read anyway, but it is the wrong place for one caused by a
-    /// button several sections further down: they press Delete, the row stays, and the
-    /// explanation is off-screen behind a scroll. An alert cannot be missed and
-    /// arrives where the action was.
-    @State private var deletionFailure: String?
-
-    /// The post being deleted, so its own row can show it rather than the whole
-    /// screen going busy.
-    @State private var deleting: String?
-
     /// A published post: tap to edit, swipe to take it down.
     ///
     /// Editing is the row's own action because it is the safe one and the one wanted
@@ -326,7 +276,7 @@ public struct PlusSettingsContent: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if deleting == record.uri {
+                if removing == record.uri {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "chevron.right")
@@ -340,7 +290,7 @@ public struct PlusSettingsContent: View {
         .disabled(store.isWorking)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
-                pendingDeletion = record
+                onTakeDown(record)
             } label: {
                 Label {
                     Text("Take Down", bundle: .module)
@@ -349,40 +299,11 @@ public struct PlusSettingsContent: View {
                 }
             }
         }
-        .confirmationDialog(
-            Text("Take this post down?", bundle: .module),
-            isPresented: Binding(
-                get: { pendingDeletion?.uri == record.uri },
-                set: { if !$0 { pendingDeletion = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: pendingDeletion
-        ) { target in
-            // Two different acts, and the difference is the text. Both remove the
-            // record — that is what makes a post not public — but one keeps what was
-            // written and the other does not.
-            if store.canKeepDrafts {
-                Button {
-                    pendingDeletion = nil
-                    Task { await unpublish(target) }
-                } label: {
-                    Text("Unpublish and Keep a Draft", bundle: .module)
-                }
-            }
-            Button(role: .destructive) {
-                pendingDeletion = nil
-                Task { await delete(target) }
-            } label: {
-                Text("Delete the Text Too", bundle: .module)
-            }
-            Button(role: .cancel) { pendingDeletion = nil } label: {
-                Text("Cancel", bundle: .module)
-            }
-        } message: { target in
-            Text(
-                "“\(target.value.title)” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere.",
-                bundle: .module)
-        }
+        // The confirmation is not attached here, and must not be. A presentation
+        // inside a `List` row goes away when the row is laid out again, and revealing
+        // a swipe action is exactly that: the dialog appeared and vanished on its own
+        // every time. It lives on the host, outside the list — the same reason the
+        // sheets do, per the note at the top of this file.
     }
 
     // MARK: - Developer
