@@ -748,9 +748,21 @@ struct ReaderDetailView: View {
             switch store.readerContentState(for: article) {
             case .ready(let html):
                 HTMLContentView(html: html, baseURL: article.url, selectable: false, translator: nativeTranslator, typography: readerStyle.typography)
-            case .failed, .gone:
+            case .gone:
                 VStack(alignment: .leading, spacing: 14) {
                     ReaderUnavailableNotice(
+                        reason: .gone,
+                        onRetry: { store.retryReaderContent(for: article) },
+                        onDelete: { deleteAndClose(article) }
+                    )
+                    originalArticleBody(article)
+                }
+            case .failed:
+                // The page is still there; it just yielded no body. Deleting is
+                // not the remedy, so it is not offered.
+                VStack(alignment: .leading, spacing: 14) {
+                    ReaderUnavailableNotice(
+                        reason: .notExtracted,
                         onRetry: { store.retryReaderContent(for: article) },
                         onDelete: { deleteAndClose(article) }
                     )

@@ -50,7 +50,10 @@ public final class ReaderModeExtractor {
 /// One offscreen extraction. Owns its web view + delegates and calls `onFinish`
 /// exactly once (success, failure, or timeout), then tears everything down.
 @MainActor
-private final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+/// Internal rather than private so the extraction script can be exercised
+/// directly by tests. It decides whether a page has an article in it, and that
+/// decision was shipping untested.
+final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     private let url: URL
     private let timeout: TimeInterval
     // Optional so it can be released after firing, breaking the session↔closure
@@ -177,25 +180,58 @@ private final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptM
         });
       }
 
+      /* The length floor exists to reject a page that is all navigation, where
+         picking the biggest block of text would show junk. It does not apply when
+         the markup says outright where the body is: an <article> or an
+         [itemprop="articleBody"] is the page declaring it, not us guessing, and a
+         short post is still a post. Without this a twenty-word note read as
+         "can't show the original", which sent people to delete a perfectly good
+         article. */
+      var MINIMUM_GUESSED_TEXT = 80;
+
+      function declaredBody() {
+        return document.querySelector('article .article-content, article [itemprop="articleBody"], [itemprop="articleBody"], article');
+      }
+
+      function packaged(element) {
+        var content = element.cloneNode(true);
+        normalizeMedia(content);
+        var heading = document.querySelector('h1');
+        return {
+          title: heading ? heading.textContent.trim() : document.title,
+          byline: '',
+          content: content.innerHTML
+        };
+      }
+
       function extractedArticle() {
+        var declared = declaredBody();
+
         if (typeof Readability !== 'undefined') {
           var clone = document.cloneNode(true);
           normalizeMedia(clone);
           var allowedEmbeds = /\\/\\/(www\\.)?((dailymotion|youtube|youtube-nocookie|player\\.vimeo|v\\.qq|codepen)\\.(com|io)|(archive|upload\\.wikimedia)\\.org|player\\.twitch\\.tv)/i;
           var parsed = new Readability(clone, { allowedVideoRegex: allowedEmbeds }).parse();
-          if (parsed && parsed.content && parsed.textContent && parsed.textContent.trim().length > 80) {
-            return parsed;
+          if (parsed && parsed.content && parsed.textContent) {
+            var text = parsed.textContent.trim();
+            /* Readability's own result is trusted without a floor when the page
+               declared its body: the two agree on what the article is, so a short
+               one is short rather than suspect. */
+            if (text.length > MINIMUM_GUESSED_TEXT || (declared && text.length > 0)) {
+              return parsed;
+            }
           }
         }
-        var fallback = document.querySelector('article .article-content, article [itemprop="articleBody"], article, main');
-        if (!fallback || (fallback.innerText || '').trim().length < 80) return null;
-        var content = fallback.cloneNode(true);
-        normalizeMedia(content);
-        return {
-          title: document.querySelector('h1') ? document.querySelector('h1').textContent.trim() : document.title,
-          byline: '',
-          content: content.innerHTML
-        };
+
+        /* Declared body, whatever its length. */
+        if (declared && (declared.innerText || '').trim().length > 0) {
+          return packaged(declared);
+        }
+
+        /* Nothing declared, so this is a guess, and the floor applies. */
+        var guessed = document.querySelector('main');
+        if (!guessed || (guessed.innerText || '').trim().length < MINIMUM_GUESSED_TEXT) return null;
+        return packaged(guessed);
       }
 
       function done(payload) {

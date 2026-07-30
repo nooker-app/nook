@@ -1811,6 +1811,28 @@
         }
       }
     },
+    "Couldn't read the original here": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ここでは原文を読み込めませんでした"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여기서는 원문을 읽어올 수 없었습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法在此读取原文"
+          }
+        }
+      }
+    },
     "Couldn’t Save Markdown": {
       "localizations": {
         "en": {
@@ -4601,6 +4623,28 @@
         }
       }
     },
+    "Open Original": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原文を開く"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "원문 열기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开原文"
+          }
+        }
+      }
+    },
     "Open in Browser": {
       "localizations": {
         "en": {
@@ -7021,6 +7065,50 @@
         }
       }
     },
+    "The page has been taken down. The saved copy is shown below, and you can delete the article if you no longer want it.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ページが削除されています。以下に保存済みのコピーを表示しています。不要であれば記事を削除できます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페이지가 내려갔습니다. 아래에 저장된 사본을 보여줍니다. 필요 없다면 글을 삭제할 수 있습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该页面已被撤下。下方显示的是已保存的副本，如不再需要可以删除这篇文章。"
+          }
+        }
+      }
+    },
+    "The page is still there, but no article text came out of it. The saved copy is shown below.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ページ自体は残っていますが、本文を取り出せませんでした。以下に保存済みのコピーを表示しています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "페이지는 그대로 있지만 본문을 추출하지 못했습니다. 아래에 저장된 사본을 보여줍니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "页面仍然存在，但没能提取出正文。下方显示的是已保存的副本。"
+          }
+        }
+      }
+    },
     "The production server is not running yet, so publishing cannot work on this setting. Choose the test server below.": {
       "extractionState": "stale",
       "localizations": {
@@ -7376,6 +7464,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "这篇文章已在别处被修改。请先重新加载再保存。"
+          }
+        }
+      }
+    },
+    "This article is no longer online": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この記事はもう公開されていません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글은 더 이상 온라인에 없습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这篇文章已不在线"
           }
         }
       }
