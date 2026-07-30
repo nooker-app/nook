@@ -18,11 +18,10 @@ public struct PlusComposeView: View {
     }
 
     @State private var title = ""
-    @State private var slug = ""
-    /// True once the address has been edited by hand, after which the title stops
-    /// driving it. Without this, correcting the address would be undone by the
-    /// next keystroke in the title.
-    @State private var slugEdited = false
+    /// Follows the title until the writer takes it over. The rule lives in
+    /// PlusSlugField because deciding which writes are the view's own is the part
+    /// that was wrong, and it cannot be tested from here.
+    @State private var slugField = PlusSlugField()
     @State private var summary = ""
     @State private var markdown = ""
     @FocusState private var focus: Field?
@@ -96,13 +95,10 @@ public struct PlusComposeView: View {
                     }
                     .font(.title3.weight(.semibold))
                     .focused($focus, equals: .title)
-                    .onChange(of: title) { _, latest in
-                        // The address follows the title until the writer takes it
-                        // over. Making them invent one by hand was the fiddliest
-                        // part of publishing, for a value most people would rather
-                        // not think about.
-                        if !slugEdited { slug = PlusSlug.derive(from: latest) }
-                    }
+                    // Making the writer invent a web address by hand was the
+                    // fiddliest part of publishing, for a value most people would
+                    // rather not think about.
+                    .onChange(of: title) { _, latest in slugField.titleChanged(to: latest) }
                 }
 
                 field(Text("Web address", bundle: .module)) {
@@ -114,7 +110,13 @@ public struct PlusComposeView: View {
                                 .lineLimit(1)
                                 .truncationMode(.head)
                         }
-                        TextField(text: $slug, prompt: Text(verbatim: "my-first-post")) {
+                        TextField(
+                            text: Binding(
+                                get: { slugField.value },
+                                set: { slugField.changed(to: $0) }
+                            ),
+                            prompt: Text(verbatim: "my-first-post")
+                        ) {
                             Text("Web address", bundle: .module)
                         }
                         .font(.caption.monospaced())
@@ -122,7 +124,6 @@ public struct PlusComposeView: View {
                         #if os(iOS)
                             .textInputAutocapitalization(.never)
                         #endif
-                        .onChange(of: slug) { _, _ in slugEdited = true }
                     }
                 }
 
@@ -191,19 +192,19 @@ public struct PlusComposeView: View {
 
     private var canPublish: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !slug.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !slugField.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && store.canPublish
     }
 
     private func publish() async {
-        await store.publish(title: title, slug: slug, markdown: markdown, summary: summary)
+        await store.publish(
+            title: title, slug: slugField.value, markdown: markdown, summary: summary)
         guard store.failure == nil else { return }
         // Cleared only on success, so a rejected post is not lost along with the
         // reason it was rejected.
         title = ""
-        slug = ""
-        slugEdited = false
+        slugField.reset()
         summary = ""
         markdown = ""
         onFinished()
