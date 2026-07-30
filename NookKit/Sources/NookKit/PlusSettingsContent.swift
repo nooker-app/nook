@@ -98,6 +98,24 @@ public struct PlusSettingsContent: View {
 
     private var signedIn: some View {
         Group {
+            // Every failure this screen can cause, said out loud.
+            //
+            // Nothing here showed `store.failure` at all. Deleting a post failed with
+            // a 400 seven times over and the only thing the writer saw was the trash
+            // button blink: the message was set on the store and never rendered, so a
+            // real refusal was indistinguishable from a dead button.
+            if let failure = store.failure {
+                Section {
+                    Label { Text(verbatim: failure) } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .foregroundStyle(.orange)
+                    .font(.callout)
+                    Button { store.clearFailure() } label: { Text("Dismiss", bundle: .module) }
+                        .font(.callout)
+                }
+            }
+
             Section {
                 if let session = store.session {
                     LabeledContent { Text(verbatim: session.handle) } label: { Text("Handle", bundle: .module) }
@@ -158,6 +176,12 @@ public struct PlusSettingsContent: View {
     }
 
 
+    /// The post the writer has asked to delete, held until they confirm.
+    ///
+    /// Deleting removes the authoritative record from their repository. One tap on a
+    /// small icon did that, permanently, with nothing in between.
+    @State private var pendingDeletion: ATRecord<ArticleRecord>?
+
     @ViewBuilder
     private func articleRow(_ record: ATRecord<ArticleRecord>) -> some View {
         HStack(alignment: .firstTextBaseline) {
@@ -169,12 +193,36 @@ public struct PlusSettingsContent: View {
             }
             Spacer()
             Button(role: .destructive) {
-                Task { await store.delete(record) }
+                pendingDeletion = record
             } label: {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
             .disabled(store.isWorking)
+            .accessibilityLabel(Text("Delete this post", bundle: .module))
+        }
+        .confirmationDialog(
+            Text("Delete this post?", bundle: .module),
+            isPresented: Binding(
+                get: { pendingDeletion?.uri == record.uri },
+                set: { if !$0 { pendingDeletion = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDeletion
+        ) { target in
+            Button(role: .destructive) {
+                pendingDeletion = nil
+                Task { await store.delete(target) }
+            } label: {
+                Text("Delete", bundle: .module)
+            }
+            Button(role: .cancel) { pendingDeletion = nil } label: {
+                Text("Cancel", bundle: .module)
+            }
+        } message: { target in
+            Text(
+                "“\(target.value.title)” will be removed from your repository and from the web. This cannot be undone.",
+                bundle: .module)
         }
     }
 
