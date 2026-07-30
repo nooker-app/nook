@@ -45,6 +45,9 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     /// sections down: the row stays and the explanation is behind a scroll.
     @State private var removalFailure: String?
 
+    /// Whether the writer is being asked to confirm leaving the service.
+    @State private var confirmingLeave = false
+
     public init(@ViewBuilder container: @escaping (PlusSettingsContent) -> Container) {
         self.container = container
     }
@@ -57,9 +60,44 @@ public struct PlusSettingsScreenContent<Container: View>: View {
                 onSignIn: { present(.signIn) },
                 onCompose: { target in present(.compose(target)) },
                 onTakeDown: { record in pendingTakeDown = record },
+                onLeave: { confirmingLeave = true },
                 removing: removing
             )
         )
+        // Two steps to leave, and the second one spells out what stays. A single
+        // destructive tap on something that needs a new invitation to undo would be
+        // the wrong shape for it.
+        .confirmationDialog(
+            Text("Leave Nook Plus?", bundle: .module),
+            isPresented: $confirmingLeave,
+            titleVisibility: .visible
+        ) {
+            Button(role: .destructive) {
+                confirmingLeave = false
+                Task { await store.disconnect() }
+            } label: {
+                Text("Leave", bundle: .module)
+            }
+            Button(role: .cancel) { confirmingLeave = false } label: {
+                Text("Cancel", bundle: .module)
+            }
+        } message: {
+            Text("Your posts stay in your repository and your account is untouched. Nook stops publishing your pages and forgets your membership, and coming back needs a new invitation.", bundle: .module)
+        }
+        // Confirmed rather than left to a screen that has quietly emptied itself:
+        // the difference between "this worked" and "something went wrong" is exactly
+        // what somebody who just left needs to know.
+        .alert(
+            Text("You have left Nook Plus", bundle: .module),
+            isPresented: Binding(
+                get: { store.disconnected },
+                set: { if !$0 { store.acknowledgeDisconnection() } }
+            )
+        ) {
+            Button { store.acknowledgeDisconnection() } label: { Text("OK", bundle: .module) }
+        } message: {
+            Text("Your pages are coming down. Everything you wrote is still in your repository, and your drafts are still on this device.", bundle: .module)
+        }
         .confirmationDialog(
             Text("Take this post down?", bundle: .module),
             isPresented: Binding(

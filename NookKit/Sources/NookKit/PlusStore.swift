@@ -385,6 +385,41 @@ public final class PlusStore {
         failure = nil
     }
 
+    // MARK: - Leaving the service
+
+    /// Set once a disconnection has been accepted, so the screen can report what
+    /// happened rather than simply emptying itself.
+    public private(set) var disconnected = false
+
+    /// Leaves Nook Plus, keeping everything the writer owns.
+    ///
+    /// Three different things get called "delete my account" and this is the middle
+    /// one. It removes the membership, the service's operational data, and every
+    /// public page the service generated. It does **not** touch the repository: the
+    /// account, its DID, its handle, and every publication and article stay exactly
+    /// as they are, and the writer can still read and export them.
+    ///
+    /// Signing out locally afterwards because the membership is gone: leaving the
+    /// session in place would present a signed-in Plus screen for an account the
+    /// service no longer knows. The draft files are deliberately left alone — they
+    /// are the writer's, were never the service's, and deleting them here would be
+    /// this method quietly doing the one thing it promises not to.
+    public func disconnect() async {
+        var accepted = false
+        await perform {
+            _ = try await self.service.requestDisconnection(idempotencyKey: UUID().uuidString)
+            accepted = true
+        }
+        guard accepted, failure == nil else { return }
+        signOut()
+        disconnected = true
+    }
+
+    /// Clears the confirmation, for a screen that has shown it.
+    public func acknowledgeDisconnection() {
+        if disconnected { disconnected = false }
+    }
+
     /// Reads publications and articles from the PDS, which is authoritative.
     public func loadContent() async {
         guard let did = session?.did else { return }

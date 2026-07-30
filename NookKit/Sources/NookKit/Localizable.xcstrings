@@ -4093,6 +4093,118 @@
         }
       }
     },
+    "Leave": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탈퇴"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退会"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出"
+          }
+        }
+      }
+    },
+    "Leave Nook Plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave Nook Plus"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus 탈퇴"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus を退会"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出 Nook Plus"
+          }
+        }
+      }
+    },
+    "Leave Nook Plus?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave Nook Plus?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus를 탈퇴할까요?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus を退会しますか？"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要退出 Nook Plus 吗？"
+          }
+        }
+      }
+    },
+    "Leaving": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leaving"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탈퇴"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退会"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出"
+          }
+        }
+      }
+    },
     "Link": {
       "localizations": {
         "en": {
@@ -8452,6 +8564,34 @@
         }
       }
     },
+    "This is not the same as signing out, and not the same as deleting your account. Coming back needs a new invitation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is not the same as signing out, and not the same as deleting your account. Coming back needs a new invitation."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그아웃과 다르고, 계정 삭제와도 다릅니다. 다시 시작하려면 새 초대가 필요합니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サインアウトとも、アカウント削除とも異なります。再開するには新しい招待が必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这既不同于退出登录，也不同于删除账户。若要重新加入，需要新的邀请。"
+          }
+        }
+      }
+    },
     "This name is already yours": {
       "localizations": {
         "ja": {
@@ -9614,6 +9754,34 @@
         }
       }
     },
+    "You have left Nook Plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have left Nook Plus"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus를 탈퇴했습니다"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus を退会しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已退出 Nook Plus"
+          }
+        }
+      }
+    },
     "You will sign in as": {
       "localizations": {
         "ja": {
@@ -9865,6 +10033,34 @@
         }
       }
     },
+    "Your pages are coming down. Everything you wrote is still in your repository, and your drafts are still on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your pages are coming down. Everything you wrote is still in your repository, and your drafts are still on this device."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "공개 페이지가 내려가는 중입니다. 작성한 글은 모두 내 저장소에 그대로 있고, 초안도 이 기기에 남아 있습니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "公開ページは削除中です。書いたものはすべてリポジトリに残っており、下書きもこの端末に残っています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的页面正在下架。你写的内容都还在你的仓库里，草稿也仍在此设备上。"
+          }
+        }
+      }
+    },
     "Your password could not be saved to Passwords. Write it down somewhere safe — it cannot be reset.": {
       "extractionState": "stale",
       "localizations": {
@@ -9985,6 +10181,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "你的文章存放在保存密码的服务器上，重设码由该服务器通过邮件发送。Nook 看不到它。"
+          }
+        }
+      }
+    },
+    "Your posts stay in your repository and your account is untouched. Nook stops publishing your pages and forgets your membership, and coming back needs a new invitation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your posts stay in your repository and your account is untouched. Nook stops publishing your pages and forgets your membership, and coming back needs a new invitation."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글은 내 저장소에 그대로 남고 계정도 건드리지 않습니다. Nook은 공개 페이지 발행을 중단하고 멤버십을 잊으며, 다시 시작하려면 새 초대가 필요합니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "投稿はリポジトリにそのまま残り、アカウントには触れません。Nook はページの公開を停止してメンバーシップを忘れ、再開には新しい招待が必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的文章会留在你的仓库中，账户不受影响。Nook 会停止发布你的页面并忘记你的会员身份，重新加入需要新的邀请。"
+          }
+        }
+      }
+    },
+    "Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행물과 글은 내 저장소에 그대로 남고, 이름과 계정도 건드리지 않습니다. 없어지는 것은 멤버십과 Nook이 발행해 주는 공개 페이지입니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パブリケーションと投稿はリポジトリにそのまま残り、名前とアカウントにも触れません。なくなるのはメンバーシップと、Nook が公開しているページです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的发布页和文章会留在你的仓库中，名称和账户也不受影响。消失的是你的会员身份和 Nook 为你发布的页面。"
           }
         }
       }

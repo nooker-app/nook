@@ -19,6 +19,9 @@ public struct PlusSettingsContent: View {
     /// Asks the host to confirm taking a post down. The dialog cannot live here: see
     /// the note above about presentations inside a `List`.
     let onTakeDown: (ATRecord<ArticleRecord>) -> Void
+    /// Asks the host to confirm leaving the service. Same reason it is not a dialog
+    /// attached here.
+    let onLeave: () -> Void
     /// The post currently being removed, so its row can show it. Owned by the host,
     /// which is where the work is run from.
     let removing: String?
@@ -29,6 +32,7 @@ public struct PlusSettingsContent: View {
         onSignIn: @escaping () -> Void,
         onCompose: @escaping (PlusComposeTarget) -> Void,
         onTakeDown: @escaping (ATRecord<ArticleRecord>) -> Void,
+        onLeave: @escaping () -> Void,
         removing: String?
     ) {
         self.store = store
@@ -36,6 +40,7 @@ public struct PlusSettingsContent: View {
         self.onSignIn = onSignIn
         self.onCompose = onCompose
         self.onTakeDown = onTakeDown
+        self.onLeave = onLeave
         self.removing = removing
     }
 
@@ -195,6 +200,42 @@ public struct PlusSettingsContent: View {
                 Text("Your posts", bundle: .module)
             } footer: {
                 Text("Read straight from your own repository, so this is what actually exists — not a copy Nook keeps.", bundle: .module)
+            }
+
+            leavingSection
+        }
+    }
+
+    /// Leaving the service.
+    ///
+    /// Last, and on its own, because it is the one thing here that cannot be undone
+    /// by doing it again.
+    ///
+    /// Three different things get called "delete my account", and the difference is
+    /// the whole point of this section's wording: what leaves is Nook's hold on the
+    /// writer, not anything they wrote. The publications and articles are records in
+    /// their own repository and stay there; the handle and the account stay; what
+    /// goes is the membership and the public pages Nook generated. Deleting the
+    /// account itself belongs to the repository host, is irreversible, and is
+    /// deliberately not offered here.
+    private var leavingSection: some View {
+        Section {
+            Button(role: .destructive) {
+                onLeave()
+            } label: {
+                Label {
+                    Text("Leave Nook Plus", bundle: .module)
+                } icon: {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                }
+            }
+            .disabled(store.isWorking)
+        } header: {
+            Text("Leaving", bundle: .module)
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you.", bundle: .module)
+                Text("This is not the same as signing out, and not the same as deleting your account. Coming back needs a new invitation.", bundle: .module)
             }
         }
     }
