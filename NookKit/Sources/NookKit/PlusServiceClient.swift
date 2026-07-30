@@ -247,6 +247,41 @@ public struct PlusServiceClient: Sendable {
         }
     }
 
+    /// Asks the service to package this member's records.
+    ///
+    /// Answers with a job. When the status is already `completed` the link is on it;
+    /// otherwise the caller polls ``getExport``.
+    public func requestExport(idempotencyKey: String) async throws
+        -> Components.Schemas.ExportJob
+    {
+        guard session() != nil else { throw PlusServiceError.sessionInvalid }
+        let output = try await send({
+            try await client.requestExport(
+                headers: .init(Idempotency_hyphen_Key: idempotencyKey)
+            )
+        })
+        switch output {
+        case .accepted(let accepted):
+            return try accepted.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
+        }
+    }
+
+    /// Reads an export job.
+    public func getExport(id: String) async throws -> Components.Schemas.ExportJob {
+        guard session() != nil else { throw PlusServiceError.sessionInvalid }
+        let output = try await send({
+            try await client.getExport(path: .init(exportId: id))
+        })
+        switch output {
+        case .ok(let ok):
+            return try ok.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
+        }
+    }
+
     /// Requests disconnection from Nook Plus.
     ///
     /// This keeps the PDS account, its DID, and every record. It is neither

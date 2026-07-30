@@ -48,6 +48,22 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     /// Whether the writer is being asked to confirm leaving the service.
     @State private var confirmingLeave = false
 
+    /// The fetched archive, as a sheet item.
+    ///
+    /// Derived from the store rather than mirrored into local state, so there is one
+    /// answer to "is there a file" and the sheet cannot outlive it.
+    private var exportShare: Binding<ExportShare?> {
+        Binding(
+            get: { store.exportFile.map(ExportShare.init(file:)) },
+            set: { if $0 == nil { store.clearExportFile() } }
+        )
+    }
+
+    private struct ExportShare: Identifiable {
+        let file: URL
+        var id: URL { file }
+    }
+
     public init(@ViewBuilder container: @escaping (PlusSettingsContent) -> Container) {
         self.container = container
     }
@@ -83,6 +99,13 @@ public struct PlusSettingsScreenContent<Container: View>: View {
             }
         } message: {
             Text("Your posts stay in your repository and your account is untouched. Nook stops publishing your pages and forgets your membership, and coming back needs a new invitation.", bundle: .module)
+        }
+        // The archive, once it is on the device. A sheet rather than a link, because
+        // what is shared is the file: the service's download URL is a bearer
+        // credential, and putting one into a share sheet would invite it into a
+        // message or a clipboard.
+        .sheet(item: exportShare) { share in
+            PlusExportShareSheet(file: share.file) { store.clearExportFile() }
         }
         // Confirmed rather than left to a screen that has quietly emptied itself:
         // the difference between "this worked" and "something went wrong" is exactly

@@ -385,6 +385,79 @@ public final class PlusStore {
         failure = nil
     }
 
+    // MARK: - Taking a copy away
+
+    /// The archive, once it has been fetched onto this device.
+    public private(set) var exportFile: URL?
+
+    /// True while an export is being built and fetched, which takes a round trip or
+    /// two more than most things here.
+    public private(set) var isExporting = false
+
+    /// Builds an export and downloads it, leaving a file to share.
+    ///
+    /// The bytes are fetched here rather than the download link being handed to the
+    /// UI. That link is a bearer credential — anyone holding it can read the archive
+    /// until it expires — so putting it into a share sheet would invite it into a
+    /// message or a clipboard. Downloading first means what gets shared is a file,
+    /// which is what somebody asking for a copy of their writing actually wants.
+    ///
+    /// Polls, because the service answers 202 with whatever status it reached. In
+    /// practice a repository small enough to render is small enough to package in the
+    /// request, so this usually completes on the first answer.
+    public func exportWriting() async {
+        guard !isExporting else { return }
+        isExporting = true
+        defer { isExporting = false }
+
+        exportFile = nil
+        await perform {
+            var job = try await self.service.requestExport(idempotencyKey: UUID().uuidString)
+
+            // Bounded: a job that never finishes must not spin here forever. Five
+            // attempts over about fifteen seconds, after which the writer is told to
+            // try again rather than left watching a spinner.
+            for attempt in 0..<5 where job.status == .pending || job.status == .processing {
+                try await Task.sleep(for: .seconds(attempt == 0 ? 1 : 3))
+                job = try await self.service.getExport(id: job.id)
+            }
+
+            switch job.status {
+            case .completed:
+                break
+            case .failed:
+                throw PlusExportError.serviceFailed
+            case .pending, .processing:
+                throw PlusExportError.stillWorking
+            }
+            guard let link = job.downloadUrl, let url = URL(string: link) else {
+                throw PlusExportError.noDownloadLink
+            }
+            self.exportFile = try await self.downloadArchive(from: url)
+        }
+    }
+
+    /// Fetches the archive into a file this device owns.
+    private func downloadArchive(from url: URL) async throws -> URL {
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw PlusExportError.downloadFailed(status: http.statusCode)
+        }
+        // Named for a person looking at it in Files, and dated so two exports do not
+        // overwrite one another.
+        let stamp = ISO8601DateFormatter()
+        stamp.formatOptions = [.withFullDate]
+        let name = "nook-export-\(stamp.string(from: Date())).json"
+        let file = FileManager.default.temporaryDirectory.appending(path: name)
+        try data.write(to: file, options: .atomic)
+        return file
+    }
+
+    /// Clears a fetched archive, for a screen that has finished with it.
+    public func clearExportFile() {
+        if exportFile != nil { exportFile = nil }
+    }
+
     // MARK: - Leaving the service
 
     /// Set once a disconnection has been accepted, so the screen can report what
@@ -812,5 +885,45 @@ public final class PlusStore {
                 localized: "Could not reach the service: \(url.localizedDescription)", bundle: .module)
         }
         return String(localized: "Could not reach the service.", bundle: .module)
+    }
+}
+
+/// What can go wrong building an export, in the writer's terms.
+///
+/// Separate cases rather than one message, because the remedies differ: "try again
+/// in a moment" and "something on the service failed" are different situations and
+/// a single sentence covering both would be useful for neither.
+enum PlusExportError: Error, LocalizedError {
+    /// The service reported the job as failed.
+    case serviceFailed
+    /// Still being built when the client stopped waiting.
+    case stillWorking
+    /// Completed, but with no link to fetch — a service-side problem.
+    case noDownloadLink
+    /// The archive could not be fetched.
+    case downloadFailed(status: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .serviceFailed:
+            return String(
+                localized: "Your export could not be prepared. Try again in a few minutes.",
+                bundle: .module)
+        case .stillWorking:
+            return String(
+                localized: "Your export is still being prepared. Try again in a moment.",
+                bundle: .module)
+        case .noDownloadLink:
+            return String(
+                localized: "Your export was prepared but could not be downloaded. Try again.",
+                bundle: .module)
+        case .downloadFailed(let status):
+            // The status is included: a 403 means the link expired while it was being
+            // used, which is a different thing from the service being unreachable,
+            // and somebody reporting the problem should be able to say which.
+            return String(
+                localized: "Your export could not be downloaded (\(status)). Try again.",
+                bundle: .module)
+        }
     }
 }

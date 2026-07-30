@@ -2536,6 +2536,34 @@
         }
       }
     },
+    "Download a Copy of Your Writing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download a Copy of Your Writing"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 글 사본 내려받기"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自分の文章のコピーをダウンロード"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载你的写作副本"
+          }
+        }
+      }
+    },
     "Download for Offline": {
       "localizations": {
         "en": {
@@ -2828,6 +2856,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "输入要隐藏的单词、短语或模式。"
+          }
+        }
+      }
+    },
+    "Every publication and article, exactly as your repository holds them.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every publication and article, exactly as your repository holds them."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행물과 글 전부, 내 저장소가 담고 있는 그대로입니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パブリケーションと投稿のすべてを、リポジトリが保持しているそのままの形で。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有发布页和文章，与你的仓库中保存的完全一致。"
           }
         }
       }
@@ -5712,6 +5768,34 @@
         }
       }
     },
+    "Preparing your copy…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing your copy…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 준비하는 중…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーを準備中…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备副本…"
+          }
+        }
+      }
+    },
     "Production": {
       "localizations": {
         "en": {
@@ -6737,6 +6821,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "分享链接"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in Finder"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder에서 보기"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder に表示"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Finder 中显示"
           }
         }
       }
@@ -7979,6 +8091,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "你受邀时收到的代码，形式为四组字母和数字。"
+          }
+        }
+      }
+    },
+    "The copy is a file of your own records — every publication and article, exactly as your repository holds them.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The copy is a file of your own records — every publication and article, exactly as your repository holds them."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본은 내 레코드를 담은 파일입니다 — 발행물과 글 전부, 내 저장소가 담고 있는 그대로입니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーは自分のレコードを収めたファイルです。パブリケーションと投稿のすべてを、リポジトリが保持しているそのままの形で。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "副本是包含你自己记录的文件——所有发布页和文章，与你的仓库中保存的完全一致。"
           }
         }
       }
@@ -9900,6 +10040,146 @@
           "stringUnit": {
             "state": "translated",
             "value": "你的地址"
+          }
+        }
+      }
+    },
+    "Your copy is ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your copy is ready"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본이 준비되었습니다"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーの準備ができました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "副本已就绪"
+          }
+        }
+      }
+    },
+    "Your export could not be downloaded (%@). Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your export could not be downloaded (%@). Try again."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 내려받지 못했습니다 (%@). 다시 시도해 주세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーをダウンロードできませんでした (%@)。もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法下载副本（%@）。请重试。"
+          }
+        }
+      }
+    },
+    "Your export could not be prepared. Try again in a few minutes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your export could not be prepared. Try again in a few minutes."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 준비하지 못했습니다. 몇 분 후 다시 시도해 주세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーを準備できませんでした。数分後にもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法准备副本。请几分钟后重试。"
+          }
+        }
+      }
+    },
+    "Your export is still being prepared. Try again in a moment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your export is still being prepared. Try again in a moment."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본을 아직 준비하는 중입니다. 잠시 후 다시 시도해 주세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーはまだ準備中です。少し待ってからもう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "副本仍在准备中。请稍后重试。"
+          }
+        }
+      }
+    },
+    "Your export was prepared but could not be downloaded. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your export was prepared but could not be downloaded. Try again."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본은 준비되었지만 내려받지 못했습니다. 다시 시도해 주세요."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーは準備できましたが、ダウンロードできませんでした。もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "副本已准备好，但无法下载。请重试。"
           }
         }
       }

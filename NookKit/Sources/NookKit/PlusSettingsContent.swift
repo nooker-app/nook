@@ -220,6 +220,30 @@ public struct PlusSettingsContent: View {
     /// deliberately not offered here.
     private var leavingSection: some View {
         Section {
+            // Before leaving, and in the same section as it, because the contract's
+            // advice is export first and a client that offers one without the other
+            // is doing the writer a disservice. It is useful on its own too: a copy
+            // of your own writing is not something you should have to be leaving to
+            // get.
+            Button {
+                Task { await store.exportWriting() }
+            } label: {
+                Label {
+                    if store.isExporting {
+                        Text("Preparing your copy…", bundle: .module)
+                    } else {
+                        Text("Download a Copy of Your Writing", bundle: .module)
+                    }
+                } icon: {
+                    if store.isExporting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.down.doc")
+                    }
+                }
+            }
+            .disabled(store.isExporting || store.isWorking)
+
             Button(role: .destructive) {
                 onLeave()
             } label: {
@@ -234,6 +258,7 @@ public struct PlusSettingsContent: View {
             Text("Leaving", bundle: .module)
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
+                Text("The copy is a file of your own records — every publication and article, exactly as your repository holds them.", bundle: .module)
                 Text("Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you.", bundle: .module)
                 Text("This is not the same as signing out, and not the same as deleting your account. Coming back needs a new invitation.", bundle: .module)
             }
