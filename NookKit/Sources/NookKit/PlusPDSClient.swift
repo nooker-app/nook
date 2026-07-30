@@ -146,11 +146,21 @@ public struct PlusPDSClient: Sendable {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let bearer {
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body ?? [:])
+        // No body means no body, and no content type either.
+        //
+        // This used to send `{}` with `Content-Type: application/json` regardless,
+        // which the host refuses for a method that takes no input:
+        // "A request body was provided when none was expected", 400. The only such
+        // method here is `refreshSession`, so every two hours the app tried to renew
+        // its session, was rejected, and told the writer to sign in again — with a
+        // refresh token valid for ninety days sitting in the Keychain.
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
 
         let (data, response) = try await reach { try await session.data(for: request) }
         try check(response, data)
