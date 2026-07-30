@@ -594,6 +594,16 @@ public final class ReaderStore {
         storage != nil
     }
 
+    /// The folder the reader was pointed at, when one has been chosen.
+    ///
+    /// Exposed so a writer's own published posts can be mirrored into it as Markdown
+    /// files. Everything else Nook keeps — feeds, article caches, icons — already
+    /// lives there; posts were the one thing a writer makes themselves and could not
+    /// open in Finder.
+    public var syncFolderURL: URL? {
+        storage?.directoryURL
+    }
+
     public var isRefreshing: Bool {
         !refreshingFeedIDs.isEmpty
     }

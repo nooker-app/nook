@@ -110,6 +110,30 @@ public final class PlusStore {
         didSet { PlusOwnFeed.remember(publicationURL: publicationURL) }
     }
     public private(set) var articles: [ATRecord<ArticleRecord>] = []
+
+    /// Where the reader's sync folder is, when it has one, so published posts can be
+    /// mirrored there as Markdown files.
+    ///
+    /// A closure rather than a URL because the folder can be chosen, changed, or
+    /// cleared while this store is alive, and because the reader holds the
+    /// security-scoped access that makes writing there legal at all — asking it each
+    /// time means the mirror is never written to a folder the app has lost access to.
+    public var syncFolder: (@MainActor () -> URL?)?
+
+    /// The directory the mirror last wrote to, for a screen that wants to show the
+    /// writer where their files are. Nil until a pass has run.
+    public private(set) var mirroredDirectory: URL?
+
+    /// Changes the writer made to the mirrored files by hand, found on the last pass.
+    ///
+    /// The files themselves are untouched — nothing here has been published, and
+    /// nothing has been discarded. This is the list the screen turns into "publish this
+    /// change?", which is the whole reason the folder is worth editing in.
+    ///
+    /// Internal rather than public because the type it carries is internal; the screen
+    /// that shows it lives in this module.
+    private(set) var folderEdits: [PlusPostMirror.Edit] = []
+
     public private(set) var isWorking = false
     /// User-facing message for the last failure, if any.
     public private(set) var failure: String?
@@ -138,11 +162,24 @@ public final class PlusStore {
     private var pds: PlusPDSClient
     private var service: PlusServiceClient
 
-    public init(environment: PlusEnvironment = .current) {
+    public convenience init(environment: PlusEnvironment = .current) {
+        self.init(environment: environment, urlSession: .shared, session: PlusCredential.current)
+    }
+
+    /// A store whose network and starting session are supplied.
+    ///
+    /// For tests. Both clients take a `URLSession`, so a stub protocol can answer or
+    /// fail every request, and the session is passed in rather than read from the
+    /// Keychain — a test must not depend on, or disturb, whatever is signed in on the
+    /// machine running it.
+    init(environment: PlusEnvironment, urlSession: URLSession, session: PlusSession?) {
         self.environment = environment
-        self.pds = PlusPDSClient(host: environment.pdsHost, issuedDomains: [environment.handleDomain])
-        self.service = PlusServiceClient(baseURL: environment.apiBaseURL)
-        self.session = PlusCredential.current
+        self.pds = PlusPDSClient(
+            host: environment.pdsHost, issuedDomains: [environment.handleDomain],
+            session: urlSession)
+        self.service = PlusServiceClient(
+            baseURL: environment.apiBaseURL, session: { session }, urlSession: urlSession)
+        self.session = session
     }
 
     public var isSignedIn: Bool { session != nil }
@@ -519,9 +556,108 @@ public final class PlusStore {
     public func loadContent() async {
         guard let did = session?.did else { return }
         await perform {
-            self.publications = try await self.pds.publications(did: did)
-            self.articles = try await self.pds.articles(did: did)
+            // Both fetched before either is stored, so a failure on the second leaves
+            // neither half-applied.
+            let publications = try await self.pds.publications(did: did)
+            let articles = try await self.pds.articles(did: did)
+            self.publications = publications
+            self.articles = articles
+            // Inside the work, so it is reached only when the fetch actually returned.
+            // `perform` turns a throw — or an expired session, or an unreachable host —
+            // into a message and returns, leaving `articles` as it was: empty on a fresh
+            // launch. Mirroring that would read every file in the folder as a post that
+            // no longer exists and delete the lot. It is the same mistake as a
+            // reconciler treating an unreachable source as an empty one.
+            self.mirrorPosts()
         }
+    }
+
+    /// Writes the loaded posts into the reader's sync folder.
+    ///
+    /// Runs after loading rather than after publishing, and from the records rather
+    /// than from what was just sent: the repository is what the mirror is a mirror of,
+    /// so a post created on another device appears here too, and one deleted anywhere
+    /// disappears. Publishing already reloads, so the folder is current either way.
+    ///
+    /// Deliberately silent. A sync folder that has gone away — an unplugged volume, a
+    /// revoked permission, a Dropbox folder mid-relocation — is not a publishing
+    /// failure, and reporting it as one would put an error over a post that was
+    /// published perfectly well. The pass runs again on the next load.
+    private func mirrorPosts() {
+        guard let session, let folder = syncFolder?() else { return }
+        let posts = articles.map { record in
+            PlusPostMirror.Post(
+                slug: record.value.slug,
+                title: record.value.title,
+                summary: record.value.summary ?? "",
+                markdown: record.value.content,
+                publishedAt: record.value.publishedAt,
+                url: PlusOwnFeed.articleURL(
+                    publicationURL: publicationURL, slug: record.value.slug))
+        }
+        do {
+            let result = try PlusPostMirror.write(
+                posts, to: folder, handle: session.handle, did: session.did)
+            // Not ours means another account's posts are in the folder under the same
+            // name. Nothing was touched, which is the point, and the writer is not told
+            // because there is nothing for them to do about it here.
+            mirroredDirectory =
+                result.refusedAsNotOurs
+                ? nil : PlusPostMirror.directory(in: folder, handle: session.handle)
+            // Ordered by slug so the list does not rearrange itself between passes, and
+            // replaced rather than merged: an edit the writer has since undone in the
+            // folder should stop being offered.
+            folderEdits = result.edited.sorted { $0.slug < $1.slug }
+        } catch {
+            mirroredDirectory = nil
+            folderEdits = []
+        }
+    }
+
+    /// Publishes a change the writer made to a mirrored file.
+    ///
+    /// The record is found by the slug written inside the file rather than by its name,
+    /// so a renamed file still updates the post it came from. Goes through ``update``,
+    /// which means the post keeps its identity and its links keep working — a hand edit
+    /// is an edit, not a new post.
+    ///
+    /// A file whose post no longer exists becomes a draft instead. The writing is the
+    /// part worth keeping, and re-publishing something the writer deleted elsewhere is
+    /// not a decision to make on their behalf.
+    func publishFolderEdit(_ edit: PlusPostMirror.Edit) async {
+        guard let record = articles.first(where: { $0.value.slug == edit.slug }) else {
+            save(
+                PlusDraft(
+                    title: edit.title, slug: edit.slug, summary: edit.summary,
+                    markdown: edit.markdown, wasPublished: true))
+            // Only once the draft is really on disk. Removing the file first would lose
+            // the writing outright if the draft store could not be written to, which is
+            // the one failure ``save`` reports rather than throwing.
+            guard failure == nil else { return }
+            try? FileManager.default.removeItem(at: edit.file)
+            folderEdits.removeAll { $0.slug == edit.slug }
+            return
+        }
+        await update(
+            record, title: edit.title, slug: edit.slug, markdown: edit.markdown,
+            summary: edit.summary)
+        // Not cleared unconditionally: a failed update leaves the edit outstanding, and
+        // the file is still the only copy of it. ``update`` reloads on success, which
+        // rewrites the file and drops it from the list on its own.
+        if failure == nil { folderEdits.removeAll { $0.slug == edit.slug } }
+    }
+
+    /// Throws a folder edit away and puts the copy back as the record has it.
+    ///
+    /// The one destructive thing in the mirror, so it is only ever reached from a
+    /// confirmed action. Restores rather than merely forgetting, because an edit left on
+    /// disk would be found again on the next pass and offered all over again.
+    func discardFolderEdit(_ edit: PlusPostMirror.Edit) {
+        folderEdits.removeAll { $0.slug == edit.slug }
+        try? FileManager.default.removeItem(at: edit.file)
+        // Rewrites from the records, which is where the copy comes from. A post that no
+        // longer exists leaves nothing behind, which is correct — the record is gone.
+        mirrorPosts()
     }
 
     /// Exchanges the refresh token when the access token is spent.

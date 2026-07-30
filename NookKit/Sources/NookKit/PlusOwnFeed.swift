@@ -48,6 +48,19 @@ public enum PlusOwnFeed {
         publicationURL.map(feedURL(for:))
     }
 
+    /// The public page for one post.
+    ///
+    /// The service builds this as the publication page joined with the article's slug,
+    /// and this has to agree with it: the value is written into the mirrored file so
+    /// somebody reading it in Finder can find the page. Returns nil rather than a
+    /// half-built URL when the publication is unknown, because a wrong link in a file
+    /// that outlives the app is worse than no link.
+    public static func articleURL(publicationURL: String?, slug: String) -> String? {
+        guard let publicationURL, let page = URL(string: publicationURL), !slug.isEmpty
+        else { return nil }
+        return page.appending(path: slug).absoluteString
+    }
+
     /// Whether two URLs address the same page.
     ///
     /// Used to find the reader's copy of a post the writer just published. The

@@ -1275,6 +1275,34 @@
         }
       }
     },
+    "Changes in your folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes in your folder"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダ内の変更"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "폴더에서 수정된 글"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹中的更改"
+          }
+        }
+      }
+    },
     "Check Availability": {
       "localizations": {
         "en": {
@@ -2452,6 +2480,62 @@
         }
       }
     },
+    "Discard the Change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard the Change"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "変更を破棄"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "변경 버리기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "放弃更改"
+          }
+        }
+      }
+    },
+    "Discard this change?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard this change?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この変更を破棄しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 변경을 버릴까요?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "放弃此更改？"
+          }
+        }
+      }
+    },
     "Dismiss": {
       "localizations": {
         "en": {
@@ -2916,6 +3000,34 @@
         }
       }
     },
+    "Every published post is written here as a Markdown file, named after its address.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every published post is written here as a Markdown file, named after its address."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "公開したすべての投稿が、アドレスと同じ名前の Markdown ファイルとしてここに保存されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행한 모든 글이 주소와 같은 이름의 Markdown 파일로 이곳에 저장됩니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每篇已发布的文章都以其地址命名，作为 Markdown 文件保存在这里。"
+          }
+        }
+      }
+    },
     "Everything here is already saved for offline.": {
       "localizations": {
         "en": {
@@ -3152,6 +3264,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "过滤器通过你的文件夹同步，因此同一批文章会在每台设备上都被隐藏。"
+          }
+        }
+      }
+    },
+    "Folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "폴더"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹"
           }
         }
       }
@@ -3977,6 +4117,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "只填名称。其余部分会自动补上。"
+          }
+        }
+      }
+    },
+    "Keep Editing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Editing"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編集を続ける"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계속 편집"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继续编辑"
           }
         }
       }
@@ -5796,6 +5964,34 @@
         }
       }
     },
+    "Posts on this device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posts on this device"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイス上の投稿"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기의 글 파일"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备上的文章"
+          }
+        }
+      }
+    },
     "Preparing your copy…": {
       "localizations": {
         "en": {
@@ -5904,6 +6100,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "发布"
+          }
+        }
+      }
+    },
+    "Publish This Change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publish This Change"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この変更を公開"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 변경 발행"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发布此更改"
           }
         }
       }
@@ -6849,6 +7073,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "分享链接"
+          }
+        }
+      }
+    },
+    "Show Posts in Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Posts in Files"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイルアプリで投稿を表示"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일 앱에서 글 보기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在“文件”中显示文章"
+          }
+        }
+      }
+    },
+    "Show Posts in Finder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Posts in Finder"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder で投稿を表示"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder에서 글 보기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在“访达”中显示文章"
           }
         }
       }
@@ -8207,6 +8487,34 @@
         }
       }
     },
+    "The file will be replaced with the published version of %@. What you wrote outside Nook will be gone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file will be replaced with the published version of %@. What you wrote outside Nook will be gone."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイルは公開中の「%@」の内容に戻ります。Nook の外で書いた内容は失われます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일이 발행된 ‘%@’의 내용으로 되돌아갑니다. Nook 밖에서 쓴 내용은 사라집니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该文件将被替换为已发布的《%@》。你在 Nook 之外写的内容将会消失。"
+          }
+        }
+      }
+    },
     "The invitation in that link cannot be used. It may have been used already or expired.": {
       "localizations": {
         "en": {
@@ -8577,6 +8885,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "网址会成为这篇文章链接的最后一段。可使用小写字母、数字和连字符。"
+          }
+        }
+      }
+    },
+    "These are copies. Nook keeps them up to date from your repository, so editing one does not change the published post and deleting one does not unpublish it — use the post's own row for that.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These are copies. Nook keeps them up to date from your repository, so editing one does not change the published post and deleting one does not unpublish it — use the post's own row for that."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これらはコピーです。Nook がリポジトリから最新の状態に保つため、ファイルを編集しても公開中の投稿は変わらず、削除しても非公開にはなりません。それは投稿の行から行ってください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 파일들은 사본입니다. Nook이 내 저장소에서 계속 맞춰 두므로, 파일을 고쳐도 발행된 글이 바뀌지 않고 파일을 지워도 발행이 취소되지 않습니다. 그건 글 목록의 해당 항목에서 하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这些是副本。Nook 会依据你的仓库保持它们最新，所以编辑文件不会改动已发布的文章，删除文件也不会取消发布 — 请在文章自己的那一行进行。"
           }
         }
       }
@@ -9923,6 +10259,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "现在可以发布了。"
+          }
+        }
+      }
+    },
+    "You edited these files outside Nook. Nothing is published until you say so, and the files are exactly as you left them.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You edited these files outside Nook. Nothing is published until you say so, and the files are exactly as you left them."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これらのファイルは Nook の外で編集されました。あなたが指示するまで公開されず、ファイルは編集したままの状態です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook 밖에서 이 파일들을 수정했습니다. 직접 발행하기 전까지는 아무것도 발행되지 않고, 파일은 수정한 그대로 있습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你在 Nook 之外编辑了这些文件。在你确认之前不会发布任何内容，文件也保持你留下的样子。"
           }
         }
       }

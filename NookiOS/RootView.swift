@@ -856,6 +856,11 @@ private struct CompactShell: View {
             store = PlusStore()
             composeStore = store
         }
+        // Publishing from here mirrors the writer's posts into the reader's sync
+        // folder too, so the store is told where that is. The composer is the other
+        // place a post is created, and a mirror only the settings screen refreshed
+        // would be stale exactly when the writer just wrote something.
+        store.syncFolder = { ReaderStore.shared.syncFolderURL }
         // A fresh draft, and a session read again rather than assumed. The store is
         // kept between openings, so without this the previous publish's confirmation
         // opened with the blank draft, and a session replaced by signing in on

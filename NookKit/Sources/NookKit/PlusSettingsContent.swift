@@ -22,6 +22,10 @@ public struct PlusSettingsContent: View {
     /// Asks the host to confirm leaving the service. Same reason it is not a dialog
     /// attached here.
     let onLeave: () -> Void
+    /// Asks the host to confirm throwing away a change made in the sync folder. Also a
+    /// dialog, so also not attached here — and worth confirming, because the file is
+    /// the only copy of that writing.
+    let onDiscardFolderEdit: (PlusPostMirror.Edit) -> Void
     /// The post currently being removed, so its row can show it. Owned by the host,
     /// which is where the work is run from.
     let removing: String?
@@ -33,6 +37,7 @@ public struct PlusSettingsContent: View {
         onCompose: @escaping (PlusComposeTarget) -> Void,
         onTakeDown: @escaping (ATRecord<ArticleRecord>) -> Void,
         onLeave: @escaping () -> Void,
+        onDiscardFolderEdit: @escaping (PlusPostMirror.Edit) -> Void,
         removing: String?
     ) {
         self.store = store
@@ -41,6 +46,7 @@ public struct PlusSettingsContent: View {
         self.onCompose = onCompose
         self.onTakeDown = onTakeDown
         self.onLeave = onLeave
+        self.onDiscardFolderEdit = onDiscardFolderEdit
         self.removing = removing
     }
 
@@ -202,7 +208,106 @@ public struct PlusSettingsContent: View {
                 Text("Read straight from your own repository, so this is what actually exists — not a copy Nook keeps.", bundle: .module)
             }
 
+            folderEditsSection
+
+            mirrorSection
+
             leavingSection
+        }
+    }
+
+    /// Changes the writer made to the files, waiting to be published.
+    ///
+    /// First of the folder sections, and only present when there is something in it,
+    /// because it is the one part of this screen that is about writing the writer has
+    /// done and Nook has not acted on. Nothing here has been published and nothing has
+    /// been thrown away — the file is exactly as they left it.
+    @ViewBuilder
+    private var folderEditsSection: some View {
+        if !store.folderEdits.isEmpty {
+            Section {
+                ForEach(store.folderEdits, id: \.slug) { edit in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(verbatim: edit.title.isEmpty ? edit.slug : edit.title)
+                            .font(.headline)
+                        Text(verbatim: edit.file.lastPathComponent)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Button {
+                                Task { await store.publishFolderEdit(edit) }
+                            } label: {
+                                Text("Publish This Change", bundle: .module)
+                            }
+                            .disabled(store.isWorking)
+                            Spacer()
+                            Button(role: .destructive) {
+                                onDiscardFolderEdit(edit)
+                            } label: {
+                                Text("Discard", bundle: .module)
+                            }
+                            .disabled(store.isWorking)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            } header: {
+                Text("Changes in your folder", bundle: .module)
+            } footer: {
+                Text("You edited these files outside Nook. Nothing is published until you say so, and the files are exactly as you left them.", bundle: .module)
+            }
+        }
+    }
+
+    /// Where the posts are on disk.
+    ///
+    /// Nook is a folder-backed tool everywhere else, and posts were the one thing a
+    /// writer made that they could not open in Finder. This says where they are, and
+    /// says plainly what the files are: copies, kept current from the repository. A
+    /// folder that looked authoritative would invite editing that quietly went nowhere.
+    ///
+    /// Shown only once a pass has actually written something. A path offered before the
+    /// directory exists sends the writer to a Finder window that is not there — and
+    /// nothing is written at all when no sync folder has been chosen, or when the
+    /// folder already holds another account's posts under the same name.
+    @ViewBuilder
+    private var mirrorSection: some View {
+        if let directory = store.mirroredDirectory {
+            Section {
+                Button {
+                    PlusPostMirror.reveal(directory)
+                } label: {
+                    Label {
+                        // Named for the app that opens, which is not the same one on
+                        // both platforms. "Show in Finder" on an iPhone is an
+                        // instruction to use something that is not there.
+                        #if os(macOS)
+                            Text("Show Posts in Finder", bundle: .module)
+                        #else
+                            Text("Show Posts in Files", bundle: .module)
+                        #endif
+                    } icon: {
+                        Image(systemName: "folder")
+                    }
+                }
+                LabeledContent {
+                    // The path, not just the folder name: a writer with more than one
+                    // sync folder needs to know which one this is.
+                    Text(verbatim: directory.path(percentEncoded: false))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                } label: {
+                    Text("Folder", bundle: .module)
+                }
+            } header: {
+                Text("Posts on this device", bundle: .module)
+            } footer: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Every published post is written here as a Markdown file, named after its address.", bundle: .module)
+                    Text("These are copies. Nook keeps them up to date from your repository, so editing one does not change the published post and deleting one does not unpublish it — use the post's own row for that.", bundle: .module)
+                }
+            }
         }
     }
 

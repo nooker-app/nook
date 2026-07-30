@@ -37,6 +37,11 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     /// closed itself immediately, every time.
     @State private var pendingTakeDown: ATRecord<ArticleRecord>?
 
+    /// A folder edit the writer has asked to throw away, held until they confirm. Here
+    /// for the same reason as ``pendingTakeDown``: a dialog attached inside a `List` row
+    /// is torn down the moment the row is laid out again.
+    @State private var pendingDiscard: PlusPostMirror.Edit?
+
     /// A post being removed, so its row can show it rather than the screen going busy.
     @State private var removing: String?
 
@@ -77,9 +82,36 @@ public struct PlusSettingsScreenContent<Container: View>: View {
                 onCompose: { target in present(.compose(target)) },
                 onTakeDown: { record in pendingTakeDown = record },
                 onLeave: { confirmingLeave = true },
+                onDiscardFolderEdit: { edit in pendingDiscard = edit },
                 removing: removing
             )
         )
+        // Confirmed, because the file is the only copy of that writing — the record
+        // has the old version, and discarding replaces the file with it.
+        .confirmationDialog(
+            Text("Discard this change?", bundle: .module),
+            isPresented: Binding(
+                get: { pendingDiscard != nil },
+                set: { if !$0 { pendingDiscard = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDiscard
+        ) { edit in
+            Button(role: .destructive) {
+                let edit = edit
+                pendingDiscard = nil
+                store.discardFolderEdit(edit)
+            } label: {
+                Text("Discard the Change", bundle: .module)
+            }
+            Button(role: .cancel) { pendingDiscard = nil } label: {
+                Text("Keep Editing", bundle: .module)
+            }
+        } message: { edit in
+            Text(
+                "The file will be replaced with the published version of \(edit.title.isEmpty ? edit.slug : edit.title). What you wrote outside Nook will be gone.",
+                bundle: .module)
+        }
         // Two steps to leave, and the second one spells out what stays. A single
         // destructive tap on something that needs a new invitation to undo would be
         // the wrong shape for it.
@@ -172,6 +204,11 @@ public struct PlusSettingsScreenContent<Container: View>: View {
             // Drafts are on disk, so they are there before any network call and must
             // be listed whether or not the account can be reached.
             store.loadDrafts()
+            // Published posts are mirrored into the reader's sync folder, so the store
+            // needs to know where that is. Read from the shared reader each time rather
+            // than captured now: it holds the security-scoped access that makes the
+            // write legal, and the folder can be changed while this screen is open.
+            store.syncFolder = { ReaderStore.shared.syncFolderURL }
         }
         .onChange(of: PlusInviteInbox.shared.pendingCode) { _, code in
             if code != nil { openSetupIfInvited() }
