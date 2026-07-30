@@ -29,12 +29,15 @@ public struct PlusComposeView: View {
     /// used to sit between the title and the body, pushing writing a third of the way
     /// down the screen for two values most posts never change.
     @State private var showingDetails = false
-    /// Lets the formatting buttons act on the body's selection.
+    /// Lets the formatting buttons act on the body's selection, and Return on the title
+    /// move the caret into it. Both need the text view itself, which SwiftUI's focus
+    /// and selection machinery cannot reach.
     @State private var editor = PlusMarkdownEditorHandle()
 
+    /// Only the title. The body's focus lives in the text view, and a case here for it
+    /// was a value that could be set but never took effect.
     private enum Field: Hashable {
         case title
-        case body
     }
 
     public var body: some View {
@@ -79,12 +82,11 @@ public struct PlusComposeView: View {
                             }
                             .disabled(!canPublish)
                         }
-                        // Only while the body has focus. A formatting bar over the
-                        // title would act on the wrong field, and the keyboard bar is
-                        // prime space to spend on something inapplicable.
-                        if focus == .body {
-                            ToolbarItemGroup(placement: .keyboard) { formattingBar }
-                        }
+                        // The formatting bar is not here. `.keyboard` placement is
+                        // rendered for the focused *SwiftUI* view, and the body is a
+                        // UITextView, so the bar flashed as the title gave up focus and
+                        // never returned. It is the text view's own accessory view now —
+                        // see PlusMarkdownAccessoryBar.
                     }
                     .sheet(isPresented: $showingDetails) { detailsSheet }
             }
@@ -132,10 +134,12 @@ public struct PlusComposeView: View {
                 }
                 .font(.title2.weight(.semibold))
                 .focused($focus, equals: .title)
-                // Enter moves to the body rather than doing nothing, so a title and its
-                // first sentence are one continuous action.
+                // Return moves to the body rather than doing nothing, so a title and its
+                // first sentence are one continuous action. Through the editor's handle,
+                // because `@FocusState` cannot reach into a text view SwiftUI does not
+                // own: setting it to `.body` registered a value nothing acted on.
                 .submitLabel(.next)
-                .onSubmit { focus = .body }
+                .onSubmit { editor.focus() }
                 .onChange(of: title) { _, latest in slugField.titleChanged(to: latest) }
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
@@ -156,7 +160,6 @@ public struct PlusComposeView: View {
                     placeholder: String(localized: "Write here. Markdown works.", bundle: .module),
                     handle: editor
                 )
-                .focused($focus, equals: .body)
                 .padding(.horizontal, 16)
                 .frame(maxHeight: .infinity)
             }
@@ -206,62 +209,6 @@ public struct PlusComposeView: View {
         private var fullAddress: String {
             guard let base = store.publicationBaseURL else { return slugField.value }
             return base + "/" + slugField.value
-        }
-
-        /// Markdown that would otherwise be typed character by character on a keyboard
-        /// where `*`, `#`, `[`, and a backtick are each two taps deep, mid-sentence.
-        ///
-        /// Scrollable rather than compressed: eight fixed buttons across the narrowest
-        /// phone leaves each one too small to hit, and the ones past the edge are the
-        /// ones used least.
-        private var formattingBar: some View {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
-                    formatButton("bold", label: Text("Bold", bundle: .module)) {
-                        editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "**") }
-                    }
-                    formatButton("italic", label: Text("Italic", bundle: .module)) {
-                        editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "*") }
-                    }
-                    formatButton("link", label: Text("Link", bundle: .module)) {
-                        editor.perform { PlusMarkdownEdit.link($0, selection: $1) }
-                    }
-                    Divider().frame(height: 20).padding(.horizontal, 4)
-                    formatButton("number", label: Text("Heading", bundle: .module)) {
-                        editor.perform {
-                            PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "## ")
-                        }
-                    }
-                    formatButton("list.bullet", label: Text("List", bundle: .module)) {
-                        editor.perform {
-                            PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "- ")
-                        }
-                    }
-                    formatButton("text.quote", label: Text("Quote", bundle: .module)) {
-                        editor.perform {
-                            PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "> ")
-                        }
-                    }
-                    formatButton("chevron.left.forwardslash.chevron.right", label: Text("Code", bundle: .module)) {
-                        editor.perform { PlusMarkdownEdit.codeBlock($0, selection: $1) }
-                    }
-                }
-                .padding(.horizontal, 4)
-            }
-            // The bar owns the keyboard's width; without this the group is centred and
-            // the first button sits in the middle of the screen.
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-
-        private func formatButton(
-            _ symbol: String, label: Text, action: @escaping () -> Void
-        ) -> some View {
-            Button(action: action) {
-                Image(systemName: symbol)
-                    .frame(width: 40, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel(label)
         }
 
         /// The two values a post is given once.

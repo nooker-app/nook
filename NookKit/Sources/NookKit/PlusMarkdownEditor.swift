@@ -69,6 +69,7 @@ struct PlusMarkdownEditor: View {
 @MainActor
 final class PlusMarkdownEditorHandle {
     fileprivate var attachment: ((@escaping (String, NSRange) -> PlusMarkdownEdit.Edit) -> Void)?
+    fileprivate var takeFocus: (() -> Void)?
 
     /// Whether an editor is attached. False before the editor appears, which is when a
     /// button would otherwise look enabled and do nothing.
@@ -76,6 +77,15 @@ final class PlusMarkdownEditorHandle {
 
     func perform(_ edit: @escaping (String, NSRange) -> PlusMarkdownEdit.Edit) {
         attachment?(edit)
+    }
+
+    /// Puts the caret in the body.
+    ///
+    /// Needed because `@FocusState` cannot move focus into a text view SwiftUI does not
+    /// own: `.focused(_:equals:)` on a representable registers a value nothing ever
+    /// sets or acts on, so Return at the end of the title did nothing at all.
+    func focus() {
+        takeFocus?()
     }
 }
 
@@ -231,6 +241,178 @@ extension PlatformColor {
 // MARK: - iOS
 
 #if canImport(UIKit)
+    /// The formatting bar above the keyboard.
+    ///
+    /// The text view's own `inputAccessoryView`, in UIKit, rather than SwiftUI's
+    /// `.toolbar(placement: .keyboard)`.
+    ///
+    /// That placement is rendered for whichever *SwiftUI* view holds the focus, and the
+    /// body is a `UITextView`. `.focused(_:equals:)` on a representable registers a
+    /// value that nothing sets, because SwiftUI is never told the text view took the
+    /// keyboard — so the bar appeared for the instant the title gave up focus and then
+    /// never came back. An accessory view belongs to the responder itself, so it is
+    /// shown exactly when this text view has the keyboard and at no other time.
+    ///
+    /// `UIInputView` rather than a plain view: it draws the keyboard's own background,
+    /// so the bar looks attached to the keyboard instead of floating above it.
+    final class PlusMarkdownAccessoryBar: UIInputView {
+        /// One button: what it inserts, and what to call it.
+        struct Item {
+            let symbol: String
+            let label: String
+            let edit: (String, NSRange) -> PlusMarkdownEdit.Edit
+            /// Ends the group it closes, drawn as a hairline after the button.
+            var endsGroup = false
+        }
+
+        private let perform: (@escaping (String, NSRange) -> PlusMarkdownEdit.Edit) -> Void
+        private let dismiss: () -> Void
+
+        init(
+            accent: UIColor,
+            perform: @escaping (@escaping (String, NSRange) -> PlusMarkdownEdit.Edit) -> Void,
+            dismiss: @escaping () -> Void
+        ) {
+            self.perform = perform
+            self.dismiss = dismiss
+            super.init(
+                frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44),
+                inputViewStyle: .keyboard)
+            // An accessory view is sized by its frame, not by what is inside it, and
+            // the keyboard resizes it by width alone. Without this it keeps whatever
+            // width it was born with, which is wrong on rotation and on every device
+            // but the one it happened to match.
+            autoresizingMask = .flexibleWidth
+            build(accent: accent)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("not used from a nib") }
+
+        /// The markers that are two taps deep on a phone keyboard, in the order they
+        /// get reached for: emphasis, then links, then structure.
+        static var items: [Item] {
+            [
+                Item(
+                    symbol: "bold", label: String(localized: "Bold", bundle: .module),
+                    edit: { PlusMarkdownEdit.wrap($0, selection: $1, with: "**") }),
+                Item(
+                    symbol: "italic", label: String(localized: "Italic", bundle: .module),
+                    edit: { PlusMarkdownEdit.wrap($0, selection: $1, with: "*") }),
+                Item(
+                    symbol: "link", label: String(localized: "Link", bundle: .module),
+                    edit: { PlusMarkdownEdit.link($0, selection: $1) }, endsGroup: true),
+                Item(
+                    symbol: "number", label: String(localized: "Heading", bundle: .module),
+                    edit: { PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "## ") }),
+                Item(
+                    symbol: "list.bullet", label: String(localized: "List", bundle: .module),
+                    edit: { PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "- ") }),
+                Item(
+                    symbol: "text.quote", label: String(localized: "Quote", bundle: .module),
+                    edit: { PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "> ") }),
+                Item(
+                    symbol: "chevron.left.forwardslash.chevron.right",
+                    label: String(localized: "Code", bundle: .module),
+                    edit: { PlusMarkdownEdit.codeBlock($0, selection: $1) }),
+            ]
+        }
+
+        private func build(accent: UIColor) {
+            let row = UIStackView()
+            row.axis = .horizontal
+            row.alignment = .center
+            row.spacing = 2
+
+            for item in Self.items {
+                row.addArrangedSubview(button(for: item, accent: accent))
+                if item.endsGroup {
+                    row.addArrangedSubview(separator())
+                }
+            }
+
+            // Scrollable rather than squeezed: seven fixed buttons across the narrowest
+            // phone leaves each too small to hit reliably, and the ones that fall off
+            // the edge are the ones reached for least.
+            let scroll = UIScrollView()
+            scroll.showsHorizontalScrollIndicator = false
+            scroll.alwaysBounceHorizontal = false
+            scroll.addSubview(row)
+            row.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+                row.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+                row.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+                row.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+                row.heightAnchor.constraint(equalTo: scroll.frameLayoutGuide.heightAnchor),
+            ])
+
+            // Pinned outside the scroll view, so the one button that is not about
+            // formatting is always in the same place.
+            let hide = UIButton(type: .system)
+            hide.setImage(UIImage(systemName: "keyboard.chevron.compact.down"), for: .normal)
+            hide.tintColor = accent
+            hide.accessibilityLabel = String(localized: "Hide the keyboard", bundle: .module)
+            hide.addAction(UIAction { [weak self] _ in self?.dismiss() }, for: .touchUpInside)
+
+            let edge = separator()
+            // Laid out with explicit constraints rather than an outer stack view. A
+            // scroll view has no intrinsic width, so a stack would have had nothing to
+            // size it from and could have given it none at all; here it is simply
+            // whatever is left over.
+            for child in [scroll, edge, hide] {
+                child.translatesAutoresizingMaskIntoConstraints = false
+                addSubview(child)
+            }
+            NSLayoutConstraint.activate([
+                scroll.leadingAnchor.constraint(equalTo: layoutMarginsGuide.leadingAnchor),
+                scroll.topAnchor.constraint(equalTo: topAnchor),
+                scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+                edge.leadingAnchor.constraint(equalTo: scroll.trailingAnchor),
+                edge.topAnchor.constraint(equalTo: topAnchor),
+                edge.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+                hide.leadingAnchor.constraint(equalTo: edge.trailingAnchor),
+                hide.trailingAnchor.constraint(equalTo: layoutMarginsGuide.trailingAnchor),
+                hide.topAnchor.constraint(equalTo: topAnchor),
+                hide.bottomAnchor.constraint(equalTo: bottomAnchor),
+                hide.widthAnchor.constraint(equalToConstant: 44),
+            ])
+        }
+
+        private func button(for item: Item, accent: UIColor) -> UIButton {
+            let button = UIButton(type: .system)
+            button.setImage(UIImage(systemName: item.symbol), for: .normal)
+            button.tintColor = accent
+            button.accessibilityLabel = item.label
+            // 44 across is the smallest a target should be, and the bar's own height
+            // gives the other axis.
+            button.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            let edit = item.edit
+            button.addAction(
+                UIAction { [weak self] _ in self?.perform(edit) },
+                for: .touchUpInside)
+            return button
+        }
+
+        private func separator() -> UIView {
+            let line = UIView()
+            line.backgroundColor = .separator
+            line.translatesAutoresizingMaskIntoConstraints = false
+            line.widthAnchor.constraint(equalToConstant: 1).isActive = true
+            let holder = UIView()
+            holder.addSubview(line)
+            NSLayoutConstraint.activate([
+                line.centerXAnchor.constraint(equalTo: holder.centerXAnchor),
+                line.centerYAnchor.constraint(equalTo: holder.centerYAnchor),
+                line.heightAnchor.constraint(equalToConstant: 22),
+                holder.widthAnchor.constraint(equalToConstant: 9),
+            ])
+            return holder
+        }
+    }
+
     extension PlusMarkdownEditor {
         fileprivate struct Representable: UIViewRepresentable {
             @Binding var text: String
@@ -254,6 +436,19 @@ extension PlatformColor {
                 view.autocorrectionType = .yes
                 view.spellCheckingType = .yes
                 context.coordinator.replace(text, in: view)
+
+                // The bar belongs to this responder, so it appears exactly when this
+                // text view has the keyboard. Held weakly in both directions: the bar
+                // must not keep the view alive, and the view owns the bar.
+                view.inputAccessoryView = PlusMarkdownAccessoryBar(
+                    accent: accentColor,
+                    perform: { [weak view] edit in
+                        guard let view else { return }
+                        context.coordinator.apply(edit, to: view)
+                    },
+                    dismiss: { [weak view] in view?.resignFirstResponder() }
+                )
+
                 // Weakly, so the handle outliving the view cannot keep it alive, and a
                 // button pressed after the editor is gone does nothing rather than
                 // acting on a detached view.
@@ -261,6 +456,7 @@ extension PlatformColor {
                     guard let view else { return }
                     context.coordinator.apply(makeEdit, to: view)
                 }
+                handle?.takeFocus = { [weak view] in view?.becomeFirstResponder() }
                 return view
             }
 
