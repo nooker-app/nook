@@ -3149,6 +3149,34 @@
         }
       }
     },
+    "My Nook" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Nook"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイNook"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 Nook"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的 Nook"
+          }
+        }
+      }
+    },
     "Never" : {
       "localizations" : {
         "en" : {
@@ -6862,6 +6890,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全部看完啦"
+          }
+        }
+      }
+    },
+    "Your publication was followed but couldn't be opened. It is in your feed list." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your publication was followed but couldn't be opened. It is in your feed list."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公開ページをフォローしましたが、開けませんでした。フィード一覧には追加されています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 Nook을 구독했지만 열 수 없었습니다. 피드 목록에는 추가되어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已关注你的发布页面，但无法打开。它已添加到订阅源列表中。"
           }
         }
       }

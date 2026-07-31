@@ -234,6 +234,11 @@ struct ContentView: View {
         .task {
             if signedInToPlus {
                 plusStore.loadDrafts()
+                // Restore the publication independently of the reader bootstrap.
+                // Existing writers who signed in before My Nook was introduced may
+                // not have its URL mirrored into defaults yet; loading Plus content
+                // once makes the sidebar entry appear without delaying local feeds.
+                Task { await plusStore.loadContent() }
             }
             // The store computes the unread count; macOS reflects it on the Dock.
             store.onUnreadBadgeChange = { count in
@@ -294,6 +299,7 @@ struct ContentView: View {
         .onChange(of: signedInToPlus) { _, signedIn in
             if signedIn {
                 plusStore.loadDrafts()
+                Task { await plusStore.loadContent() }
             }
         }
         .focusedSceneValue(
@@ -487,6 +493,10 @@ private struct FeedSidebar: View {
     @State private var renameFeedName = ""
     @State private var dropTargetFolder: String?
     @State private var isTopLevelDropTargeted = false
+    /// Mirrored by `PlusStore`, so the reader sidebar can expose the writer's
+    /// publication without owning another account store.
+    @AppStorage(PlusOwnFeed.publicationURLKey) private var ownPublicationURL = ""
+    @State private var isFollowingOwnFeed = false
     /// Bumped on each action-bar tap to drive a haptic tick on Force Touch
     /// trackpads (a no-op elsewhere).
     @State private var actionFeedback = 0
@@ -496,6 +506,15 @@ private struct FeedSidebar: View {
             Section("Library") {
                 ForEach(SmartSource.library) { source in
                     smartSourceRow(source)
+                }
+            }
+
+            // The writer's publication is still an ordinary RSS feed. Keeping this
+            // as a dedicated way into that feed mirrors iOS while preserving all of
+            // the native reader's existing offline, search, and read-state behavior.
+            if let publication = URL(string: ownPublicationURL) {
+                Section {
+                    ownNookRow(publication: publication)
                 }
             }
 
@@ -634,6 +653,79 @@ private struct FeedSidebar: View {
         } message: { _ in
             Text("Enter a new name, or leave empty to use the feed's own name.")
         }
+    }
+
+    /// Opens the writer's feed immediately when it is already followed, or follows
+    /// it first for an account that has never opened My Nook on this Mac.
+    @ViewBuilder
+    private func ownNookRow(publication: URL) -> some View {
+        let feedURL = PlusOwnFeed.feedURL(for: publication)
+        if let feed = store.followedFeed(at: feedURL) {
+            ownNookLabel(unread: store.unreadCount(feedID: feed.id))
+                .tag(feed.id)
+                .help("My Nook")
+                .accessibilityIdentifier("plus-own-feed")
+        } else {
+            Button {
+                Task { await followOwnFeed(publication: publication) }
+            } label: {
+                ownNookLabel(unread: 0)
+            }
+            .buttonStyle(.plain)
+            .disabled(isFollowingOwnFeed || !store.isStorageConfigured)
+            .help(
+                store.isStorageConfigured
+                    ? "My Nook"
+                    : "Choose a sync folder first")
+            .accessibilityIdentifier("plus-own-feed")
+        }
+    }
+
+    private func ownNookLabel(unread: Int) -> some View {
+        HStack(spacing: 8) {
+            Label {
+                Text("My Nook")
+            } icon: {
+                if isFollowingOwnFeed {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "square.and.pencil")
+                        .foregroundStyle(PlusTheme.accent)
+                }
+            }
+            Spacer(minLength: 8)
+            if unread > 0 {
+                Text(unread, format: .number)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func followOwnFeed(publication: URL) async {
+        isFollowingOwnFeed = true
+        defer { isFollowingOwnFeed = false }
+        let feedURL = PlusOwnFeed.feedURL(for: publication)
+        do {
+            try await store.addFeed(urlString: feedURL.absoluteString)
+        } catch {
+            store.errorMessage = error.localizedDescription
+            return
+        }
+
+        // Opening a source should show its list first, not implicitly open whichever
+        // article happened to be first in the newly fetched feed.
+        store.selectedArticleID = nil
+        guard let feed = store.followedFeed(at: feedURL) else {
+            store.errorMessage = String(
+                localized:
+                    "Your publication was followed but couldn't be opened. It is in your feed list.")
+            return
+        }
+        store.feedSelection = [feed.id]
     }
 
     private func draftRow(_ draft: PlusDraft) -> some View {
