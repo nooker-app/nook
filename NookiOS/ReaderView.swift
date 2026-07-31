@@ -302,22 +302,13 @@ struct ReaderDetailView: View {
                     header(article)
 
                     Group {
-                        if summariesEnabled {
-                            if let summary = summaryController.summary {
-                                ArticleSummaryCard(
-                                    summary: summary,
-                                    style: summaryController.style,
-                                    provider: summaryController.provider
-                                )
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                            } else {
-                                ArticleSummaryActionButton(
-                                    isLoading: summaryController.isLoading,
-                                    issue: summaryController.issue
-                                ) {
-                                    requestSummary(for: article)
-                                }
-                            }
+                        if summariesEnabled, let summary = summaryController.summary {
+                            ArticleSummaryCard(
+                                summary: summary,
+                                style: summaryController.style,
+                                provider: summaryController.provider
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                     .id(summaryAnchorID(for: article))
