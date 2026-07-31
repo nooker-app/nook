@@ -58,14 +58,15 @@ struct PlusStoreMirrorTests {
         Stub.outcome = outcome
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [Stub.self]
+        let credential = PlusSession(
+            did: "did:plc:me", handle: "tim.staging.nooker.app",
+            // Far-future expiry, so nothing tries to refresh mid-test.
+            accessJWT: Self.token(expiring: 4_000_000_000),
+            refreshJWT: Self.token(expiring: 4_000_000_000))
         return PlusStore(
             environment: .staging,
             urlSession: URLSession(configuration: configuration),
-            session: PlusSession(
-                did: "did:plc:me", handle: "tim.staging.nooker.app",
-                // Far-future expiry, so nothing tries to refresh mid-test.
-                accessJWT: Self.token(expiring: 4_000_000_000),
-                refreshJWT: Self.token(expiring: 4_000_000_000)))
+            credential: { credential })
     }
 
     /// An unsigned JWT with just the expiry the store reads.
@@ -122,7 +123,7 @@ struct PlusStoreMirrorTests {
         defer { try? FileManager.default.removeItem(at: folder) }
 
         let store = PlusStore(
-            environment: .staging, urlSession: .shared, session: nil)
+            environment: .staging, urlSession: .shared, credential: { nil })
         store.syncFolder = { folder }
         await store.loadContent()
 

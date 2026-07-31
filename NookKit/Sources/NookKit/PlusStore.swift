@@ -163,23 +163,40 @@ public final class PlusStore {
     private var service: PlusServiceClient
 
     public convenience init(environment: PlusEnvironment = .current) {
-        self.init(environment: environment, urlSession: .shared, session: PlusCredential.current)
+        self.init(
+            environment: environment, urlSession: .shared,
+            // Read again for every request, never captured. The Keychain is the one
+            // place both signing in and refreshing write to, so asking it each time
+            // is what makes a token that changed mid-session take effect.
+            credential: { PlusCredential.current })
     }
 
-    /// A store whose network and starting session are supplied.
+    /// A store whose network and credential source are supplied.
     ///
     /// For tests. Both clients take a `URLSession`, so a stub protocol can answer or
-    /// fail every request, and the session is passed in rather than read from the
+    /// fail every request, and the credential comes from a closure rather than the
     /// Keychain — a test must not depend on, or disturb, whatever is signed in on the
     /// machine running it.
-    init(environment: PlusEnvironment, urlSession: URLSession, session: PlusSession?) {
+    ///
+    /// A closure and not a value, and that distinction is the whole bug this
+    /// signature once caused: passing a `PlusSession?` here froze the token at
+    /// construction. A store built before sign-in then sent no credential ever
+    /// again, and one built with a session kept sending that access token after it
+    /// had been refreshed — so editing a post reported an expired session
+    /// immediately, signing in again changed nothing, and only relaunching helped.
+    /// Anything standing in for the Keychain has to be re-read, not remembered.
+    init(
+        environment: PlusEnvironment,
+        urlSession: URLSession,
+        credential: @escaping @Sendable () -> PlusSession?
+    ) {
         self.environment = environment
         self.pds = PlusPDSClient(
             host: environment.pdsHost, issuedDomains: [environment.handleDomain],
             session: urlSession)
         self.service = PlusServiceClient(
-            baseURL: environment.apiBaseURL, session: { session }, urlSession: urlSession)
-        self.session = session
+            baseURL: environment.apiBaseURL, session: credential, urlSession: urlSession)
+        self.session = credential()
     }
 
     public var isSignedIn: Bool { session != nil }
