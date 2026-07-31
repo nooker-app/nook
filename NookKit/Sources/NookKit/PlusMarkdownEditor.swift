@@ -1016,6 +1016,7 @@ extension PlatformColor {
             private var applyingProgrammaticEdit = false
             private var revision = 0
             private var titleTask: Task<Void, Never>?
+            private var pendingWhitespaceViewportOrigin: NSPoint?
 
             init(
                 text: Binding<String>,
@@ -1061,9 +1062,18 @@ extension PlatformColor {
             func textDidChange(_ notification: Notification) {
                 guard let view = notification.object as? NSTextView else { return }
                 guard !applyingProgrammaticEdit else { return }
+                let visibleOrigin = pendingWhitespaceViewportOrigin
+                pendingWhitespaceViewportOrigin = nil
                 revision += 1
                 text.wrappedValue = view.string
                 restyle(view)
+                if let visibleOrigin {
+                    stabilizeViewport(
+                        in: view,
+                        preserving: visibleOrigin,
+                        revealing: view.selectedRange(),
+                        atRevision: revision)
+                }
             }
 
             func textView(
@@ -1089,6 +1099,15 @@ extension PlatformColor {
                     paste(url, selection: affectedCharRange, into: textView)
                     return false
                 }
+                // A separating space is what turns `-`, `#`, and similar prefixes
+                // into Markdown. AppKit may scroll the caret while the resulting
+                // attribute delta is still changing line geometry, so remember the
+                // stable viewport before the native edit. Marked-text input is
+                // excluded by the guard above and remains owned by the IME.
+                pendingWhitespaceViewportOrigin =
+                    !replacementString.isEmpty && replacementString.allSatisfy(\.isWhitespace)
+                    ? textView.enclosingScrollView?.contentView.bounds.origin
+                    : nil
                 return true
             }
 
@@ -1163,6 +1182,7 @@ extension PlatformColor {
                 // The documented order for a programmatic edit: ask, change the
                 // storage, then report. `shouldChangeText` is what opens the undo
                 // grouping, so one button press stays one undo step.
+                let visibleOrigin = view.enclosingScrollView?.contentView.bounds.origin
                 applyingProgrammaticEdit = true
                 guard view.shouldChangeText(in: edit.range, replacementString: edit.replacement) else {
                     applyingProgrammaticEdit = false
@@ -1175,6 +1195,11 @@ extension PlatformColor {
                 revision += 1
                 text.wrappedValue = view.string
                 restyle(view)
+                stabilizeViewport(
+                    in: view,
+                    preserving: visibleOrigin,
+                    revealing: edit.selection,
+                    atRevision: revision)
             }
 
             func apply(
@@ -1208,6 +1233,54 @@ extension PlatformColor {
                     scroll.contentView.scroll(to: visibleOrigin)
                     scroll.reflectScrolledClipView(scroll.contentView)
                 }
+            }
+
+            /// Keeps a programmatic edit inside the scroll view's valid document area.
+            ///
+            /// AppKit updates an `NSTextView`'s document height lazily. Return is routed
+            /// through ``apply(_:to:)`` so Markdown lists and hard breaks can choose
+            /// their replacement text; when that replacement splits a paragraph, its
+            /// paragraph-style delta can leave the clip view using bounds calculated
+            /// for the previous height for one frame. That exposes a large blank area
+            /// until the first manual scroll constrains the bounds again.
+            ///
+            /// Preserve the writer's viewport, reveal the new caret only when needed,
+            /// and constrain the clip view both now and on the next run-loop turn after
+            /// TextKit has committed its lazy geometry. This stays local to explicit
+            /// edits and Markdown-triggering whitespace rather than forcing
+            /// full-document layout on every character.
+            private func stabilizeViewport(
+                in view: NSTextView,
+                preserving visibleOrigin: NSPoint?,
+                revealing selection: NSRange,
+                atRevision expectedRevision: Int
+            ) {
+                guard let scroll = view.enclosingScrollView else { return }
+                scroll.layoutSubtreeIfNeeded()
+                if let visibleOrigin {
+                    scroll.contentView.scroll(to: visibleOrigin)
+                }
+                constrainViewport(of: scroll)
+                view.scrollRangeToVisible(selection)
+                constrainViewport(of: scroll)
+
+                DispatchQueue.main.async { [weak self, weak view] in
+                    guard let self, let view, self.revision == expectedRevision,
+                        let scroll = view.enclosingScrollView
+                    else { return }
+                    scroll.layoutSubtreeIfNeeded()
+                    self.constrainViewport(of: scroll)
+                    view.needsDisplay = true
+                }
+            }
+
+            private func constrainViewport(of scroll: NSScrollView) {
+                let clip = scroll.contentView
+                let constrained = clip.constrainBoundsRect(clip.bounds)
+                if constrained.origin != clip.bounds.origin {
+                    clip.scroll(to: constrained.origin)
+                }
+                scroll.reflectScrolledClipView(clip)
             }
 
             private func paste(_ url: URL, selection: NSRange, into view: NSTextView) {
