@@ -240,5 +240,36 @@ struct PlusMarkdownStylerTests {
 
             #expect(changed.isEmpty)
         }
+
+        @Test("macOS TOC completion invalidates only its placeholder line")
+        func macTOCCompletionIsLocal() {
+            let prefix = String(repeating: "장문의 단락입니다.\n", count: 500)
+            let source = prefix + "[TOC"
+            let storage = MarkdownAttributes.attributed(source, accent: .systemBrown)
+            storage.append(
+                NSAttributedString(string: "]", attributes: MarkdownAttributes.baseAttributes()))
+
+            let changed = MarkdownAttributes.restyleChangedAttributes(
+                storage, accent: .systemBrown)
+            let toc = NSRange(location: storage.length - 5, length: 5)
+
+            #expect(changed == [toc])
+            #expect(NSMaxRange(changed[0]) == storage.length)
+        }
+
+        @Test("macOS footnote completion leaves the long document untouched")
+        func macFootnoteCompletionIsLocal() {
+            let prefix = String(repeating: "장문의 단락입니다.\n", count: 500)
+            let source = prefix + "참조[^1"
+            let storage = MarkdownAttributes.attributed(source, accent: .systemBrown)
+            storage.append(
+                NSAttributedString(string: "]", attributes: MarkdownAttributes.baseAttributes()))
+
+            let changed = MarkdownAttributes.restyleChangedAttributes(
+                storage, accent: .systemBrown)
+            let reference = NSRange(location: storage.length - 4, length: 4)
+
+            #expect(changed == [reference])
+        }
     #endif
 }

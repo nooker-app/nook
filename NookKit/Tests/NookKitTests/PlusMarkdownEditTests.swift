@@ -22,6 +22,16 @@ struct PlusMarkdownEditTests {
         (result as NSString).substring(with: edit.selection)
     }
 
+    private func apply(_ transaction: PlusMarkdownEdit.Transaction, to text: String) -> String {
+        let ns = NSMutableString(string: text)
+        for replacement in transaction.replacements.sorted(
+            by: { $0.range.location > $1.range.location })
+        {
+            ns.replaceCharacters(in: replacement.range, with: replacement.text)
+        }
+        return ns as String
+    }
+
     // MARK: - Wrapping
 
     @Test("wrapping a selection puts the markers around it")
@@ -196,6 +206,93 @@ struct PlusMarkdownEditTests {
         let result = apply(edit, to: text)
         #expect(result == "```\nlet x = 1\n```\n")
         #expect(selected(edit, in: result) == "let x = 1")
+    }
+
+    // MARK: - Semantic breaks
+
+    @Test("Return creates paragraphs and Shift-Return creates a visible hard break")
+    func semanticBreaks() {
+        let paragraph = PlusMarkdownEdit.breakLine(
+            "first", selection: NSRange(location: 5, length: 0), kind: .paragraph)
+        #expect(apply(paragraph, to: "first") == "first\n\n")
+
+        let line = PlusMarkdownEdit.breakLine(
+            "first", selection: NSRange(location: 5, length: 0), kind: .line)
+        #expect(apply(line, to: "first") == "first\\\n")
+    }
+
+    @Test("Return continues a list and exits an empty item")
+    func listBreaks() {
+        let next = PlusMarkdownEdit.breakLine(
+            "- one", selection: NSRange(location: 5, length: 0), kind: .paragraph)
+        #expect(apply(next, to: "- one") == "- one\n- ")
+
+        let source = "- one\n- "
+        let exit = PlusMarkdownEdit.breakLine(
+            source, selection: NSRange(location: 8, length: 0), kind: .paragraph)
+        #expect(apply(exit, to: source) == "- one\n\n")
+    }
+
+    @Test("code fences retain literal newlines")
+    func codeBreaks() {
+        let source = "```\ncode\n```"
+        let edit = PlusMarkdownEdit.breakLine(
+            source, selection: NSRange(location: 8, length: 0), kind: .paragraph)
+        #expect(apply(edit, to: source) == "```\ncode\n\n```")
+    }
+
+    // MARK: - Paste and authoring components
+
+    @Test("a pasted URL uses selected prose without waiting for metadata")
+    func pasteURLOverSelection() throws {
+        let url = try #require(URL(string: "https://example.com/a(b)"))
+        let source = "Read this today"
+        let paste = PlusMarkdownEdit.pasteURL(
+            url, into: source, selection: NSRange(location: 5, length: 4))
+        #expect(apply(paste.edit, to: source) == "Read [this](https://example.com/a\\(b\\)) today")
+    }
+
+    @Test("a pasted URL is its own immediate fallback label")
+    func pasteURLFallback() throws {
+        let url = try #require(URL(string: "https://example.com/post"))
+        let paste = PlusMarkdownEdit.pasteURL(
+            url, into: "", selection: NSRange(location: 0, length: 0))
+        let result = apply(paste.edit, to: "")
+        #expect(result == "[https://example.com/post](https://example.com/post)")
+        #expect((result as NSString).substring(with: paste.labelRange) == url.absoluteString)
+    }
+
+    @Test("TOC is inserted as one block and a second insertion selects the existing marker")
+    func tableOfContents() {
+        let first = PlusMarkdownEdit.tableOfContents(
+            "Intro", selection: NSRange(location: 5, length: 0))
+        #expect(apply(first, to: "Intro") == "Intro\n\n[TOC]\n\n")
+
+        let source = "[TOC]\n\n# One"
+        let duplicate = PlusMarkdownEdit.tableOfContents(
+            source, selection: NSRange(location: (source as NSString).length, length: 0))
+        #expect(apply(duplicate, to: source) == source)
+        #expect((source as NSString).substring(with: duplicate.selection).contains("[TOC]"))
+    }
+
+    @Test("a footnote transaction changes only its reference and definition")
+    func footnote() {
+        let source = "A claim"
+        let transaction = PlusMarkdownEdit.footnote(
+            source,
+            selection: NSRange(location: (source as NSString).length, length: 0),
+            label: "1",
+            content: "Supporting note")
+        #expect(apply(transaction, to: source) == "A claim[^1]\n\n[^1]: Supporting note\n")
+        #expect(transaction.replacements.count == 1)
+
+        let middle = PlusMarkdownEdit.footnote(
+            "Claim and more",
+            selection: NSRange(location: 5, length: 0),
+            label: "2",
+            content: "Second")
+        #expect(apply(middle, to: "Claim and more") == "Claim[^2] and more\n\n[^2]: Second\n")
+        #expect(middle.replacements.count == 2)
     }
 
     // MARK: - Everything lands inside the document

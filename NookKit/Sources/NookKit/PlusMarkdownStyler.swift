@@ -36,6 +36,14 @@ enum PlusMarkdownStyler {
         case linkText
         /// A URL, whether in a link's parentheses or written bare.
         case url
+        /// Nook's block placeholder for a generated table of contents.
+        case tableOfContents
+        /// A clickable reference such as `[^1]`.
+        case footnoteReference(label: String)
+        /// The `[^1]:` portion of a canonical footnote definition.
+        case footnoteDefinition
+        /// A paragraph ending in CommonMark's visible hard-break marker.
+        case hardBreak
         /// Syntax that has to stay visible but should recede: `#`, `**`, `>`, the
         /// bullet of a list, a fence's backticks.
         case marker
@@ -92,6 +100,19 @@ enum PlusMarkdownStyler {
             return
         }
 
+        if trimmed.caseInsensitiveCompare("[TOC]") == .orderedSame {
+            spans.append(Span(range: line, kind: .tableOfContents))
+            return
+        }
+
+        if let definition = footnoteDefinitionSpans(in: content) {
+            spans.append(contentsOf: definition)
+            if let contentRange = definition.last?.range {
+                appendInlineSpans(in: contentRange, of: text, into: &spans)
+            }
+            return
+        }
+
         if trimmed.hasPrefix(">") {
             let marker = content.range(of: ">")!
             spans.append(Span(range: marker, kind: .marker))
@@ -121,6 +142,11 @@ enum PlusMarkdownStyler {
             return
         }
 
+        if content.hasSuffix("\\") {
+            spans.append(Span(range: line, kind: .hardBreak))
+            let marker = content.index(before: content.endIndex)..<content.endIndex
+            spans.append(Span(range: marker, kind: .marker))
+        }
         appendInlineSpans(in: line, of: text, into: &spans)
     }
 
@@ -184,6 +210,27 @@ enum PlusMarkdownStyler {
         return false
     }
 
+    private static func footnoteDefinitionSpans(
+        in content: Substring
+    ) -> [Span]? {
+        var start = content.startIndex
+        var spaces = 0
+        while start < content.endIndex, content[start] == " ", spaces < 4 {
+            spaces += 1
+            start = content.index(after: start)
+        }
+        guard spaces <= 3,
+            content[start...].hasPrefix("[^"),
+            let close = content.range(of: "]:", range: start..<content.endIndex),
+            close.lowerBound > content.index(start, offsetBy: 2)
+        else { return nil }
+        let markerEnd = close.upperBound
+        return [
+            Span(range: content.startIndex..<markerEnd, kind: .footnoteDefinition),
+            Span(range: markerEnd..<content.endIndex, kind: .body),
+        ]
+    }
+
     // MARK: - Inline
 
     /// Emphasis, code, links, and bare URLs within one range.
@@ -196,7 +243,29 @@ enum PlusMarkdownStyler {
         appendDelimited(text, range, "`", .inlineCode, into: &spans)
         appendDelimited(text, range, "*", .italic, into: &spans)
         appendDelimited(text, range, "_", .italic, into: &spans)
+        appendFootnoteReferences(text, range, into: &spans)
         appendLinks(text, range, into: &spans)
+    }
+
+    private static func appendFootnoteReferences(
+        _ text: String,
+        _ range: Range<String.Index>,
+        into spans: inout [Span]
+    ) {
+        var search = range
+        while let open = text.range(of: "[^", range: search),
+            let close = text.range(of: "]", range: open.upperBound..<range.upperBound)
+        {
+            let labelRange = open.upperBound..<close.lowerBound
+            if !labelRange.isEmpty {
+                spans.append(
+                    Span(
+                        range: open.lowerBound..<close.upperBound,
+                        kind: .footnoteReference(label: String(text[labelRange]))))
+            }
+            search = close.upperBound..<range.upperBound
+            if search.isEmpty { return }
+        }
     }
 
     /// Pairs of the same delimiter, styling the contents and muting the markers.

@@ -56,6 +56,12 @@ public struct PlusComposeView: View {
     /// used to sit between the title and the body, pushing writing a third of the way
     /// down the screen for two values most posts never change.
     @State private var showingDetails = false
+    @State private var showingMarkdownHelp = false
+    @State private var showingFootnoteEditor = false
+    @State private var showingTableOfContents = false
+    @State private var footnoteLabel = "1"
+    @State private var footnoteText = ""
+    @State private var footnoteIsNew = true
     /// Lets the formatting buttons act on the body's selection, and Return on the title
     /// move the caret into it. Both need the text view itself, which SwiftUI's focus
     /// and selection machinery cannot reach.
@@ -158,8 +164,12 @@ public struct PlusComposeView: View {
                     .navigationTitle(screenTitle)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
+                        ToolbarItemGroup(placement: .topBarLeading) {
                             Button { cancel() } label: { Text("Cancel", bundle: .module) }
+                            Button { showingMarkdownHelp = true } label: {
+                                Image(systemName: "questionmark.circle")
+                            }
+                            .accessibilityLabel(Text("Markdown help", bundle: .module))
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button { Task { await publish() } } label: {
@@ -178,6 +188,9 @@ public struct PlusComposeView: View {
                         // see PlusMarkdownAccessoryBar.
                     }
                     .sheet(isPresented: $showingDetails) { detailsSheet }
+                    .sheet(isPresented: $showingMarkdownHelp) { markdownHelp }
+                    .sheet(isPresented: $showingFootnoteEditor) { footnoteEditor }
+                    .sheet(isPresented: $showingTableOfContents) { tableOfContents }
                     .confirmationDialog(
                         Text("Keep this as a draft?", bundle: .module),
                         isPresented: $askAboutDraft,
@@ -203,6 +216,9 @@ public struct PlusComposeView: View {
             .background(PlusTheme.canvas)
             .tint(PlusTheme.accent)
             .sheet(isPresented: $showingDetails) { macDetailsSheet }
+            .sheet(isPresented: $showingMarkdownHelp) { markdownHelp }
+            .sheet(isPresented: $showingFootnoteEditor) { footnoteEditor }
+            .sheet(isPresented: $showingTableOfContents) { tableOfContents }
             .onAppear { if title.isEmpty { focus = .title } }
             .confirmationDialog(
                 Text("Keep this as a draft?", bundle: .module),
@@ -270,7 +286,11 @@ public struct PlusComposeView: View {
                 PlusMarkdownEditor(
                     text: $markdown,
                     placeholder: String(localized: "Write here. Markdown works.", bundle: .module),
-                    handle: editor
+                    handle: editor,
+                    onOpenFootnote: openFootnote,
+                    onOpenTableOfContents: { showingTableOfContents = true },
+                    onRequestFootnote: beginFootnote,
+                    onRequestHelp: { showingMarkdownHelp = true }
                 )
                 .padding(.horizontal, 16)
                 .frame(maxHeight: .infinity)
@@ -355,6 +375,199 @@ public struct PlusComposeView: View {
         }
     #endif
 
+    // MARK: - Writing tools
+
+    private var markdownHelp: some View {
+        PlusMarkdownHelpView(insert: insertFromHelp)
+    }
+
+    private func insertFromHelp(_ kind: PlusMarkdownHelpView.Example.Kind) {
+        switch kind {
+        case .heading:
+            editor.perform { PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "## ") }
+        case .bold:
+            editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "**") }
+        case .italic:
+            editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "*") }
+        case .strikethrough:
+            editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "~~") }
+        case .inlineCode:
+            editor.perform { PlusMarkdownEdit.wrap($0, selection: $1, with: "`") }
+        case .link:
+            editor.perform { PlusMarkdownEdit.link($0, selection: $1) }
+        case .list:
+            editor.perform { PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "- ") }
+        case .numberedList:
+            editor.perform { PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "1. ") }
+        case .quote:
+            editor.perform { PlusMarkdownEdit.toggleLinePrefix($0, selection: $1, marker: "> ") }
+        case .code:
+            editor.perform { PlusMarkdownEdit.codeBlock($0, selection: $1) }
+        case .table:
+            editor.perform {
+                PlusMarkdownEdit.insertBlock(
+                    $0,
+                    selection: $1,
+                    source: "| Name | Value |\n| --- | --- |\n| Nook | Plus |")
+            }
+        case .thematicBreak:
+            editor.perform {
+                PlusMarkdownEdit.insertBlock($0, selection: $1, source: "---")
+            }
+        case .paragraphBreak:
+            editor.perform { PlusMarkdownEdit.breakLine($0, selection: $1, kind: .paragraph) }
+        case .lineBreak:
+            editor.perform { PlusMarkdownEdit.breakLine($0, selection: $1, kind: .line) }
+        case .tableOfContents:
+            editor.perform { PlusMarkdownEdit.tableOfContents($0, selection: $1) }
+        case .footnote:
+            showingMarkdownHelp = false
+            Task { @MainActor in
+                await Task.yield()
+                beginFootnote()
+            }
+            return
+        }
+        showingMarkdownHelp = false
+        editor.focus()
+    }
+
+    private func beginFootnote() {
+        footnoteLabel = PlusMarkdownDocumentIndex(markdown).nextNumericFootnoteLabel
+        footnoteText = ""
+        footnoteIsNew = true
+        showingFootnoteEditor = true
+    }
+
+    private func openFootnote(_ label: String) {
+        let definition = PlusMarkdownDocumentIndex(markdown).definition(label: label)
+        footnoteLabel = label
+        footnoteText = definition?.content ?? ""
+        footnoteIsNew = false
+        showingFootnoteEditor = true
+    }
+
+    private func saveFootnote() {
+        let label = footnoteLabel
+        let content = footnoteText
+        if footnoteIsNew {
+            editor.performTransaction {
+                PlusMarkdownEdit.footnote($0, selection: $1, label: label, content: content)
+            }
+        } else {
+            editor.perform { source, selection in
+                var edit = PlusMarkdownEdit.updateFootnote(
+                    source, label: label, content: content)
+                    ?? PlusMarkdownEdit.appendFootnoteDefinition(
+                        source, label: label, content: content)
+                edit.selection = selection
+                return edit
+            }
+        }
+        showingFootnoteEditor = false
+        editor.focus()
+    }
+
+    private var footnoteEditor: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(verbatim: "[^\(footnoteLabel)]")
+                    .font(.title3.monospaced().weight(.semibold))
+                    .foregroundStyle(PlusTheme.accent)
+
+                Text("The definition is stored as [^1]: without a list dash.", bundle: .module)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextEditor(text: $footnoteText)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .background(
+                        PlusTheme.hairline.opacity(0.35),
+                        in: RoundedRectangle(cornerRadius: 10))
+                    .frame(minHeight: 180)
+            }
+            .padding(20)
+            .background(PlusTheme.canvas.ignoresSafeArea())
+            .navigationTitle(
+                footnoteIsNew
+                    ? Text("New footnote", bundle: .module)
+                    : Text("Footnote", bundle: .module))
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { showingFootnoteEditor = false } label: {
+                        Text("Cancel", bundle: .module)
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { saveFootnote() } label: {
+                        Text("Save", bundle: .module)
+                    }
+                    .disabled(footnoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        #if os(iOS)
+            .presentationDetents([.medium, .large])
+        #else
+            .frame(width: 520, height: 380)
+        #endif
+    }
+
+    private var tableOfContents: some View {
+        let headings = PlusMarkdownDocumentIndex(markdown).headings
+        return NavigationStack {
+            Group {
+                if headings.isEmpty {
+                    ContentUnavailableView(
+                        "No headings yet",
+                        systemImage: "list.bullet.indent",
+                        description: Text(
+                            "Add headings with # markers and they will appear here.",
+                            bundle: .module))
+                } else {
+                    List(headings) { heading in
+                        Button {
+                            showingTableOfContents = false
+                            editor.select(heading.range)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(verbatim: String(repeating: "#", count: heading.level))
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.tertiary)
+                                Text(verbatim: heading.title)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                            }
+                            .padding(.leading, CGFloat(max(0, heading.level - 1)) * 10)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .navigationTitle(Text("Table of contents", bundle: .module))
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { showingTableOfContents = false } label: {
+                        Text("Done", bundle: .module)
+                    }
+                }
+            }
+        }
+        #if os(iOS)
+            .presentationDetents([.medium, .large])
+        #else
+            .frame(width: 500, height: 520)
+        #endif
+    }
+
     /// What is stopping publishing, or what is being waited for. Nil when there is
     /// nothing to say.
     @ViewBuilder
@@ -388,8 +601,39 @@ public struct PlusComposeView: View {
 
                 Spacer()
 
-                screenTitle
-                    .font(.headline)
+                HStack(spacing: 4) {
+                    Button {
+                        editor.perform {
+                            PlusMarkdownEdit.tableOfContents($0, selection: $1)
+                        }
+                    } label: {
+                        Label {
+                            Text("Table of contents", bundle: .module)
+                        } icon: {
+                            Image(systemName: "list.bullet.indent")
+                        }
+                    }
+                    .help(Text("Insert table of contents", bundle: .module))
+
+                    Button { beginFootnote() } label: {
+                        Label {
+                            Text("Footnote", bundle: .module)
+                        } icon: {
+                            Image(systemName: "text.badge.plus")
+                        }
+                    }
+                    .help(Text("Add footnote", bundle: .module))
+
+                    Button { showingMarkdownHelp = true } label: {
+                        Label {
+                            Text("Markdown help", bundle: .module)
+                        } icon: {
+                            Image(systemName: "questionmark.circle")
+                        }
+                    }
+                    .help(Text("Markdown help", bundle: .module))
+                }
+                .labelStyle(.iconOnly)
 
                 Spacer()
 
@@ -406,6 +650,11 @@ public struct PlusComposeView: View {
             }
             .padding(.horizontal, 18)
             .frame(height: 52)
+            .overlay {
+                screenTitle
+                    .font(.headline)
+                    .allowsHitTesting(false)
+            }
         }
 
         private var macWritingSurface: some View {
@@ -433,7 +682,11 @@ public struct PlusComposeView: View {
                 PlusMarkdownEditor(
                     text: $markdown,
                     placeholder: String(localized: "Write here. Markdown works.", bundle: .module),
-                    handle: editor
+                    handle: editor,
+                    onOpenFootnote: openFootnote,
+                    onOpenTableOfContents: { showingTableOfContents = true },
+                    onRequestFootnote: beginFootnote,
+                    onRequestHelp: { showingMarkdownHelp = true }
                 )
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
