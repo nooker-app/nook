@@ -38,7 +38,9 @@ struct PlusMarkdownEditor: View {
     var placeholder: String = ""
     /// Lets the composer's formatting buttons act on the live selection.
     var handle: PlusMarkdownEditorHandle? = nil
-    var onOpenFootnote: (String) -> Void = { _ in }
+    /// The label and the text view's exact live source. Passing the source avoids
+    /// reopening from a SwiftUI binding that may still be one update behind TextKit.
+    var onOpenFootnote: (String, String) -> Void = { _, _ in }
     var onOpenTableOfContents: () -> Void = {}
     var onRequestFootnote: () -> Void = {}
     var onRequestHelp: () -> Void = {}
@@ -623,7 +625,7 @@ extension PlatformColor {
             @Binding var text: String
             let placeholder: String
             let handle: PlusMarkdownEditorHandle?
-            let onOpenFootnote: (String) -> Void
+            let onOpenFootnote: (String, String) -> Void
             let onOpenTableOfContents: () -> Void
             let onRequestFootnote: () -> Void
             let onRequestHelp: () -> Void
@@ -717,7 +719,7 @@ extension PlatformColor {
         fileprivate final class Coordinator: NSObject, UITextViewDelegate {
             var text: Binding<String>
             var accent: UIColor
-            var onOpenFootnote: (String) -> Void
+            var onOpenFootnote: (String, String) -> Void
             var onOpenTableOfContents: () -> Void
             private var applyingProgrammaticEdit = false
             private var revision = 0
@@ -726,7 +728,7 @@ extension PlatformColor {
             init(
                 text: Binding<String>,
                 accent: UIColor,
-                onOpenFootnote: @escaping (String) -> Void,
+                onOpenFootnote: @escaping (String, String) -> Void,
                 onOpenTableOfContents: @escaping () -> Void
             ) {
                 self.text = text
@@ -820,7 +822,7 @@ extension PlatformColor {
                     URL.host == "reference",
                     let label = URL.pathComponents.dropFirst().first
                 else { return true }
-                onOpenFootnote(label)
+                onOpenFootnote(label, textView.text)
                 return false
             }
 
@@ -944,7 +946,7 @@ extension PlatformColor {
             @Binding var text: String
             let placeholder: String
             let handle: PlusMarkdownEditorHandle?
-            let onOpenFootnote: (String) -> Void
+            let onOpenFootnote: (String, String) -> Void
             let onOpenTableOfContents: () -> Void
             let onRequestFootnote: () -> Void
             let onRequestHelp: () -> Void
@@ -1009,7 +1011,7 @@ extension PlatformColor {
         fileprivate final class Coordinator: NSObject, NSTextViewDelegate {
             var text: Binding<String>
             var accent: NSColor
-            var onOpenFootnote: (String) -> Void
+            var onOpenFootnote: (String, String) -> Void
             var onOpenTableOfContents: () -> Void
             private var applyingProgrammaticEdit = false
             private var revision = 0
@@ -1018,7 +1020,7 @@ extension PlatformColor {
             init(
                 text: Binding<String>,
                 accent: NSColor,
-                onOpenFootnote: @escaping (String) -> Void,
+                onOpenFootnote: @escaping (String, String) -> Void,
                 onOpenTableOfContents: @escaping () -> Void
             ) {
                 self.text = text
@@ -1123,7 +1125,7 @@ extension PlatformColor {
                     guard let label = url.pathComponents.dropFirst().first else {
                         return false
                     }
-                    onOpenFootnote(label)
+                    onOpenFootnote(label, textView.string)
                     return true
                 default:
                     return false

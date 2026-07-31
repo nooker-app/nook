@@ -81,9 +81,80 @@ public struct PlusComposeView: View {
     /// fresh sheet identity, even when the same label is opened twice.
     private struct FootnoteSession: Identifiable {
         let id = UUID()
-        var label: String
-        var text: String
-        var isNew: Bool
+        let label: String
+        let text: String
+        let isNew: Bool
+    }
+
+    /// Owns the text field's transient edit buffer. Its initial value comes directly
+    /// from the sheet item, so the first frame cannot observe the parent's previous
+    /// optional session.
+    private struct FootnoteEditorContent: View {
+        let session: FootnoteSession
+        let onCancel: () -> Void
+        let onSave: (String) -> Void
+        @State private var text: String
+
+        init(
+            session: FootnoteSession,
+            onCancel: @escaping () -> Void,
+            onSave: @escaping (String) -> Void
+        ) {
+            self.session = session
+            self.onCancel = onCancel
+            self.onSave = onSave
+            _text = State(initialValue: session.text)
+        }
+
+        var body: some View {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(verbatim: "[^\(session.label)]")
+                        .font(.title3.monospaced().weight(.semibold))
+                        .foregroundStyle(PlusTheme.accent)
+
+                    Text("The definition is stored as [^1]: without a list dash.", bundle: .module)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextEditor(text: $text)
+                        .font(.body)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .background(
+                            PlusTheme.hairline.opacity(0.35),
+                            in: RoundedRectangle(cornerRadius: 10))
+                        .frame(minHeight: 180)
+                }
+                .padding(20)
+                .background(PlusTheme.canvas.ignoresSafeArea())
+                .navigationTitle(
+                    session.isNew
+                        ? Text("New footnote", bundle: .module)
+                        : Text("Footnote", bundle: .module))
+                #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(action: onCancel) {
+                            Text("Cancel", bundle: .module)
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button { onSave(text) } label: {
+                            Text("Save", bundle: .module)
+                        }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            #if os(iOS)
+                .presentationDetents([.medium, .large])
+            #else
+                .frame(width: 520, height: 380)
+            #endif
+        }
     }
 
     /// What the screen is called, so the writer knows whether they are about to change
@@ -449,8 +520,8 @@ public struct PlusComposeView: View {
             isNew: true)
     }
 
-    private func openFootnote(_ label: String) {
-        let definition = PlusMarkdownDocumentIndex(markdown).definition(label: label)
+    private func openFootnote(_ label: String, source: String) {
+        let definition = PlusMarkdownDocumentIndex(source).definition(label: label)
         footnoteSession = FootnoteSession(
             label: label,
             text: definition?.content ?? "",
@@ -460,10 +531,8 @@ public struct PlusComposeView: View {
             isNew: false)
     }
 
-    private func saveFootnote() {
-        guard let session = footnoteSession else { return }
+    private func saveFootnote(_ session: FootnoteSession, content: String) {
         let label = session.label
-        let content = session.text
         if session.isNew {
             editor.performTransaction {
                 PlusMarkdownEdit.footnote($0, selection: $1, label: label, content: content)
@@ -482,62 +551,11 @@ public struct PlusComposeView: View {
         editor.focus()
     }
 
-    private var footnoteText: Binding<String> {
-        Binding(
-            get: { footnoteSession?.text ?? "" },
-            set: { footnoteSession?.text = $0 })
-    }
-
     private func footnoteEditor(session: FootnoteSession) -> some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(verbatim: "[^\(session.label)]")
-                    .font(.title3.monospaced().weight(.semibold))
-                    .foregroundStyle(PlusTheme.accent)
-
-                Text("The definition is stored as [^1]: without a list dash.", bundle: .module)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextEditor(text: footnoteText)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .background(
-                        PlusTheme.hairline.opacity(0.35),
-                        in: RoundedRectangle(cornerRadius: 10))
-                    .frame(minHeight: 180)
-            }
-            .padding(20)
-            .background(PlusTheme.canvas.ignoresSafeArea())
-            .navigationTitle(
-                session.isNew
-                    ? Text("New footnote", bundle: .module)
-                    : Text("Footnote", bundle: .module))
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { footnoteSession = nil } label: {
-                        Text("Cancel", bundle: .module)
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button { saveFootnote() } label: {
-                        Text("Save", bundle: .module)
-                    }
-                    .disabled(
-                        (footnoteSession?.text ?? "")
-                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-        #if os(iOS)
-            .presentationDetents([.medium, .large])
-        #else
-            .frame(width: 520, height: 380)
-        #endif
+        FootnoteEditorContent(
+            session: session,
+            onCancel: { footnoteSession = nil },
+            onSave: { saveFootnote(session, content: $0) })
     }
 
     private var tableOfContents: some View {
