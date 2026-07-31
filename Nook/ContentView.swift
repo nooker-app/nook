@@ -27,8 +27,16 @@ struct ContentView: View {
     @AppStorage(PlusCredential.configuredKey) private var signedInToPlus = false
     @State private var showTranslatePromo = false
     @State private var plusStore = PlusStore()
-    @State private var isComposingPost = false
-    @State private var composeTarget = PlusComposeTarget.newPost
+    @State private var composeSession: ComposeSession?
+
+    /// The sheet's identity and its payload must change as one value. Keeping
+    /// `isPresented` and `composeTarget` in separate state let SwiftUI create the
+    /// first sheet from the old `.newPost` target before the draft assignment was
+    /// visible; reopening worked only because the target had settled by then.
+    private struct ComposeSession: Identifiable {
+        let id = UUID()
+        let target: PlusComposeTarget
+    }
 
     // In-app browser (window-wide bottom sheet).
     @State private var browserDragOffset: CGFloat = 0
@@ -178,9 +186,9 @@ struct ContentView: View {
                 try await store.addFeed(urlString: feedURL, toFolder: folder)
             }
         }
-        .sheet(isPresented: $isComposingPost) {
-            PlusComposeView(store: plusStore, target: composeTarget) {
-                isComposingPost = false
+        .sheet(item: $composeSession) { session in
+            PlusComposeView(store: plusStore, target: session.target) {
+                composeSession = nil
             }
         }
         // One-time promo introducing list-title translation (shown once per app).
@@ -307,8 +315,7 @@ struct ContentView: View {
     private func presentComposer(_ target: PlusComposeTarget) {
         plusStore.syncFolder = { ReaderStore.shared.syncFolderURL }
         plusStore.loadDrafts()
-        composeTarget = target
-        isComposingPost = true
+        composeSession = ComposeSession(target: target)
         Task { await plusStore.prepareToCompose() }
     }
 
