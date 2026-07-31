@@ -209,5 +209,36 @@ struct PlusMarkdownStylerTests {
             let bodyFont = try #require(body[.font] as? NSFont)
             #expect(headingFont.pointSize > bodyFont.pointSize)
         }
+
+        @Test("macOS list space restyles only the marker")
+        func macListSpaceRestylesOnlyMarker() {
+            let prefix = String(repeating: "스크롤을 채우는 본문입니다.\n", count: 200)
+            let source = prefix + "-"
+            let storage = MarkdownAttributes.attributed(source, accent: .systemBrown)
+            storage.append(
+                NSAttributedString(string: " ", attributes: MarkdownAttributes.baseAttributes()))
+
+            let changed = MarkdownAttributes.restyleChangedAttributes(
+                storage, accent: .systemBrown)
+            let marker = NSRange(location: storage.length - 2, length: 2)
+
+            #expect(changed == [marker])
+            #expect(
+                storage.attribute(.foregroundColor, at: marker.location, effectiveRange: nil)
+                    as? NSColor == NSColor.tertiaryLabelColor)
+        }
+
+        @Test("macOS ordinary trailing space does not invalidate styled text")
+        func macPlainSpaceNeedsNoRestyle() {
+            let source = String(repeating: "긴 본문입니다.\n", count: 200) + "마지막"
+            let storage = MarkdownAttributes.attributed(source, accent: .systemBrown)
+            storage.append(
+                NSAttributedString(string: " ", attributes: MarkdownAttributes.baseAttributes()))
+
+            let changed = MarkdownAttributes.restyleChangedAttributes(
+                storage, accent: .systemBrown)
+
+            #expect(changed.isEmpty)
+        }
     #endif
 }

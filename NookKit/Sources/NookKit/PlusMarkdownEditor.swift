@@ -165,6 +165,91 @@ enum MarkdownAttributes {
         }
     }
 
+    /// Applies only the rendered attributes that actually changed.
+    ///
+    /// AppKit invalidates text layout for every range whose font or paragraph style
+    /// is touched. Resetting the whole document after each keystroke therefore makes
+    /// a bottom-pinned scroll view recalculate its full height while `NSTextView` is
+    /// also scrolling the caret into view. A list's separating space made this
+    /// especially visible: two marker characters changed colour, but every paragraph
+    /// was invalidated.
+    ///
+    /// The Markdown pass remains document-wide so constructs such as fenced code stay
+    /// correct. Only its attribute delta reaches the live text storage. Kept separate
+    /// from ``restyle(_:accent:)`` because UIKit already has stable scrolling and does
+    /// not need its editing path changed.
+    @discardableResult
+    static func restyleChangedAttributes(
+        _ storage: NSMutableAttributedString, accent: PlatformColor
+    ) -> [NSRange] {
+        guard storage.length > 0 else { return [] }
+
+        let expected = attributed(storage.string, accent: accent)
+        let whole = NSRange(location: 0, length: storage.length)
+        var edits: [(
+            range: NSRange,
+            attributes: [NSAttributedString.Key: Any],
+            keys: [NSAttributedString.Key]
+        )] = []
+
+        expected.enumerateAttributes(in: whole) { expectedAttributes, expectedRange, _ in
+            storage.enumerateAttributes(in: expectedRange) { currentAttributes, currentRange, _ in
+                let keys = changedManagedKeys(currentAttributes, to: expectedAttributes)
+                guard !keys.isEmpty else { return }
+                edits.append((currentRange, expectedAttributes, keys))
+            }
+        }
+
+        for edit in edits {
+            for key in edit.keys {
+                if let value = edit.attributes[key] {
+                    storage.addAttribute(key, value: value, range: edit.range)
+                } else {
+                    storage.removeAttribute(key, range: edit.range)
+                }
+            }
+        }
+        return merged(edits.map(\.range))
+    }
+
+    private static let managedKeys: [NSAttributedString.Key] = [
+        .font,
+        .foregroundColor,
+        .paragraphStyle,
+        .strikethroughStyle,
+        .underlineStyle,
+    ]
+
+    private static func changedManagedKeys(
+        _ lhs: [NSAttributedString.Key: Any],
+        to rhs: [NSAttributedString.Key: Any]
+    ) -> [NSAttributedString.Key] {
+        managedKeys.filter { !attribute(lhs[$0], equals: rhs[$0]) }
+    }
+
+    private static func attribute(_ lhs: Any?, equals rhs: Any?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case let (lhs as NSObject, rhs as NSObject):
+            return lhs.isEqual(rhs)
+        default:
+            return false
+        }
+    }
+
+    private static func merged(_ ranges: [NSRange]) -> [NSRange] {
+        var result: [NSRange] = []
+        for range in ranges.sorted(by: { $0.location < $1.location }) {
+            guard let last = result.last, NSMaxRange(last) >= range.location else {
+                result.append(range)
+                continue
+            }
+            result[result.count - 1] = NSUnionRange(last, range)
+        }
+        return result
+    }
+
     static func attributes(
         for kind: PlusMarkdownStyler.Kind, accent: PlatformColor
     ) -> [NSAttributedString.Key: Any] {
@@ -652,7 +737,7 @@ extension PlatformColor {
                 guard view.markedRange().length == 0, let storage = view.textStorage else { return }
                 let selection = view.selectedRange()
                 storage.beginEditing()
-                MarkdownAttributes.restyle(storage, accent: accent)
+                MarkdownAttributes.restyleChangedAttributes(storage, accent: accent)
                 storage.endEditing()
 
                 if view.selectedRange() != selection {
