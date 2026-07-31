@@ -43,13 +43,14 @@ struct NookApp: App {
 /// running in the background rather than quitting on last-window-close).
 private struct MainWindowContent: View {
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(PlusCredential.configuredKey) private var signedInToPlus = false
 
     var body: some View {
         ContentView()
             // Give the app-lifetime activity controller the exact reader window.
             // App activation alone is insufficient: Settings can be frontmost,
             // the reader can be closed/minimized, or the Mac can be unattended.
-            .background(ReaderWindowProbe())
+            .background(ReaderWindowProbe(title: signedInToPlus ? "Nook+" : "Nook"))
             // Format dates/numbers with the chosen UI language, not the OS
             // locale (`Text(_, format:)` otherwise follows the environment).
             .environment(\.locale, AppLanguage.formattingLocale)
@@ -61,12 +62,32 @@ private struct MainWindowContent: View {
 /// native equivalent of attaching an element ref in a web app: it lets the
 /// app-lifetime controller distinguish the actual reading surface from Settings.
 private struct ReaderWindowProbe: NSViewRepresentable {
-    func makeNSView(context: Context) -> ProbeView { ProbeView() }
-    func updateNSView(_ nsView: ProbeView, context: Context) {}
+    let title: String
+
+    func makeNSView(context: Context) -> ProbeView { ProbeView(title: title) }
+
+    func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.title = title
+    }
 
     final class ProbeView: NSView {
+        var title: String {
+            didSet { window?.title = title }
+        }
+
+        init(title: String) {
+            self.title = title
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            window?.title = title
             BackgroundRefreshController.shared?.setReaderWindow(window)
         }
     }

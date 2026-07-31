@@ -24,7 +24,10 @@ struct ContentView: View {
     @AppStorage("showUnreadBadge") private var showUnreadBadge = true
     @AppStorage(ReaderStore.translateTitlesPromoSeenKey) private var hasSeenTranslatePromo = false
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
+    @AppStorage(PlusCredential.configuredKey) private var signedInToPlus = false
     @State private var showTranslatePromo = false
+    @State private var plusStore = PlusStore()
+    @State private var isComposingPost = false
 
     // In-app browser (window-wide bottom sheet).
     @State private var browserDragOffset: CGFloat = 0
@@ -110,6 +113,22 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
+                if signedInToPlus {
+                    Button {
+                        presentComposer()
+                    } label: {
+                        Label("Write a post", systemImage: "square.and.pencil")
+                            .labelStyle(.titleAndIcon)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 4)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .tint(PlusTheme.accent)
+                    .help("Write a post")
+                    .accessibilityIdentifier("plus-compose-button")
+                }
+
                 Button {
                     store.toggleSelectedStarred()
                 } label: {
@@ -156,6 +175,9 @@ struct ContentView: View {
             AddFeedSheet(folders: store.feedFolders) { feedURL, folder in
                 try await store.addFeed(urlString: feedURL, toFolder: folder)
             }
+        }
+        .sheet(isPresented: $isComposingPost) {
+            PlusComposeView(store: plusStore) { isComposingPost = false }
         }
         // One-time promo introducing list-title translation (shown once per app).
         .sheet(isPresented: $showTranslatePromo) {
@@ -262,6 +284,16 @@ struct ContentView: View {
                 toggleReaderMode: store.toggleBrowserMode
             )
         )
+    }
+
+    /// Opens publishing directly from the main reader window. The retained Plus
+    /// store keeps a cancelled writing session available when the sheet is reopened,
+    /// while preparation reloads account data changed from the Settings window.
+    private func presentComposer() {
+        plusStore.syncFolder = { ReaderStore.shared.syncFolderURL }
+        plusStore.loadDrafts()
+        isComposingPost = true
+        Task { await plusStore.prepareToCompose() }
     }
 
     /// The window-wide in-app browser bottom sheet, its dimmer, and the fixed
