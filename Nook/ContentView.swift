@@ -28,6 +28,7 @@ struct ContentView: View {
     @State private var showTranslatePromo = false
     @State private var plusStore = PlusStore()
     @State private var isComposingPost = false
+    @State private var composeTarget = PlusComposeTarget.newPost
 
     // In-app browser (window-wide bottom sheet).
     @State private var browserDragOffset: CGFloat = 0
@@ -79,7 +80,9 @@ struct ContentView: View {
                 onChooseSyncFolder: { chooseSyncFolder() },
                 onAddFeed: { isAddingFeed = true },
                 onImportOPML: { isImportingOPML = true },
-                onExportOPML: { isExportingOPML = true }
+                onExportOPML: { isExportingOPML = true },
+                drafts: signedInToPlus ? plusStore.drafts : [],
+                onOpenDraft: { presentComposer(.draft($0)) }
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 270, max: 340)
         } content: {
@@ -115,7 +118,7 @@ struct ContentView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 if signedInToPlus {
                     Button {
-                        presentComposer()
+                        presentComposer(.newPost)
                     } label: {
                         Label("Write a post", systemImage: "square.and.pencil")
                             .labelStyle(.titleAndIcon)
@@ -176,7 +179,9 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $isComposingPost) {
-            PlusComposeView(store: plusStore) { isComposingPost = false }
+            PlusComposeView(store: plusStore, target: composeTarget) {
+                isComposingPost = false
+            }
         }
         // One-time promo introducing list-title translation (shown once per app).
         .sheet(isPresented: $showTranslatePromo) {
@@ -219,6 +224,9 @@ struct ContentView: View {
             store.handleOPMLExport(result)
         }
         .task {
+            if signedInToPlus {
+                plusStore.loadDrafts()
+            }
             // The store computes the unread count; macOS reflects it on the Dock.
             store.onUnreadBadgeChange = { count in
                 NSApp.dockTile.badgeLabel = count > 0 ? String(count) : nil
@@ -242,6 +250,9 @@ struct ContentView: View {
             // Pull another device's changes (read/star/feeds) from the sync
             // folder first, then refresh feeds over the network (throttled).
             store.syncFromDisk()
+            if signedInToPlus {
+                plusStore.loadDrafts()
+            }
             if autoRefreshEnabled { store.refreshOnActivation(honorThrottle: true) }
         }
         // Periodic auto-refresh is driven app-wide by BackgroundRefreshController
@@ -272,6 +283,11 @@ struct ContentView: View {
             }
         }
         .onChange(of: showUnreadBadge) { _, newValue in store.showsUnreadBadge = newValue }
+        .onChange(of: signedInToPlus) { _, signedIn in
+            if signedIn {
+                plusStore.loadDrafts()
+            }
+        }
         .focusedSceneValue(
             \.readerCommandActions,
             ReaderCommandActions(
@@ -288,9 +304,10 @@ struct ContentView: View {
     /// Opens publishing directly from the main reader window. The retained Plus
     /// store keeps a cancelled writing session available when the sheet is reopened,
     /// while preparation reloads account data changed from the Settings window.
-    private func presentComposer() {
+    private func presentComposer(_ target: PlusComposeTarget) {
         plusStore.syncFolder = { ReaderStore.shared.syncFolderURL }
         plusStore.loadDrafts()
+        composeTarget = target
         isComposingPost = true
         Task { await plusStore.prepareToCompose() }
     }
@@ -448,6 +465,8 @@ private struct FeedSidebar: View {
     var onAddFeed: () -> Void
     var onImportOPML: () -> Void
     var onExportOPML: () -> Void
+    var drafts: [PlusDraft]
+    var onOpenDraft: (PlusDraft) -> Void
 
     @AppStorage("collapsedFolders") private var collapsedFoldersData = Data()
     @State private var isCreatingFolder = false
@@ -468,6 +487,14 @@ private struct FeedSidebar: View {
             Section("Library") {
                 ForEach(SmartSource.library) { source in
                     smartSourceRow(source)
+                }
+            }
+
+            if !drafts.isEmpty {
+                Section("Drafts") {
+                    ForEach(drafts) { draft in
+                        draftRow(draft)
+                    }
                 }
             }
 
@@ -598,6 +625,38 @@ private struct FeedSidebar: View {
         } message: { _ in
             Text("Enter a new name, or leave empty to use the feed's own name.")
         }
+    }
+
+    private func draftRow(_ draft: PlusDraft) -> some View {
+        Button {
+            onOpenDraft(draft)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.text")
+                    .foregroundStyle(PlusTheme.accent)
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    if draft.displayTitle.isEmpty {
+                        Text("Untitled")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(verbatim: draft.displayTitle)
+                    }
+
+                    Text(draft.updatedAt, format: .relative(presentation: .named))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+
+                Spacer(minLength: 4)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(draft.displayTitle.isEmpty ? String(localized: "Untitled") : draft.displayTitle)
+        .accessibilityIdentifier("plus-draft-\(draft.id.uuidString)")
     }
 
     /// The library-management bar at the base of the sidebar — the native home
