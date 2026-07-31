@@ -57,11 +57,8 @@ public struct PlusComposeView: View {
     /// down the screen for two values most posts never change.
     @State private var showingDetails = false
     @State private var showingMarkdownHelp = false
-    @State private var showingFootnoteEditor = false
     @State private var showingTableOfContents = false
-    @State private var footnoteLabel = "1"
-    @State private var footnoteText = ""
-    @State private var footnoteIsNew = true
+    @State private var footnoteSession: FootnoteSession?
     /// Lets the formatting buttons act on the body's selection, and Return on the title
     /// move the caret into it. Both need the text view itself, which SwiftUI's focus
     /// and selection machinery cannot reach.
@@ -74,6 +71,19 @@ public struct PlusComposeView: View {
     /// was a value that could be set but never took effect.
     private enum Field: Hashable {
         case title
+    }
+
+    /// Everything needed to present one footnote travels as one sheet item.
+    ///
+    /// Separate `footnoteText` and `showingFootnoteEditor` state allowed SwiftUI to
+    /// create the sheet from the initial empty text before the definition parsed
+    /// from Markdown became visible. The UUID also gives every reference click a
+    /// fresh sheet identity, even when the same label is opened twice.
+    private struct FootnoteSession: Identifiable {
+        let id = UUID()
+        var label: String
+        var text: String
+        var isNew: Bool
     }
 
     /// What the screen is called, so the writer knows whether they are about to change
@@ -189,7 +199,7 @@ public struct PlusComposeView: View {
                     }
                     .sheet(isPresented: $showingDetails) { detailsSheet }
                     .sheet(isPresented: $showingMarkdownHelp) { markdownHelp }
-                    .sheet(isPresented: $showingFootnoteEditor) { footnoteEditor }
+                    .sheet(item: $footnoteSession) { footnoteEditor(session: $0) }
                     .sheet(isPresented: $showingTableOfContents) { tableOfContents }
                     .confirmationDialog(
                         Text("Keep this as a draft?", bundle: .module),
@@ -217,7 +227,7 @@ public struct PlusComposeView: View {
             .tint(PlusTheme.accent)
             .sheet(isPresented: $showingDetails) { macDetailsSheet }
             .sheet(isPresented: $showingMarkdownHelp) { markdownHelp }
-            .sheet(isPresented: $showingFootnoteEditor) { footnoteEditor }
+            .sheet(item: $footnoteSession) { footnoteEditor(session: $0) }
             .sheet(isPresented: $showingTableOfContents) { tableOfContents }
             .onAppear { if title.isEmpty { focus = .title } }
             .confirmationDialog(
@@ -433,24 +443,28 @@ public struct PlusComposeView: View {
     }
 
     private func beginFootnote() {
-        footnoteLabel = PlusMarkdownDocumentIndex(markdown).nextNumericFootnoteLabel
-        footnoteText = ""
-        footnoteIsNew = true
-        showingFootnoteEditor = true
+        footnoteSession = FootnoteSession(
+            label: PlusMarkdownDocumentIndex(markdown).nextNumericFootnoteLabel,
+            text: "",
+            isNew: true)
     }
 
     private func openFootnote(_ label: String) {
         let definition = PlusMarkdownDocumentIndex(markdown).definition(label: label)
-        footnoteLabel = label
-        footnoteText = definition?.content ?? ""
-        footnoteIsNew = false
-        showingFootnoteEditor = true
+        footnoteSession = FootnoteSession(
+            label: label,
+            text: definition?.content ?? "",
+            // The reference already exists in the source. If its definition is
+            // missing, Save appends only the definition rather than duplicating the
+            // reference at the current caret.
+            isNew: false)
     }
 
     private func saveFootnote() {
-        let label = footnoteLabel
-        let content = footnoteText
-        if footnoteIsNew {
+        guard let session = footnoteSession else { return }
+        let label = session.label
+        let content = session.text
+        if session.isNew {
             editor.performTransaction {
                 PlusMarkdownEdit.footnote($0, selection: $1, label: label, content: content)
             }
@@ -464,14 +478,20 @@ public struct PlusComposeView: View {
                 return edit
             }
         }
-        showingFootnoteEditor = false
+        footnoteSession = nil
         editor.focus()
     }
 
-    private var footnoteEditor: some View {
+    private var footnoteText: Binding<String> {
+        Binding(
+            get: { footnoteSession?.text ?? "" },
+            set: { footnoteSession?.text = $0 })
+    }
+
+    private func footnoteEditor(session: FootnoteSession) -> some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 14) {
-                Text(verbatim: "[^\(footnoteLabel)]")
+                Text(verbatim: "[^\(session.label)]")
                     .font(.title3.monospaced().weight(.semibold))
                     .foregroundStyle(PlusTheme.accent)
 
@@ -479,7 +499,7 @@ public struct PlusComposeView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                TextEditor(text: $footnoteText)
+                TextEditor(text: footnoteText)
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .padding(8)
@@ -491,7 +511,7 @@ public struct PlusComposeView: View {
             .padding(20)
             .background(PlusTheme.canvas.ignoresSafeArea())
             .navigationTitle(
-                footnoteIsNew
+                session.isNew
                     ? Text("New footnote", bundle: .module)
                     : Text("Footnote", bundle: .module))
             #if os(iOS)
@@ -499,7 +519,7 @@ public struct PlusComposeView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { showingFootnoteEditor = false } label: {
+                    Button { footnoteSession = nil } label: {
                         Text("Cancel", bundle: .module)
                     }
                 }
@@ -507,7 +527,9 @@ public struct PlusComposeView: View {
                     Button { saveFootnote() } label: {
                         Text("Save", bundle: .module)
                     }
-                    .disabled(footnoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        (footnoteSession?.text ?? "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
