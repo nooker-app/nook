@@ -326,7 +326,7 @@ enum MarkdownAttributes {
             ]
         case .footnoteDefinition:
             return [.font: mono, .foregroundColor: accent]
-        case .hardBreak:
+        case .softBreak, .hardBreak:
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineSpacing = 3
             paragraph.paragraphSpacing = 0

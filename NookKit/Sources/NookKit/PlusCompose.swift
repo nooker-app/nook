@@ -415,7 +415,7 @@ public struct PlusComposeView: View {
                 PlusMarkdownEdit.insertBlock($0, selection: $1, source: "---")
             }
         case .paragraphBreak:
-            editor.perform { PlusMarkdownEdit.breakLine($0, selection: $1, kind: .paragraph) }
+            editor.perform { PlusMarkdownEdit.paragraphBreak($0, selection: $1) }
         case .lineBreak:
             editor.perform { PlusMarkdownEdit.breakLine($0, selection: $1, kind: .line) }
         case .tableOfContents:
@@ -595,9 +595,13 @@ public struct PlusComposeView: View {
         /// top bar, then a large title and a body that owns all remaining space.
         /// Address and summary are available without occupying the writing canvas.
         private var macToolbar: some View {
-            HStack {
+            HStack(spacing: 12) {
                 Button { cancel() } label: { Text("Cancel", bundle: .module) }
                     .keyboardShortcut(.cancelAction)
+
+                screenTitle
+                    .font(.headline)
+                    .lineLimit(1)
 
                 Spacer()
 
@@ -635,8 +639,6 @@ public struct PlusComposeView: View {
                 }
                 .labelStyle(.iconOnly)
 
-                Spacer()
-
                 Button { Task { await publish() } } label: {
                     if store.isWorking {
                         ProgressView().controlSize(.small)
@@ -650,11 +652,6 @@ public struct PlusComposeView: View {
             }
             .padding(.horizontal, 18)
             .frame(height: 52)
-            .overlay {
-                screenTitle
-                    .font(.headline)
-                    .allowsHitTesting(false)
-            }
         }
 
         private var macWritingSurface: some View {

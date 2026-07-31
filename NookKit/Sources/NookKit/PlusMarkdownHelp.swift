@@ -75,11 +75,11 @@ struct PlusMarkdownHelpView: View {
             source: "---", kind: .thematicBreak),
         .init(
             title: String(localized: "New paragraph", bundle: .module),
-            explanation: String(localized: "Return inserts the blank line that separates Markdown paragraphs.", bundle: .module),
+            explanation: String(localized: "Press Return twice to insert the blank line that separates Markdown paragraphs.", bundle: .module),
             source: "First paragraph\n\nSecond paragraph", kind: .paragraphBreak),
         .init(
-            title: String(localized: "Line break", bundle: .module),
-            explanation: String(localized: "Shift-Return keeps the next line in the same paragraph.", bundle: .module),
+            title: String(localized: "Explicit line break", bundle: .module),
+            explanation: String(localized: "Return starts a source line. Shift-Return adds Markdown's explicit backslash break.", bundle: .module),
             source: "First line\\\nSecond line", kind: .lineBreak),
         .init(
             title: String(localized: "Table of contents", bundle: .module),

@@ -117,12 +117,16 @@ struct PlusMarkdownEditorTests {
 
     @Test("TOC and footnote references are interactive without rewriting their source")
     func authoringComponents() {
-        let source = "[TOC]\n\nA claim[^1].\n\n[^1]: Note"
+        let source = "[TOC]\n\nA claim[^1].\n\n- [^1]: Pasted note"
         let styled = attributed(source)
         #expect(styled.string == source)
         #expect(styled.attribute(.link, at: 1, effectiveRange: nil) as? URL != nil)
         let reference = (source as NSString).range(of: "[^1]")
         #expect(styled.attribute(.link, at: reference.location, effectiveRange: nil) as? URL != nil)
+        let definition = (source as NSString).range(of: "- [^1]:")
+        #expect(
+            styled.attribute(.foregroundColor, at: definition.location, effectiveRange: nil)
+                as? PlatformColor == accent)
     }
 
     @Test("a hard break removes paragraph spacing only from its own line")
@@ -137,6 +141,27 @@ struct PlusMarkdownEditorTests {
                 effectiveRange: nil) as? NSParagraphStyle)
         #expect(first.paragraphSpacing == 0)
         #expect(second.paragraphSpacing > 0)
+    }
+
+    @Test("a single source newline has line spacing while a blank line separates paragraphs")
+    func softBreakParagraphSpacing() throws {
+        let source = "first\nsecond\n\nthird"
+        let styled = attributed(source)
+        let first = try #require(
+            styled.attribute(.paragraphStyle, at: 1, effectiveRange: nil)
+                as? NSParagraphStyle)
+        let second = try #require(
+            styled.attribute(
+                .paragraphStyle,
+                at: (source as NSString).range(of: "second").location,
+                effectiveRange: nil) as? NSParagraphStyle)
+        let trailing = attributed("first\n")
+        let trailingFirst = try #require(
+            trailing.attribute(.paragraphStyle, at: 1, effectiveRange: nil)
+                as? NSParagraphStyle)
+        #expect(first.paragraphSpacing == 0)
+        #expect(second.paragraphSpacing > 0)
+        #expect(trailingFirst.paragraphSpacing == 0)
     }
 
     /// A whole document has to style without trapping. Every range comes from the

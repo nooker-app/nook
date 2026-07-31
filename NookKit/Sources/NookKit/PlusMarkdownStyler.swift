@@ -42,6 +42,8 @@ enum PlusMarkdownStyler {
         case footnoteReference(label: String)
         /// The `[^1]:` portion of a canonical footnote definition.
         case footnoteDefinition
+        /// A physical newline without a blank line after it.
+        case softBreak
         /// A paragraph ending in CommonMark's visible hard-break marker.
         case hardBreak
         /// Syntax that has to stay visible but should recede: `#`, `**`, `>`, the
@@ -72,14 +74,21 @@ enum PlusMarkdownStyler {
             if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                 spans.append(Span(range: line, kind: .codeBlock))
                 insideFence.toggle()
-                continue
-            }
-            if insideFence {
+            } else if insideFence {
                 spans.append(Span(range: line, kind: .codeBlock))
-                continue
+            } else {
+                appendBlockSpans(
+                    text: text, line: line, content: content, trimmed: trimmed, into: &spans)
             }
 
-            appendBlockSpans(text: text, line: line, content: content, trimmed: trimmed, into: &spans)
+            // A single physical newline is a line break in the writing surface.
+            // Keep paragraph spacing only when a blank line follows.
+            if !line.isEmpty, line.upperBound < text.endIndex {
+                let next = text.index(after: line.upperBound)
+                if next == text.endIndex || text[next] != "\n" {
+                    spans.append(Span(range: line, kind: .softBreak))
+                }
+            }
         }
 
         return spans
@@ -219,7 +228,27 @@ enum PlusMarkdownStyler {
             spaces += 1
             start = content.index(after: start)
         }
-        guard spaces <= 3,
+        guard spaces <= 3 else { return nil }
+
+        // Older Nook posts, including content pasted from ordinary Markdown lists,
+        // may keep definitions as `- [^1]: ...`. Treat that prefix as part of the
+        // source definition without normalising or deleting it.
+        if start < content.endIndex,
+           ["-", "+", "*"].contains(content[start])
+        {
+            let afterBullet = content.index(after: start)
+            guard afterBullet < content.endIndex,
+                content[afterBullet] == " " || content[afterBullet] == "\t"
+            else { return nil }
+            start = afterBullet
+            while start < content.endIndex,
+                content[start] == " " || content[start] == "\t"
+            {
+                start = content.index(after: start)
+            }
+        }
+
+        guard
             content[start...].hasPrefix("[^"),
             let close = content.range(of: "]:", range: start..<content.endIndex),
             close.lowerBound > content.index(start, offsetBy: 2)

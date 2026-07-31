@@ -210,15 +210,19 @@ struct PlusMarkdownEditTests {
 
     // MARK: - Semantic breaks
 
-    @Test("Return creates paragraphs and Shift-Return creates a visible hard break")
+    @Test("Return creates one source line and Shift-Return creates a visible hard break")
     func semanticBreaks() {
-        let paragraph = PlusMarkdownEdit.breakLine(
-            "first", selection: NSRange(location: 5, length: 0), kind: .paragraph)
-        #expect(apply(paragraph, to: "first") == "first\n\n")
-
         let line = PlusMarkdownEdit.breakLine(
+            "first", selection: NSRange(location: 5, length: 0), kind: .paragraph)
+        #expect(apply(line, to: "first") == "first\n")
+
+        let explicit = PlusMarkdownEdit.breakLine(
             "first", selection: NSRange(location: 5, length: 0), kind: .line)
-        #expect(apply(line, to: "first") == "first\\\n")
+        #expect(apply(explicit, to: "first") == "first\\\n")
+
+        let paragraph = PlusMarkdownEdit.paragraphBreak(
+            "first", selection: NSRange(location: 5, length: 0))
+        #expect(apply(paragraph, to: "first") == "first\n\n")
     }
 
     @Test("Return continues a list and exits an empty item")
@@ -293,6 +297,15 @@ struct PlusMarkdownEditTests {
             content: "Second")
         #expect(apply(middle, to: "Claim and more") == "Claim[^2] and more\n\n[^2]: Second\n")
         #expect(middle.replacements.count == 2)
+    }
+
+    @Test("editing a pasted footnote changes only its source content")
+    func updatePastedFootnote() throws {
+        let source = "주장[^1]\n\n- [^1]: 붙여넣은 원문"
+        let edit = try #require(
+            PlusMarkdownEdit.updateFootnote(
+                source, label: "1", content: "수정한 내용"))
+        #expect(apply(edit, to: source) == "주장[^1]\n\n- [^1]: 수정한 내용")
     }
 
     // MARK: - Everything lands inside the document

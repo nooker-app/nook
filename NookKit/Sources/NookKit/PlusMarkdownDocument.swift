@@ -109,7 +109,8 @@ struct PlusMarkdownDocumentIndex: Sendable {
         in line: String, lineRange: NSRange
     ) -> FootnoteDefinition? {
         guard
-            let regex = try? NSRegularExpression(pattern: #"^[ \t]{0,3}\[\^([^\]\s]+)\]:[ \t]*(.*)$"#),
+            let regex = try? NSRegularExpression(
+                pattern: #"^[ \t]{0,3}(?:[-+*][ \t]+)?\[\^([^\]\s]+)\]:[ \t]*(.*)$"#),
             let match = regex.firstMatch(
                 in: line, range: NSRange(location: 0, length: (line as NSString).length))
         else { return nil }

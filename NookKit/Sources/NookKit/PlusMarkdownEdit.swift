@@ -164,10 +164,11 @@ enum PlusMarkdownEdit {
 
     /// Handles Return without teaching either platform about Markdown structure.
     ///
-    /// A paragraph is a blank line in CommonMark. A hard line break is a visible
-    /// backslash before the newline, which is safer than two invisible trailing
-    /// spaces. Code blocks keep literal newlines, while lists retain the familiar
-    /// Return-to-next-item / Return-on-empty-to-exit behaviour.
+    /// Return inserts one physical newline. Pressing it again on the empty line
+    /// creates the blank line that separates CommonMark paragraphs. A hard line
+    /// break is a visible backslash before the newline, which is safer than two
+    /// invisible trailing spaces. Code blocks keep literal newlines, while lists
+    /// retain the familiar Return-to-next-item / Return-on-empty-to-exit behaviour.
     static func breakLine(_ text: String, selection: NSRange, kind: BreakKind) -> Edit {
         let ns = text as NSString
         let caret = min(selection.location, ns.length)
@@ -200,7 +201,12 @@ enum PlusMarkdownEdit {
             }
         }
 
-        return insertion(selection, text: kind == .line ? "\\\n" : "\n\n")
+        return insertion(selection, text: kind == .line ? "\\\n" : "\n")
+    }
+
+    /// Inserts the blank line that separates two Markdown paragraphs.
+    static func paragraphBreak(_ text: String, selection: NSRange) -> Edit {
+        insertion(selection, text: "\n\n")
     }
 
     struct LinkPaste: Equatable {

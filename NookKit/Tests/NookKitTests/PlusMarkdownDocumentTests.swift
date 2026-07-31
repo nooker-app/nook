@@ -35,10 +35,14 @@ struct PlusMarkdownDocumentTests {
         #expect(index.nextNumericFootnoteLabel == "2")
     }
 
-    @Test("a list dash does not become a canonical footnote definition")
-    func listDashIsNotDefinition() {
-        let index = PlusMarkdownDocumentIndex("- [^1]: This is a list item.")
-        #expect(index.definitions.isEmpty)
+    @Test("a pasted list-prefixed definition remains source-backed")
+    func listPrefixedDefinition() throws {
+        let source = "- [^1]: 붙여넣은 각주 내용을 그대로 보여줍니다."
+        let definition = try #require(
+            PlusMarkdownDocumentIndex(source).definition(label: "1"))
+        #expect(definition.content == "붙여넣은 각주 내용을 그대로 보여줍니다.")
+        #expect((source as NSString).substring(with: definition.contentRange) == definition.content)
+        #expect((source as NSString).substring(with: definition.markerRange) == "- [^1]: ")
     }
 
     @Test("HTML title metadata prefers Open Graph and decodes entities")
