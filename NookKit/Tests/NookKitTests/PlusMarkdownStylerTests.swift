@@ -2,6 +2,10 @@ import Testing
 
 @testable import NookKit
 
+#if canImport(AppKit)
+    import AppKit
+#endif
+
 /// The styler runs on every keystroke, over text that is half-typed most of the
 /// time. These pin what it must recognise, and just as importantly what it must
 /// leave alone: a construct that flickers as it is being completed puts the writer's
@@ -189,4 +193,21 @@ struct PlusMarkdownStylerTests {
         #expect(styled("**반가워요** 🎉 그리고 *테스트*", as: .italic) == ["테스트"])
         #expect(styled("# 안녕하세요 🎉", as: .heading(level: 1)) == ["안녕하세요 🎉"])
     }
+
+    #if canImport(AppKit)
+        /// NSTextView uses typingAttributes for the marked syllable a Korean IME is
+        /// still composing. The insertion point must inherit the heading rather than
+        /// falling back to body size until that syllable commits.
+        @Test("macOS typing attributes follow heading context")
+        func macTypingAttributesFollowHeading() throws {
+            let heading = MarkdownAttributes.typingAttributes(
+                for: "# 한글", atUTF16Offset: "# 한글".utf16.count, accent: .systemBrown)
+            let body = MarkdownAttributes.typingAttributes(
+                for: "# 한글\n", atUTF16Offset: "# 한글\n".utf16.count, accent: .systemBrown)
+
+            let headingFont = try #require(heading[.font] as? NSFont)
+            let bodyFont = try #require(body[.font] as? NSFont)
+            #expect(headingFont.pointSize > bodyFont.pointSize)
+        }
+    #endif
 }

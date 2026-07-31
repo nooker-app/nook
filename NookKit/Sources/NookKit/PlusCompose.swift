@@ -195,18 +195,15 @@ public struct PlusComposeView: View {
             .onAppear { if title.isEmpty { focus = .title } }
         #else
             VStack(alignment: .leading, spacing: 0) {
-                form
+                macToolbar
                 Divider()
-                HStack {
-                    Button { cancel() } label: { Text("Cancel", bundle: .module) }
-                    Spacer()
-                    Button { Task { await publish() } } label: { submitLabel }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(!canPublish)
-                }
-                .padding(16)
+                macWritingSurface
             }
-            .frame(minWidth: 520, minHeight: 460)
+            .frame(minWidth: 720, minHeight: 600)
+            .background(PlusTheme.canvas)
+            .tint(PlusTheme.accent)
+            .sheet(isPresented: $showingDetails) { macDetailsSheet }
+            .onAppear { if title.isEmpty { focus = .title } }
             .confirmationDialog(
                 Text("Keep this as a draft?", bundle: .module),
                 isPresented: $askAboutDraft,
@@ -380,25 +377,114 @@ public struct PlusComposeView: View {
         }
     }
 
-    /// The Mac composer, which stays a form.
-    ///
-    /// A window has the room for one, and a pointer makes a scroll view inside a scroll
-    /// view merely untidy rather than unusable. The phone's problem was that neither of
-    /// those is true there.
-    private var form: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                field(Text("Title", bundle: .module)) {
-                    TextField(text: $title, prompt: Text(verbatim: "")) {
-                        Text("Title", bundle: .module)
+    #if os(macOS)
+        /// The Mac uses the same writing-first hierarchy as iOS: actions in a narrow
+        /// top bar, then a large title and a body that owns all remaining space.
+        /// Address and summary are available without occupying the writing canvas.
+        private var macToolbar: some View {
+            HStack {
+                Button { cancel() } label: { Text("Cancel", bundle: .module) }
+                    .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                screenTitle
+                    .font(.headline)
+
+                Spacer()
+
+                Button { Task { await publish() } } label: {
+                    if store.isWorking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        submitLabel.fontWeight(.semibold)
                     }
-                    .font(.title3.weight(.semibold))
-                    .focused($focus, equals: .title)
-                    // Making the writer invent a web address by hand was the
-                    // fiddliest part of publishing, for a value most people would
-                    // rather not think about.
-                    .onChange(of: title) { _, latest in slugField.titleChanged(to: latest) }
                 }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canPublish)
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 52)
+        }
+
+        private var macWritingSurface: some View {
+            VStack(alignment: .leading, spacing: 0) {
+                TextField(text: $title, prompt: Text("Title", bundle: .module)) {
+                    Text("Title", bundle: .module)
+                }
+                .textFieldStyle(.plain)
+                .font(.largeTitle.weight(.semibold))
+                .focused($focus, equals: .title)
+                .onSubmit { editor.focus() }
+                .onChange(of: title) { _, latest in slugField.titleChanged(to: latest) }
+                .padding(.horizontal, 28)
+                .padding(.top, 22)
+                .padding(.bottom, 12)
+
+                macAddressLine
+
+                if let note = statusNote {
+                    note
+                        .padding(.horizontal, 28)
+                        .padding(.top, 12)
+                }
+
+                PlusMarkdownEditor(
+                    text: $markdown,
+                    placeholder: String(localized: "Write here. Markdown works.", bundle: .module),
+                    handle: editor
+                )
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+
+        private var macAddressLine: some View {
+            Button {
+                showingDetails = true
+            } label: {
+                HStack(spacing: 7) {
+                    if let problem = slugField.problem {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(verbatim: problem.message)
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    } else {
+                        Text(verbatim: macFullAddress)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                    Spacer(minLength: 8)
+                    Text("Post details", bundle: .module)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
+                        .imageScale(.small)
+                }
+                .font(.caption.monospaced())
+                .padding(.horizontal, 28)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(alignment: .bottom) {
+                PlusTheme.hairline.frame(height: 0.5)
+            }
+        }
+
+        private var macFullAddress: String {
+            guard let base = store.publicationBaseURL else { return slugField.value }
+            return base + "/" + slugField.value
+        }
+
+        private var macDetailsSheet: some View {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Post details", bundle: .module)
+                    .font(.title2.weight(.semibold))
 
                 addressField
 
@@ -408,32 +494,22 @@ public struct PlusComposeView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    // Renders while it is being typed, and never rewrites what was
-                    // typed. See PlusMarkdownEditor for why that distinction is the
-                    // whole design.
-                    PlusMarkdownEditor(
-                        text: $markdown,
-                        placeholder: String(
-                            localized: "Write here. **Bold**, *italic*, and [links](https://example.com) work.",
-                            bundle: .module),
-                        handle: editor
-                    )
-                    .frame(minHeight: 300)
-                    .padding(8)
-                    .background(cardBackground)
+                Text("Markdown, styled as you type. Headings, lists, links, quotes, and code all work; images are not supported yet.", bundle: .module)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                    Text("Markdown, styled as you type. Headings, lists, links, quotes, and code all work; images are not supported yet.", bundle: .module)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    Button { showingDetails = false } label: {
+                        Text("Done", bundle: .module)
+                    }
+                    .keyboardShortcut(.defaultAction)
                 }
-
-                statusNote
             }
-            .padding(20)
+            .padding(24)
+            .frame(width: 500)
         }
-        .scrollDismissesKeyboard(.interactively)
-    }
+    #endif
 
     /// The web address, shown as the link it will become.
     ///

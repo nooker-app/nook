@@ -125,6 +125,24 @@ enum MarkdownAttributes {
         return result
     }
 
+    /// Attributes new text should receive at a UTF-16 insertion point.
+    ///
+    /// AppKit gives marked text (the syllable a Korean IME is still composing) the
+    /// text view's `typingAttributes`. Asking the fully styled document for those
+    /// attributes is insufficient at the end of an empty heading, because there is
+    /// no character there yet. A temporary probe character lets the same Markdown
+    /// rules answer what the next character would be without touching the editor's
+    /// storage or its marked text.
+    static func typingAttributes(
+        for text: String, atUTF16Offset offset: Int, accent: PlatformColor
+    ) -> [NSAttributedString.Key: Any] {
+        let location = min(max(0, offset), text.utf16.count)
+        let insertion = String.Index(utf16Offset: location, in: text)
+        var probe = text
+        probe.insert("x", at: insertion)
+        return attributed(probe, accent: accent).attributes(at: location, effectiveRange: nil)
+    }
+
     /// Restyles storage in place, touching only attributes.
     ///
     /// The characters are never replaced, which is what makes this safe to run on a
@@ -589,6 +607,10 @@ extension PlatformColor {
                     guard let view else { return }
                     context.coordinator.apply(makeEdit, to: view)
                 }
+                handle?.takeFocus = { [weak view] in
+                    guard let view else { return }
+                    view.window?.makeFirstResponder(view)
+                }
                 return scroll
             }
 
@@ -640,13 +662,31 @@ extension PlatformColor {
                             location: min(selection.location, limit),
                             length: min(selection.length, limit - min(selection.location, limit))))
                 }
-                view.typingAttributes = MarkdownAttributes.baseAttributes()
+                updateTypingAttributes(in: view)
             }
 
             func textDidChange(_ notification: Notification) {
                 guard let view = notification.object as? NSTextView else { return }
                 text.wrappedValue = view.string
                 restyle(view)
+            }
+
+            /// Moving the caret between a heading and body text changes what an IME
+            /// should draw before it commits its marked text. This is AppKit-only:
+            /// UIKit manages marked-text attributes independently and already renders
+            /// Korean composition correctly.
+            func textViewDidChangeSelection(_ notification: Notification) {
+                guard let view = notification.object as? NSTextView,
+                    view.markedRange().length == 0
+                else { return }
+                updateTypingAttributes(in: view)
+            }
+
+            private func updateTypingAttributes(in view: NSTextView) {
+                view.typingAttributes = MarkdownAttributes.typingAttributes(
+                    for: view.string,
+                    atUTF16Offset: view.selectedRange().location,
+                    accent: accent)
             }
 
             /// See the iOS coordinator: routed through the text view's own editing API
