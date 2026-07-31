@@ -2533,6 +2533,31 @@ public final class ReaderStore {
         }
     }
 
+    /// Re-extracts and re-saves an offline copy whose Nook post has been edited.
+    ///
+    /// Nil whenever the copy on disk is the one to show: not a Nook post, unchanged
+    /// since it was saved, or changed but not re-extractable right now. That last
+    /// case is why this returns the new content instead of clearing the old: the
+    /// reader may be offline, and a saved article that opens empty would be a worse
+    /// outcome than one showing the previous wording.
+    private func refreshedOfflineCopy(for article: Article) async -> String? {
+        let saved = OfflineArticleStore.shared.info(for: article.id)
+        guard !NookPostOrigin.cachedBodyIsCurrent(saved?.sourceFingerprint, for: article) else {
+            return nil
+        }
+        if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
+        guard case .success(let html)? = await readerModeExtractor?.extract(url: article.url),
+            !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+
+        OfflineArticleStore.shared.save(
+            id: article.id, title: article.title, url: article.url,
+            feedTitle: saved?.feedTitle ?? feed(for: article.feedID)?.displayTitle ?? "",
+            html: html, now: Date(),
+            sourceFingerprint: NookPostOrigin.fingerprint(of: article))
+        return html
+    }
+
     /// Serves an offline-saved article like the extraction path serves a cache
     /// hit: read the file off-main, pre-warm the block parse and above-the-fold
     /// styled-text imports, and only then flip to `.ready` — so opening a saved
@@ -2546,6 +2571,15 @@ public final class ReaderStore {
         #endif
         let html = await OfflineArticleStore.shared.contentAsync(for: article.id)
         if let html, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // A Nook post the author edited: the saved copy is the old text, so show
+            // the new one and re-save it. Replaced rather than invalidated — a saved
+            // article has to open with no network, so the copy stays until a
+            // replacement is actually in hand, and a failed refresh is invisible.
+            if let refreshed = await refreshedOfflineCopy(for: article) {
+                await warmReaderContent(html: refreshed, baseURL: article.url)
+                readerContentStates[article.id] = .ready(refreshed)
+                return
+            }
             await warmReaderContent(html: html, baseURL: article.url)
             readerContentStates[article.id] = .ready(html)
             return
@@ -2652,7 +2686,8 @@ public final class ReaderStore {
         let feedTitle = feed(for: article.feedID)?.displayTitle ?? ""
         OfflineArticleStore.shared.save(
             id: article.id, title: article.title, url: article.url,
-            feedTitle: feedTitle, html: html, now: Date()
+            feedTitle: feedTitle, html: html, now: Date(),
+            sourceFingerprint: NookPostOrigin.fingerprint(of: article)
         )
         if refreshList { scheduleArticleFilter() }
     }
@@ -2688,7 +2723,11 @@ public final class ReaderStore {
         if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
         if case .success(let html)? = await readerModeExtractor?.extract(url: article.url),
            !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            await readerContentStore?.record(ReaderContentValue(status: .success, html: html), for: article.id)
+            await readerContentStore?.record(
+                ReaderContentValue(
+                    status: .success, html: html,
+                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
+                for: article.id)
             return html
         }
         return Self.feedBodyHTML(for: article)
@@ -2743,8 +2782,12 @@ public final class ReaderStore {
         // extraction reaches articles that already failed. Without this the fix
         // for short posts would never have been seen: the failure was cached and
         // synced, and a cache hit never re-extracts.
+        // A Nook post the author edited is the one case where a cached body is the
+        // wrong body. Its fingerprint no longer matches what the feed serves, so the
+        // extraction is redone; every other source keeps exactly what it fetched.
         if !forceRefresh, let cached = await readerContentStore?.value(for: article.id),
-            cached.isCurrent
+            cached.isCurrent,
+            NookPostOrigin.cachedBodyIsCurrent(cached.sourceFingerprint, for: article)
         {
             if cached.status == .success, let html = cached.html, !html.isEmpty {
                 await warmReaderContent(html: html, baseURL: article.url)
@@ -2766,7 +2809,11 @@ public final class ReaderStore {
         // is authoritative, so treat it as gone without extracting.
         if await originalIsGone(url: article.url) {
             readerContentStates[article.id] = .gone
-            await readerContentStore?.record(ReaderContentValue(status: .failed, html: nil), for: article.id)
+            await readerContentStore?.record(
+                ReaderContentValue(
+                    status: .failed, html: nil,
+                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
+                for: article.id)
             return
         }
 
@@ -2780,14 +2827,26 @@ public final class ReaderStore {
             // transition frame, and no placeholder→styled reflow.
             await warmReaderContent(html: html, baseURL: article.url)
             readerContentStates[article.id] = .ready(html)
-            await readerContentStore?.record(ReaderContentValue(status: .success, html: html), for: article.id)
+            await readerContentStore?.record(
+                ReaderContentValue(
+                    status: .success, html: html,
+                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
+                for: article.id)
         case .gone:
             // The original is gone (404/410); the reader will offer to delete it.
             readerContentStates[article.id] = .gone
-            await readerContentStore?.record(ReaderContentValue(status: .failed, html: nil), for: article.id)
+            await readerContentStore?.record(
+                ReaderContentValue(
+                    status: .failed, html: nil,
+                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
+                for: article.id)
         default:
             readerContentStates[article.id] = .failed
-            await readerContentStore?.record(ReaderContentValue(status: .failed, html: nil), for: article.id)
+            await readerContentStore?.record(
+                ReaderContentValue(
+                    status: .failed, html: nil,
+                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
+                for: article.id)
         }
     }
 

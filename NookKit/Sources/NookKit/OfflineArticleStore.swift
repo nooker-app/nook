@@ -11,14 +11,26 @@ public struct OfflineArticleInfo: Codable, Sendable, Identifiable, Equatable {
     public var feedTitle: String
     public var savedAt: Date
     public var byteCount: Int
+    /// The article as the feed served it when this copy was saved, as a
+    /// fingerprint. Absent in copies saved before this was tracked.
+    ///
+    /// Only consulted for Nook posts, and only to notice that the author edited
+    /// one — see ``NookPostOrigin``. A saved copy is never discarded because of
+    /// it: the replacement has to arrive first, or the copy stays, because the
+    /// point of saving is that it opens with no network.
+    public var sourceFingerprint: String?
 
-    public init(id: String, title: String, url: URL, feedTitle: String, savedAt: Date, byteCount: Int) {
+    public init(
+        id: String, title: String, url: URL, feedTitle: String, savedAt: Date,
+        byteCount: Int, sourceFingerprint: String? = nil
+    ) {
         self.id = id
         self.title = title
         self.url = url
         self.feedTitle = feedTitle
         self.savedAt = savedAt
         self.byteCount = byteCount
+        self.sourceFingerprint = sourceFingerprint
     }
 }
 
@@ -131,10 +143,15 @@ public final class OfflineArticleStore {
     /// Saves (or replaces) an article's offline copy. Updates the in-memory index
     /// immediately (so the icon/list react at once) and writes the HTML file and
     /// index off the main actor.
-    public func save(id: Article.ID, title: String, url: URL, feedTitle: String, html: String, now: Date) {
+    public func save(
+        id: Article.ID, title: String, url: URL, feedTitle: String, html: String, now: Date,
+        sourceFingerprint: String? = nil
+    ) {
         loadIfNeeded()
         let bytes = html.utf8.count
-        index[id] = OfflineArticleInfo(id: id, title: title, url: url, feedTitle: feedTitle, savedAt: now, byteCount: bytes)
+        index[id] = OfflineArticleInfo(
+            id: id, title: title, url: url, feedTitle: feedTitle, savedAt: now,
+            byteCount: bytes, sourceFingerprint: sourceFingerprint)
         pendingContent[id] = html
         evictIfNeeded()
         if let fileURL = Self.contentURL(for: id) {

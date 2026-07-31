@@ -30,10 +30,22 @@ public struct ReaderContentValue: Codable, Sendable, Equatable {
     /// was tracked, which are treated as older than any current version.
     public var extractorVersion: Int?
 
-    public init(status: Status, html: String?, extractorVersion: Int? = currentExtractorVersion) {
+    /// The article as the feed served it when this body was extracted, as a
+    /// fingerprint. Absent in records written before this was tracked.
+    ///
+    /// Only consulted for Nook posts, and only to notice that the author edited
+    /// one — see ``NookPostOrigin``. Other sources keep the body they fetched, so
+    /// for them this is recorded and never read.
+    public var sourceFingerprint: String?
+
+    public init(
+        status: Status, html: String?, extractorVersion: Int? = currentExtractorVersion,
+        sourceFingerprint: String? = nil
+    ) {
         self.status = status
         self.html = html
         self.extractorVersion = extractorVersion
+        self.sourceFingerprint = sourceFingerprint
     }
 
     /// Whether this result still reflects what the extractor would do now.
@@ -49,6 +61,7 @@ public struct ReaderContentValue: Codable, Sendable, Equatable {
         case status = "s"
         case html = "h"
         case extractorVersion = "v"
+        case sourceFingerprint = "f"
     }
 }
 
