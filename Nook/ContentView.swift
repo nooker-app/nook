@@ -298,14 +298,16 @@ struct ContentView: View {
         }
         .focusedSceneValue(
             \.readerCommandActions,
-            ReaderCommandActions(
-                refreshAll: store.refreshAll,
-                markSelectedRead: store.markSelectedRead,
-                toggleSelectedStarred: store.toggleSelectedStarred,
-                selectNextArticle: store.selectNextArticle,
-                selectPreviousArticle: store.selectPreviousArticle,
-                toggleReaderMode: store.toggleBrowserMode
-            )
+            composeSession == nil
+                ? ReaderCommandActions(
+                    refreshAll: store.refreshAll,
+                    markSelectedRead: store.markSelectedRead,
+                    toggleSelectedStarred: store.toggleSelectedStarred,
+                    selectNextArticle: store.selectNextArticle,
+                    selectPreviousArticle: store.selectPreviousArticle,
+                    toggleReaderMode: store.toggleBrowserMode
+                )
+                : nil
         )
     }
 
