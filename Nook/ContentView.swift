@@ -123,8 +123,7 @@ struct ContentView: View {
                             .padding(.horizontal, 4)
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .tint(PlusTheme.accent)
+                    .tint(PlusTheme.accent.opacity(0.14))
                     .help("Write a post")
                     .accessibilityIdentifier("plus-compose-button")
                 }
