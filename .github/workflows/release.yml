@@ -45,6 +45,7 @@ jobs:
       - name: Archive app (ad-hoc signed)
         run: |
           xcodebuild archive \
+            -skipPackagePluginValidation \
             -project Nook.xcodeproj \
             -scheme Nook \
             -configuration Release \
