@@ -347,6 +347,66 @@ private struct RegularShell: View {
     @State private var isCreatingFolder = false
     @State private var newFolderName = ""
     @State private var isShowingSettings = false
+    /// The composer, present only while it is open — the same shape the phone uses.
+    @State private var compose: ComposeSession?
+    /// Kept between openings so a cancelled draft survives, and so a reader who
+    /// never publishes never pays for a store.
+    @State private var composeStore: PlusStore?
+    /// Whether a Plus session exists, read from the flag in defaults rather than the
+    /// Keychain so laying out a toolbar does not unlock it.
+    @AppStorage(PlusCredential.configuredKey) private var signedInToPlus = false
+    @AppStorage(PlusOwnFeed.publicationURLKey) private var ownPublicationURL = ""
+
+    private struct ComposeSession: Identifiable {
+        let id = UUID()
+        let store: PlusStore
+    }
+
+    /// Opens the composer, building its store on first use — the phone's
+    /// `startComposing`, kept in step with it deliberately.
+    private func startComposing() {
+        let store: PlusStore
+        if let composeStore {
+            store = composeStore
+        } else {
+            store = PlusStore()
+            composeStore = store
+        }
+        store.syncFolder = { ReaderStore.shared.syncFolderURL }
+        // A session read again rather than assumed: the store is kept between
+        // openings, so signing in on another screen would otherwise leave Publish
+        // disabled with the writing already on screen.
+        Task { await store.prepareToCompose() }
+        compose = ComposeSession(store: store)
+    }
+
+    /// Lands the writer on their own feed once the composer closes.
+    ///
+    /// Not the phone's reveal-in-the-reader flow, which fetches the new page with a
+    /// banner and retries: on a split view the feed is already the middle column, so
+    /// selecting it shows the post as soon as the feed carries it. Following first
+    /// covers the writer who has published from another device but not this one.
+    private func revealPublishedPost() {
+        guard let composeStore, composeStore.lastPublishedURL != nil,
+            let publication = composeStore.publicationURL.flatMap(URL.init(string:))
+        else { return }
+        // Consumed: one publish, one landing.
+        composeStore.startNewDraft()
+        Task {
+            if OwnNook.followedFeed(in: store, publication: publication) == nil {
+                _ = await OwnNook.follow(publication: publication, in: store)
+            }
+            guard let feed = OwnNook.followedFeed(in: store, publication: publication) else { return }
+            store.feedSelection = [feed.id]
+            store.smartSelection = nil
+        }
+    }
+
+    /// Spelled out rather than inlined as a ternary: inline, the type checker gives
+    /// up on the whole `NavigationSplitView` expression.
+    private var composeAction: (() -> Void)? {
+        signedInToPlus ? { startComposing() } : nil
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -357,7 +417,8 @@ private struct RegularShell: View {
                 isAddingFeed: $isAddingFeed,
                 isExportingOPML: $isExportingOPML,
                 isCreatingFolder: $isCreatingFolder,
-                isShowingSettings: $isShowingSettings
+                isShowingSettings: $isShowingSettings,
+                onCompose: composeAction
             )
         } content: {
             ArticleList(store: store, selection: $store.selectedArticleID, onShowAllArticles: { store.selectSmartSource(.all) })
@@ -365,6 +426,11 @@ private struct RegularShell: View {
             ReaderDetailView(store: store)
         }
         .navigationSplitViewStyle(.balanced)
+        // Writing gets a screen of its own here too, reached from the sidebar rather
+        // than from a tab bar this shell does not have.
+        .sheet(item: $compose, onDismiss: revealPublishedPost) { session in
+            PlusComposeView(store: session.store) { compose = nil }
+        }
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: importKind == .folder ? [.folder] : [.opml, .xml],
@@ -1838,7 +1904,7 @@ private struct FeedsTab: View {
     /// device yet. One row either way, so it always means the same thing.
     @ViewBuilder
     private func ownNookRow(publication: URL) -> some View {
-        if let feed = store.followedFeed(at: PlusOwnFeed.feedURL(for: publication)) {
+        if let feed = OwnNook.followedFeed(in: store, publication: publication) {
             NavigationLink(value: FeedTarget.feed(feed.id)) {
                 ownNookLabel(unread: store.unreadCount(feedID: feed.id))
             }
@@ -1854,24 +1920,7 @@ private struct FeedsTab: View {
     }
 
     private func ownNookLabel(unread: Int) -> some View {
-        HStack {
-            Label {
-                Text("My Nook")
-            } icon: {
-                // The compose button's symbol and signature tint, so the place the
-                // writing goes is recognisably the same thing as the place it is made.
-                if isFollowingOwnFeed {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "square.and.pencil")
-                        .foregroundStyle(PlusTheme.accent)
-                }
-            }
-            Spacer()
-            if unread > 0 {
-                Text(unread, format: .number).foregroundStyle(.secondary)
-            }
-        }
+        OwnNookLabel(unread: unread, isFollowing: isFollowingOwnFeed)
     }
 
     /// Follows the publication, then opens it. Failure is reported: a row that does
@@ -1879,23 +1928,7 @@ private struct FeedsTab: View {
     private func followOwnFeed(publication: URL) async {
         isFollowingOwnFeed = true
         defer { isFollowingOwnFeed = false }
-        let feedURL = PlusOwnFeed.feedURL(for: publication)
-        do {
-            try await store.addFeed(urlString: feedURL.absoluteString)
-        } catch {
-            store.errorMessage = error.localizedDescription
-            return
-        }
-        // Adding a feed leaves its first article selected; that belongs to a reader
-        // tapping a row.
-        store.selectedArticleID = nil
-        guard let feed = store.followedFeed(at: feedURL) else {
-            // Added, but not findable at the URL it was added with — a redirect, most
-            // likely. Saying so beats a tap that appears to do nothing.
-            store.errorMessage = String(
-                localized: "Your publication was followed but couldn't be opened. It is in your feed list.")
-            return
-        }
+        guard let feed = await OwnNook.follow(publication: publication, in: store) else { return }
         path.append(.feed(feed.id))
     }
 
@@ -2142,6 +2175,87 @@ struct SplashView: View {
 /// A selectable sidebar entry. Binding the List selection to this (rather than
 /// using plain buttons) is what lets a collapsed NavigationSplitView push to the
 /// article-list column when a row is tapped on iPhone.
+// MARK: - My Nook, shared by both shells
+
+/// The writer's own publication, as both shells need it.
+///
+/// Extracted because they had drifted: the phone offered My Nook and a compose
+/// button, and the iPad — same app, same account — offered neither, so a writer on
+/// an iPad could not reach their own writing or start a post at all. One
+/// implementation of "which publication, is it followed, follow it" means the next
+/// change lands on both.
+///
+/// The publication URL comes from defaults rather than a Plus session, so neither
+/// shell needs a session or a network call to decide whether to show the row.
+enum OwnNook {
+    /// The publication to offer, or nil when the reader has never published.
+    static func publication(from stored: String) -> URL? {
+        guard !stored.isEmpty else { return nil }
+        return URL(string: stored)
+    }
+
+    /// The followed feed for a publication, if it is followed on this device.
+    @MainActor
+    static func followedFeed(in store: ReaderStore, publication: URL) -> Feed? {
+        store.followedFeed(at: PlusOwnFeed.feedURL(for: publication))
+    }
+
+    /// Follows the publication and returns its feed.
+    ///
+    /// A writer who signed in on a second device has a publication and no feed for
+    /// it, so both shells offer one row that follows on first use rather than a row
+    /// that is missing until they publish again.
+    @MainActor
+    static func follow(publication: URL, in store: ReaderStore) async -> Feed? {
+        let feedURL = PlusOwnFeed.feedURL(for: publication)
+        do {
+            try await store.addFeed(urlString: feedURL.absoluteString)
+        } catch {
+            store.errorMessage = error.localizedDescription
+            return nil
+        }
+        // Adding a feed leaves its first article selected; that belongs to a reader
+        // tapping a row.
+        store.selectedArticleID = nil
+        guard let feed = store.followedFeed(at: feedURL) else {
+            // Added, but not findable at the URL it was added with — a redirect, most
+            // likely. Saying so beats a tap that appears to do nothing.
+            store.errorMessage = String(
+                localized: "Your publication was followed but couldn't be opened. It is in your feed list.")
+            return nil
+        }
+        return feed
+    }
+}
+
+/// The row's contents, identical on the phone and the iPad so the place the writing
+/// goes looks like the same thing in both.
+struct OwnNookLabel: View {
+    var unread: Int
+    var isFollowing: Bool
+
+    var body: some View {
+        HStack {
+            Label {
+                Text("My Nook")
+            } icon: {
+                // The compose button's symbol and signature tint, so the place the
+                // writing goes is recognisably the same thing as the place it is made.
+                if isFollowing {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "square.and.pencil")
+                        .foregroundStyle(PlusTheme.accent)
+                }
+            }
+            Spacer()
+            if unread > 0 {
+                Text(unread, format: .number).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 enum SidebarItem: Hashable {
     case smart(SmartSource)
     case category(String)
@@ -2157,14 +2271,30 @@ private struct Sidebar: View {
     @Binding var isCreatingFolder: Bool
     @Binding var isShowingSettings: Bool
 
+    /// Opens the composer. Nil when there is no Plus session, which is what keeps
+    /// the button out of the toolbar for a reader who does not publish.
+    var onCompose: (() -> Void)?
+
     @State private var selection: SidebarItem?
     @State private var folderPendingRename: String?
     @State private var renameFolderName = ""
     @State private var feedPendingRename: Feed.ID?
     @State private var renameFeedName = ""
+    /// The writer's own publication, mirrored out of the Plus store so the sidebar
+    /// needs neither a session nor a network call to offer it — the same source the
+    /// phone's Feeds tab reads.
+    @AppStorage(PlusOwnFeed.publicationURLKey) private var ownPublicationURL = ""
+    @State private var isFollowingOwnFeed = false
 
     var body: some View {
         List(selection: $selection) {
+            if let publication = OwnNook.publication(from: ownPublicationURL) {
+                Section {
+                    ownNookRow(publication: publication)
+                }
+                .listRowBackground(Rectangle().fill(.ultraThinMaterial))
+            }
+
             Section("Library") {
                 ForEach(SmartSource.library) { source in
                     HStack {
@@ -2320,6 +2450,17 @@ private struct Sidebar: View {
                     Image(systemName: "ellipsis.circle")
                 }
             }
+            // The phone puts this in the tab bar, which the iPad does not have — so
+            // an iPad writer had no way to start a post at all. Same symbol and tint
+            // as the phone's, and as the My Nook row above.
+            if let onCompose {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onCompose) {
+                        Label("Write a post", systemImage: "square.and.pencil")
+                    }
+                    .tint(PlusTheme.accent)
+                }
+            }
         }
         .refreshable { await store.refreshAllAndWait() }
         // Only prompt for a folder while none is set (first run). Once storage
@@ -2364,6 +2505,33 @@ private struct Sidebar: View {
             Button("Rename") { store.renameFeed(feedID, to: renameFeedName) }
         } message: { _ in
             Text("Enter a new name, or leave empty to use the feed's own name.")
+        }
+    }
+
+    /// Selects the writer's own feed, following it first if this device has not
+    /// yet. One row either way, matching the phone: a writer signed in on a second
+    /// iPad has a publication and no feed for it until they follow it.
+    @ViewBuilder
+    private func ownNookRow(publication: URL) -> some View {
+        if let feed = OwnNook.followedFeed(in: store, publication: publication) {
+            OwnNookLabel(unread: store.unreadCount(feedID: feed.id), isFollowing: false)
+                .tag(SidebarItem.feed(feed.id))
+        } else {
+            Button {
+                Task {
+                    isFollowingOwnFeed = true
+                    defer { isFollowingOwnFeed = false }
+                    guard let feed = await OwnNook.follow(publication: publication, in: store)
+                    else { return }
+                    // Selecting it is what the split view needs to show it, where the
+                    // phone pushes onto its navigation path.
+                    selection = .feed(feed.id)
+                }
+            } label: {
+                OwnNookLabel(unread: 0, isFollowing: isFollowingOwnFeed)
+            }
+            .buttonStyle(.plain)
+            .disabled(isFollowingOwnFeed)
         }
     }
 
