@@ -22,6 +22,7 @@ The default output is organized by locale and platform:
 output/
   ko/
     iphone-6.9/  # 1290 x 2796 PNG
+    ipad-13/     # 2048 x 2732 PNG
     mac/         # 2880 x 1800 PNG
   en/
     iphone-6.9/
@@ -36,9 +37,20 @@ output/
 
 PNG files are rendered without an alpha channel, as required by App Store Connect.
 
+## Capture from Simulator
+
+Prepare the desired screen in the booted 13-inch iPad simulator, then capture its native pixels:
+
+```sh
+make app-store-capture LOCALE=ko NAME=01-library
+make app-store-capture LOCALE=ko NAME=03-reader
+```
+
+Use `SIMULATOR='iPad Pro 13-inch (M5)'` when capturing from a different device. Repeat with `LOCALE=en`, `ja`, or `zh-Hans` after changing Nook's app language and relaunching it. The script fixes the status bar, validates the App Store-compatible dimensions, and writes into `captures/<locale>/ipad-13/`.
+
 ## Update
 
-1. Replace captures in `docs/screenshots/` while keeping their filenames, or change each slide's `source` path in `config.json`.
+1. Replace captures in `docs/screenshots/` or `captures/<locale>/`, or change each slide's `source` path in `config.json`.
 2. Edit localized titles and subtitles in `config.json`.
 3. To add a language, add its identifier to `locales` and add matching copy under every slide's `localized` object.
 4. Add, remove, or reorder slides in `config.json`.

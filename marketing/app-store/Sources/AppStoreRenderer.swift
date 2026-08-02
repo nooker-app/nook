@@ -7,6 +7,7 @@ import Foundation
 struct Configuration: Decodable {
     let locales: [String]
     let iphone: Platform
+    let ipad: Platform
     let macos: Platform
 }
 
@@ -109,6 +110,12 @@ final class Renderer {
                 style: .iphone
             )
             try render(
+                platform: configuration.ipad,
+                platformName: "ipad-13",
+                locale: locale,
+                style: .ipad
+            )
+            try render(
                 platform: configuration.macos,
                 platformName: "mac",
                 locale: locale,
@@ -160,6 +167,8 @@ final class Renderer {
             switch style {
             case .iphone:
                 drawIPhone(image: image, crop: slide.crop, copy: copy, width: platform.width, height: platform.height)
+            case .ipad:
+                drawIPad(image: image, crop: slide.crop, copy: copy, width: platform.width, height: platform.height)
             case .mac:
                 drawMac(image: image, crop: slide.crop, copy: copy, width: platform.width, height: platform.height)
             }
@@ -275,6 +284,34 @@ final class Renderer {
         drawScreenshot(image, crop: crop, in: screenshotRect, cornerRadius: 54, shadowBlur: 46)
     }
 
+    private func drawIPad(image: NSImage, crop: Crop?, copy: Copy, width: Int, height: Int) {
+        drawBrand(at: NSPoint(x: 128, y: topY(128, height: height)), fontSize: 31)
+
+        drawText(
+            copy.title,
+            rect: topRect(x: 128, y: 210, width: 1792, height: 210, canvasHeight: height),
+            font: .systemFont(ofSize: 82, weight: .bold),
+            color: ink,
+            lineHeight: 1.02
+        )
+        drawText(
+            copy.subtitle,
+            rect: topRect(x: 128, y: 445, width: 1792, height: 96, canvasHeight: height),
+            font: .systemFont(ofSize: 36, weight: .medium),
+            color: mutedInk,
+            lineHeight: 1.12
+        )
+
+        let screenshotRect = topRect(
+            x: 32,
+            y: 720,
+            width: 1984,
+            height: 2646,
+            canvasHeight: height
+        )
+        drawScreenshot(image, crop: crop, in: screenshotRect, cornerRadius: 48, shadowBlur: 42)
+    }
+
     private func drawBrand(at point: NSPoint, fontSize: CGFloat) {
         let dot = NSBezierPath(ovalIn: NSRect(
             x: point.x,
@@ -373,6 +410,7 @@ final class Renderer {
 
 enum Style {
     case iphone
+    case ipad
     case mac
 }
 

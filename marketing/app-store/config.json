@@ -116,6 +116,68 @@
       }
     ]
   },
+  "ipad": {
+    "width": 2048,
+    "height": 2732,
+    "slides": [
+      {
+        "id": "01-library",
+        "source": "marketing/app-store/captures/ko/ipad-13/01-library.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/01-library.png",
+          "en": "marketing/app-store/captures/en/ipad-13/01-library.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/01-library.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/01-library.png"
+        },
+        "localized": {
+          "ko": {
+            "title": "나만의 읽을거리 라이브러리",
+            "subtitle": "피드와 카테고리를 넓은 화면에서 한눈에 정리하세요."
+          },
+          "en": {
+            "title": "Your reading library, your way",
+            "subtitle": "See feeds, categories, and new articles together."
+          },
+          "ja": {
+            "title": "自分だけの読みものライブラリ",
+            "subtitle": "フィード、カテゴリ、新着記事を広い画面でひと目に。"
+          },
+          "zh-Hans": {
+            "title": "属于你的阅读资料库",
+            "subtitle": "在宽阔屏幕上一览订阅源、分类与新文章。"
+          }
+        }
+      },
+      {
+        "id": "02-reader",
+        "source": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
+          "en": "marketing/app-store/captures/en/ipad-13/03-reader.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/03-reader.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/03-reader.png"
+        },
+        "localized": {
+          "ko": {
+            "title": "목록과 글을 나란히",
+            "subtitle": "탐색의 흐름을 끊지 않고 편안하게 읽으세요."
+          },
+          "en": {
+            "title": "Browse and read, side by side",
+            "subtitle": "Stay in your reading flow without losing your place."
+          },
+          "ja": {
+            "title": "記事一覧と本文を並べて",
+            "subtitle": "読む流れを止めず、気になる記事に集中できます。"
+          },
+          "zh-Hans": {
+            "title": "文章列表与正文并排呈现",
+            "subtitle": "无需来回切换，始终保持顺畅的阅读节奏。"
+          }
+        }
+      }
+    ]
+  },
   "macos": {
     "width": 2880,
     "height": 1800,

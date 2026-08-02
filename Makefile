@@ -14,7 +14,7 @@ BUILD_FLAGS := CODE_SIGNING_ALLOWED=NO
 # project in Xcode still shows the prompt once — click "Trust & Enable".
 PLUGIN_FLAGS := -skipPackagePluginValidation
 
-.PHONY: build clean open app-store-screenshots
+.PHONY: build clean open app-store-screenshots app-store-capture
 
 build:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath $(DERIVED_DATA_PATH) $(PLUGIN_FLAGS) $(BUILD_FLAGS) build
@@ -27,3 +27,7 @@ open:
 
 app-store-screenshots:
 	marketing/app-store/render.sh
+
+app-store-capture:
+	@test -n "$(LOCALE)" -a -n "$(NAME)" || (echo "Usage: make app-store-capture LOCALE=ko NAME=01-library" && exit 64)
+	marketing/app-store/capture-simulator.sh "$(LOCALE)" "$(NAME)" "$(or $(SIMULATOR),iPad Air 13-inch (M4))"
