@@ -1,0 +1,193 @@
+{
+  "locales": ["ko", "en", "ja", "zh-Hans"],
+  "iphone": {
+    "width": 1290,
+    "height": 2796,
+    "slides": [
+      {
+        "id": "01-library",
+        "source": "docs/screenshots/ios-library.png",
+        "localized": {
+          "ko": {
+            "title": "피드는 내가 고릅니다",
+            "subtitle": "알고리즘 없이, 관심 있는 글만 한곳에."
+          },
+          "en": {
+            "title": "Choose your own feeds",
+            "subtitle": "The writing you care about, without an algorithm."
+          },
+          "ja": {
+            "title": "フィードは自分で選ぶ",
+            "subtitle": "アルゴリズムなしで、読みたい記事だけを一か所に。"
+          },
+          "zh-Hans": {
+            "title": "订阅源，由你选择",
+            "subtitle": "没有算法，只汇集你真正关心的内容。"
+          }
+        }
+      },
+      {
+        "id": "02-articles",
+        "source": "docs/screenshots/ios-articles.png",
+        "localized": {
+          "ko": {
+            "title": "새 글을 빠르게 훑어보세요",
+            "subtitle": "읽지 않음·오늘·전체를 한 번에 정리합니다."
+          },
+          "en": {
+            "title": "Catch up at a glance",
+            "subtitle": "Move between unread, today, and every article."
+          },
+          "ja": {
+            "title": "新着記事をすばやくチェック",
+            "subtitle": "未読・今日・すべてをかんたんに整理。"
+          },
+          "zh-Hans": {
+            "title": "快速浏览新文章",
+            "subtitle": "未读、今日与全部文章，一目了然。"
+          }
+        }
+      },
+      {
+        "id": "03-reader",
+        "source": "docs/screenshots/ios-reader.png",
+        "localized": {
+          "ko": {
+            "title": "읽는 데만 집중하세요",
+            "subtitle": "웹의 소음을 걷어낸 네이티브 리더."
+          },
+          "en": {
+            "title": "Made for focused reading",
+            "subtitle": "A quiet, native reader that leaves the clutter behind."
+          },
+          "ja": {
+            "title": "読むことだけに集中",
+            "subtitle": "ウェブのノイズを取り除いたネイティブリーダー。"
+          },
+          "zh-Hans": {
+            "title": "专注阅读本身",
+            "subtitle": "原生阅读器，为你滤去网页杂音。"
+          }
+        }
+      },
+      {
+        "id": "04-starred",
+        "source": "docs/screenshots/ios-starred.png",
+        "localized": {
+          "ko": {
+            "title": "좋은 글은 다시 찾기 쉽게",
+            "subtitle": "별표 하나로 나만의 읽을거리 보관함."
+          },
+          "en": {
+            "title": "Keep the good ones close",
+            "subtitle": "Save anything worth returning to with one tap."
+          },
+          "ja": {
+            "title": "良い記事を、いつでも読み返せる",
+            "subtitle": "星を付けて、自分だけの読みものリストへ。"
+          },
+          "zh-Hans": {
+            "title": "好文章，随时回来读",
+            "subtitle": "轻点星标，收藏值得重读的内容。"
+          }
+        }
+      },
+      {
+        "id": "05-settings",
+        "source": "docs/screenshots/ios-settings.png",
+        "localized": {
+          "ko": {
+            "title": "내 방식에 맞춘 Nook",
+            "subtitle": "동기화, 번역, 읽기 설정까지 세밀하게."
+          },
+          "en": {
+            "title": "Make Nook yours",
+            "subtitle": "Fine-tune sync, translation, and the way you read."
+          },
+          "ja": {
+            "title": "自分好みのNookに",
+            "subtitle": "同期、翻訳、読み方まで細かく設定。"
+          },
+          "zh-Hans": {
+            "title": "让 Nook 适合你的习惯",
+            "subtitle": "同步、翻译与阅读方式，均可细致调整。"
+          }
+        }
+      }
+    ]
+  },
+  "macos": {
+    "width": 2880,
+    "height": 1800,
+    "slides": [
+      {
+        "id": "01-overview",
+        "source": "docs/screenshots/main.png",
+        "localized": {
+          "ko": {
+            "title": "모든 읽을거리를\n한 화면에",
+            "subtitle": "피드, 글 목록, 리더를 오가는 흐름 없이."
+          },
+          "en": {
+            "title": "Everything you read,\nin one window",
+            "subtitle": "Feeds, articles, and the reader stay together."
+          },
+          "ja": {
+            "title": "すべての読みものを\nひとつの画面に",
+            "subtitle": "フィード、記事一覧、リーダーを行き来する必要はありません。"
+          },
+          "zh-Hans": {
+            "title": "所有阅读内容\n尽在一个窗口",
+            "subtitle": "订阅源、文章列表与阅读器，无需来回切换。"
+          }
+        }
+      },
+      {
+        "id": "02-reader",
+        "source": "docs/screenshots/main.png",
+        "crop": { "x": 0.35, "y": 0.02, "width": 0.65, "height": 0.65 },
+        "localized": {
+          "ko": {
+            "title": "더 편안한\n네이티브 리더",
+            "subtitle": "웹의 소음을 덜고 글에 집중합니다."
+          },
+          "en": {
+            "title": "A calmer,\nnative reader",
+            "subtitle": "Leave the noise of the web behind and focus."
+          },
+          "ja": {
+            "title": "もっと快適な\nネイティブリーダー",
+            "subtitle": "ウェブのノイズを減らし、記事に集中できます。"
+          },
+          "zh-Hans": {
+            "title": "更舒适的\n原生阅读器",
+            "subtitle": "告别网页杂音，专注文章本身。"
+          }
+        }
+      },
+      {
+        "id": "03-library",
+        "source": "docs/screenshots/main.png",
+        "crop": { "x": 0.0, "y": 0.04, "width": 0.65, "height": 0.65 },
+        "localized": {
+          "ko": {
+            "title": "폴더와 피드를\n내 방식대로",
+            "subtitle": "알고리즘 대신 내가 만든 라이브러리."
+          },
+          "en": {
+            "title": "A library built\nyour way",
+            "subtitle": "Your folders and feeds—not someone else's algorithm."
+          },
+          "ja": {
+            "title": "フォルダとフィードを\n自分らしく整理",
+            "subtitle": "アルゴリズムではなく、自分で作るライブラリ。"
+          },
+          "zh-Hans": {
+            "title": "文件夹与订阅源\n按你的方式整理",
+            "subtitle": "不靠算法，打造属于你的阅读库。"
+          }
+        }
+      }
+    ]
+  }
+}

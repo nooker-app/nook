@@ -14,7 +14,7 @@ BUILD_FLAGS := CODE_SIGNING_ALLOWED=NO
 # project in Xcode still shows the prompt once — click "Trust & Enable".
 PLUGIN_FLAGS := -skipPackagePluginValidation
 
-.PHONY: build clean open
+.PHONY: build clean open app-store-screenshots
 
 build:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath $(DERIVED_DATA_PATH) $(PLUGIN_FLAGS) $(BUILD_FLAGS) build
@@ -24,3 +24,6 @@ clean:
 
 open:
 	xed .
+
+app-store-screenshots:
+	marketing/app-store/render.sh
