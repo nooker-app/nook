@@ -1109,7 +1109,34 @@
         }
       }
     },
-    "Close": {},
+    "Close": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じる"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "닫기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        }
+      }
+    },
     "Coherent long-article translation": {
       "localizations": {
         "ja": {
@@ -2451,7 +2478,34 @@
         }
       }
     },
-    "Font Size": {},
+    "Font Size": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Font Size"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字サイズ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글자 크기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字号"
+          }
+        }
+      }
+    },
     "Font Size: %lld": {
       "localizations": {
         "en": {
@@ -3267,7 +3321,34 @@
         }
       }
     },
-    "Letter Spacing": {},
+    "Letter Spacing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letter Spacing"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字間"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자간"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字间距"
+          }
+        }
+      }
+    },
     "Letter Spacing: %@": {
       "localizations": {
         "en": {
@@ -3352,7 +3433,34 @@
         }
       }
     },
-    "Line Spacing": {},
+    "Line Spacing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Line Spacing"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "行間"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "줄 간격"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "行距"
+          }
+        }
+      }
+    },
     "Line Spacing: %@": {
       "localizations": {
         "en": {

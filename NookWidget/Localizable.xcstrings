@@ -1,0 +1,39 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Nook" : {
+      "comment" : "The app's name, shown as the widget's title. A proper noun in every language.",
+      "shouldTranslate" : false
+    },
+    "Quick access to your reader." : {
+      "comment" : "The widget's one-line description in the widget gallery.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick access to your reader."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リーダーにすばやくアクセス。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리더로 바로 이동합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速打开你的阅读器。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

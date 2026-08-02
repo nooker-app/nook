@@ -184,6 +184,34 @@
         }
       }
     },
+    "A line containing [TOC] is replaced by links to the post's headings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A line containing [TOC] is replaced by links to the post's headings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[TOC] だけの行は、記事の見出しへのリンクに置き換わります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[TOC] 만 있는 줄은 글의 제목 목록 링크로 바뀝니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只含 [TOC] 的行会被替换为文章标题的链接。"
+          }
+        }
+      }
+    },
     "A quick tour of what publishing with Nook means.": {
       "localizations": {
         "ja": {
@@ -308,6 +336,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "添加过滤器"
+          }
+        }
+      }
+    },
+    "Add footnote": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add footnote"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "脚注を追加"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "각주 추가"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加脚注"
+          }
+        }
+      }
+    },
+    "Add headings with # markers and they will appear here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add headings with # markers and they will appear here."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "# で見出しを作ると、ここに表示されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "# 기호로 제목을 만들면 여기에 나타납니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用 # 添加标题后会显示在这里。"
           }
         }
       }
@@ -1690,6 +1774,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "代码"
+          }
+        }
+      }
+    },
+    "Code block": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code block"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コードブロック"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "코드 블록"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代码块"
           }
         }
       }
@@ -3100,6 +3212,34 @@
         }
       }
     },
+    "Explicit line break": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explicit line break"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明示的な改行"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "명시적 줄바꿈"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显式换行"
+          }
+        }
+      }
+    },
     "Feed": {
       "localizations": {
         "en": {
@@ -3292,6 +3432,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "文件夹"
+          }
+        }
+      }
+    },
+    "Footnote": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Footnote"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "脚注"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "각주"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "脚注"
           }
         }
       }
@@ -3933,6 +4101,90 @@
           "stringUnit": {
             "state": "translated",
             "value": "范围"
+          }
+        }
+      }
+    },
+    "Inline code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inline code"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インラインコード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인라인 코드"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "行内代码"
+          }
+        }
+      }
+    },
+    "Insert": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insert"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "挿入"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삽입"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插入"
+          }
+        }
+      }
+    },
+    "Insert table of contents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insert table of contents"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目次を挿入"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "목차 넣기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插入目录"
           }
         }
       }
@@ -4608,6 +4860,34 @@
         }
       }
     },
+    "Markdown help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown help"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown ヘルプ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown 도움말"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown 帮助"
+          }
+        }
+      }
+    },
     "Markdown, styled as you type. Headings, lists, links, quotes, and code all work; images are not supported yet.": {
       "localizations": {
         "ja": {
@@ -4915,6 +5195,62 @@
         }
       }
     },
+    "New footnote": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New footnote"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい脚注"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 각주"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新脚注"
+          }
+        }
+      }
+    },
+    "New paragraph": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New paragraph"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しい段落"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 문단"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新段落"
+          }
+        }
+      }
+    },
     "New password": {
       "localizations": {
         "ja": {
@@ -5117,6 +5453,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "暂无类别 — 在 Article Rules 中添加"
+          }
+        }
+      }
+    },
+    "No headings yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No headings yet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "見出しがまだありません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 제목이 없습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有标题"
           }
         }
       }
@@ -5366,6 +5730,34 @@
         }
       }
     },
+    "Nook extension": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook extension"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook 独自の記法"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook 확장 문법"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook 扩展语法"
+          }
+        }
+      }
+    },
     "Nook stores your posts in a repository on its own server, and publishing needs an account there. Support for other servers is not decided yet.": {
       "localizations": {
         "ja": {
@@ -5507,6 +5899,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "还没有发布任何内容。"
+          }
+        }
+      }
+    },
+    "Numbered list": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numbered list"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "番号付きリスト"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "번호 목록"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编号列表"
           }
         }
       }
@@ -5880,6 +6300,34 @@
         }
       }
     },
+    "Paste a URL over selected text, or use the link button.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a URL over selected text, or use the link button."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した文字の上に URL を貼り付けるか、リンクボタンを使います。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 글자 위에 URL을 붙여넣거나 링크 버튼을 누르세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在选中的文字上粘贴网址，或使用链接按钮。"
+          }
+        }
+      }
+    },
     "Pattern": {
       "localizations": {
         "en": {
@@ -6016,6 +6464,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在准备副本…"
+          }
+        }
+      }
+    },
+    "Press Return twice to insert the blank line that separates Markdown paragraphs.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press Return twice to insert the blank line that separates Markdown paragraphs."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return を 2 回押して、段落を分ける空行を入れます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return을 두 번 눌러 문단을 나누는 빈 줄을 넣습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按两次 Return 插入分隔段落的空行。"
           }
         }
       }
@@ -6233,6 +6709,62 @@
         }
       }
     },
+    "Put fenced code on lines of its own.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put fenced code on lines of its own."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コードは独立した行にフェンスで囲んで置きます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "코드를 따로 줄을 잡아 울타리로 감쌉니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把代码单独成行，用围栏包住。"
+          }
+        }
+      }
+    },
+    "Put three dashes on a line of their own.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put three dashes on a line of their own."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ハイフン 3 つを独立した行に置きます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "붙임표 세 개를 한 줄에 따로 씁니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在单独一行写三个短横线。"
+          }
+        }
+      }
+    },
     "Quote": {
       "localizations": {
         "en": {
@@ -6369,6 +6901,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "准备就绪"
+          }
+        }
+      }
+    },
+    "References use [^1]. Definitions use [^1]: without a list dash.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "References use [^1]. Definitions use [^1]: without a list dash."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "参照は [^1]、定義はリストのハイフンなしで [^1]: と書きます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "참조는 [^1], 정의는 목록 붙임표 없이 [^1]: 로 씁니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "引用写作 [^1]，定义写作 [^1]:，前面不加列表短横线。"
           }
         }
       }
@@ -6613,6 +7173,34 @@
         }
       }
     },
+    "Return starts a source line. Shift-Return adds Markdown's explicit backslash break.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return starts a source line. Shift-Return adds Markdown's explicit backslash break."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return は行を改めます。Shift-Return は Markdown の明示的なバックスラッシュ改行を入れます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return은 새 줄을 시작합니다. Shift-Return은 Markdown의 역슬래시 줄바꿈을 넣습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return 开始新的一行。Shift-Return 插入 Markdown 的反斜杠换行。"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "en": {
@@ -6810,6 +7398,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "全选"
+          }
+        }
+      }
+    },
+    "Separate columns with pipes and add a delimiter row.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separate columns with pipes and add a delimiter row."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "列を縦線で区切り、区切り行を入れます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "열을 세로줄로 나누고 구분 줄을 넣습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用竖线分隔各列，并加上分隔行。"
           }
         }
       }
@@ -7508,6 +8124,90 @@
         }
       }
     },
+    "Start a quoted line with > and a space.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a quoted line with > and a space."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "引用する行を > とスペースで始めます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인용할 줄을 > 와 한 칸으로 시작합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "引用行以 > 和一个空格开头。"
+          }
+        }
+      }
+    },
+    "Start each item with a dash and a space.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start each item with a dash and a space."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各項目をハイフンとスペースで始めます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "각 항목을 붙임표와 한 칸으로 시작합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每一项以短横线和一个空格开头。"
+          }
+        }
+      }
+    },
+    "Start each item with a number, period, and space.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start each item with a number, period, and space."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各項目を数字、ピリオド、スペースで始めます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "각 항목을 숫자, 마침표, 한 칸으로 시작합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每一项以数字、句点和一个空格开头。"
+          }
+        }
+      }
+    },
     "Step %lld of %lld": {
       "localizations": {
         "ja": {
@@ -7554,6 +8254,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "停止"
+          }
+        }
+      }
+    },
+    "Strikethrough": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strikethrough"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取り消し線"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "취소선"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除线"
           }
         }
       }
@@ -7793,6 +8521,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "系统默认"
+          }
+        }
+      }
+    },
+    "Table": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Table"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "표"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "表格"
+          }
+        }
+      }
+    },
+    "Table of contents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Table of contents"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目次"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "목차"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目录"
           }
         }
       }
@@ -8431,6 +9215,34 @@
         }
       }
     },
+    "The definition is stored as [^1]: without a list dash.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The definition is stored as [^1]: without a list dash."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定義はリストのハイフンなしで [^1]: の形で保存されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "정의는 목록 붙임표 없이 [^1]: 형태로 저장됩니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定义以 [^1]: 的形式保存，前面不加列表短横线。"
+          }
+        }
+      }
+    },
     "The feed could not be parsed: %@": {
       "localizations": {
         "en": {
@@ -8885,6 +9697,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "网址会成为这篇文章链接的最后一段。可使用小写字母、数字和连字符。"
+          }
+        }
+      }
+    },
+    "Thematic break": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thematic break"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "区切り線"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "구분선"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分隔线"
           }
         }
       }
@@ -9788,6 +10628,34 @@
         }
       }
     },
+    "Use one to six # markers followed by a space.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use one to six # markers followed by a space."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "# を 1〜6 個置き、スペースを空けます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "# 기호를 1~6개 쓰고 한 칸 띄웁니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用一到六个 # 号，后跟一个空格。"
+          }
+        }
+      }
+    },
     "Use suggestion": {
       "localizations": {
         "ja": {
@@ -10081,6 +10949,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "要隐藏的单词或短语"
+          }
+        }
+      }
+    },
+    "Wrap a short code fragment in backticks.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrap a short code fragment in backticks."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "短いコード片をバッククォートで囲みます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "짧은 코드 조각을 백틱으로 감쌉니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用反引号包住简短的代码片段。"
+          }
+        }
+      }
+    },
+    "Wrap emphasized text in one asterisk.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrap emphasized text in one asterisk."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "斜体にする文字をアスタリスク 1 つで囲みます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기울일 글자를 별표 하나로 감쌉니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用一个星号包住要倾斜的文字。"
+          }
+        }
+      }
+    },
+    "Wrap important text in two asterisks.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrap important text in two asterisks."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "強調する文字をアスタリスク 2 つで囲みます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "강조할 글자를 별표 두 개로 감쌉니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用两个星号包住要强调的文字。"
+          }
+        }
+      }
+    },
+    "Wrap removed text in two tildes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrap removed text in two tildes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取り消す文字をチルダ 2 つで囲みます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지운 글자를 물결표 두 개로 감쌉니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用两个波浪号包住要删除的文字。"
           }
         }
       }
@@ -10497,7 +11477,34 @@
         }
       }
     },
-    "Your export could not be downloaded (%lld). Try again.": {},
+    "Your export could not be downloaded (%lld). Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your export could not be downloaded (%lld). Try again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "書き出したファイルをダウンロードできませんでした (%lld)。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내보낸 파일을 받지 못했습니다 (%lld). 다시 시도해 주세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法下载导出的文件（%lld）。请重试。"
+          }
+        }
+      }
+    },
     "Your export could not be prepared. Try again in a few minutes.": {
       "localizations": {
         "en": {
