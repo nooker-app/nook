@@ -31,6 +31,14 @@ final class TourCoordinator {
     /// GeometryReader preference) only while this is set, so steady-state
     /// scrolling never pays for the tutorial.
     var listHintActive = false
+    /// Where the list's first row is, in global coordinates, while the spotlight is
+    /// live. Zero when it has not been measured.
+    ///
+    /// Carried here rather than as a preference read at the shell because a
+    /// preference does not reliably leave a `TabView` page, and the overlay has to
+    /// be drawn at the shell to sit above the bar. Written from the list's
+    /// `onPreferenceChange` — a callback, so this is never mutated during layout.
+    var firstRowFrame: CGRect = .zero
 }
 
 // MARK: - Starter picks (locale-aware)

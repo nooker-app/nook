@@ -671,7 +671,6 @@ private struct CompactShell: View {
     /// The spotlight is currently showing.
     @State private var showListHint = false
     /// The first article row's measured global frame, for an exact spotlight.
-    @State private var firstRowFrame: CGRect = .zero
     /// When the Home tab was last re-tapped, for double-tap segment cycling.
     @State private var lastHomeReselect: ContinuousClock.Instant?
 
@@ -798,14 +797,11 @@ private struct CompactShell: View {
         // switch); the *start* condition below checks for articles.
         .overlay {
             if showListHint, selection == .home, store.isStorageConfigured {
-                ListTapHint(rowFrame: firstRowFrame == .zero ? nil : firstRowFrame, onDismiss: dismissListHint)
+                ListTapHint(
+                    rowFrame: tour.firstRowFrame == .zero ? nil : tour.firstRowFrame,
+                    onDismiss: dismissListHint)
                     .transition(.opacity)
             }
-        }
-        .onPreferenceChange(FirstRowFrameKey.self) { frame in
-            // Guard: the publisher only exists pre-tutorial, but never let a
-            // same-value preference emission invalidate the whole shell.
-            if firstRowFrame != frame { firstRowFrame = frame }
         }
         .onAppear { applySelection(selection) }
         .onChange(of: selection) { _, tab in
@@ -858,12 +854,26 @@ private struct CompactShell: View {
     /// Observes the article count on behalf of the tutorial spotlight. Lives in
     /// its own tiny view so only this leaf — not the shell — depends on the
     /// article array; it unmounts entirely once the hint has been seen.
+    /// Retries the list spotlight while it is waiting for articles to arrive.
+    ///
+    /// Mounted only while the spotlight is requested, which is the point: reading
+    /// `store.visibleArticles.count` in the shell's own body made the whole shell
+    /// re-evaluate on every article-list change, forever, for a hint shown once.
+    ///
+    /// It checks on appear as well as on change, and that is not belt-and-braces —
+    /// it is the bug this had. `onChange` fires on transitions, not on the state it
+    /// mounts with, so if the articles were already there when the spotlight was
+    /// requested there was no transition left to observe and the hint never showed.
+    /// The shell-wide `onChange` this replaced was always mounted, so it always saw
+    /// the transition; scoping it to the hint's lifetime removed the very edge it
+    /// depended on.
     private struct ListHintRetrigger: View {
         var store: ReaderStore
         var retry: () -> Void
 
         var body: some View {
             Color.clear
+                .onAppear { retry() }
                 .onChange(of: store.visibleArticles.count) { _, _ in retry() }
         }
     }
@@ -2704,6 +2714,14 @@ private struct ArticleList: View {
     var body: some View {
         ScrollViewReader { proxy in
             list
+                // Read here rather than at the shell, because a preference does not
+                // reliably leave a TabView page: the shell's reader saw nothing and
+                // the spotlight fell back to a guessed rectangle instead of the row.
+                // Handing it to the coordinator crosses the boundary the preference
+                // could not, and does it from a callback rather than during layout.
+                .onPreferenceChange(FirstRowFrameKey.self) { frame in
+                    if tour.firstRowFrame != frame { tour.firstRowFrame = frame }
+                }
                 // Native re-tap semantics: re-tapping the selected tab scrolls
                 // the visible list back to the top.
                 .onChange(of: tabChrome.scrollToTopSignal) { _, _ in
