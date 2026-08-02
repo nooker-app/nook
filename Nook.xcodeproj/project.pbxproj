@@ -34,6 +34,7 @@
 		2D10544597693E9EBB8A7A62 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2D10545C5225873E388FAABE /* Assets.xcassets */; };
 		2D10551F8EBEE1DB9668FE73 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2D10550B0EFDC776DFA2A5D1 /* LaunchScreen.storyboard */; };
 		2D1055A10000000000000002 /* WelcomeTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1055A10000000000000001 /* WelcomeTour.swift */; };
+		2D1055A10000000000000008 /* NotificationOptIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1055A10000000000000007 /* NotificationOptIn.swift */; };
 		2D1055A10000000000000004 /* ReaderCoachMarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1055A10000000000000003 /* ReaderCoachMarks.swift */; };
 		2D1055A10000000000000006 /* FeedDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1055A10000000000000005 /* FeedDiscoveryView.swift */; };
 		2D1060000000000000000021 /* NookShareDiscoverExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2D1060000000000000000004 /* NookShareDiscoverExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -134,6 +135,7 @@
 		2D10545C5225873E388FAABE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2D10550B0EFDC776DFA2A5D1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		2D1055A10000000000000001 /* WelcomeTour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeTour.swift; sourceTree = "<group>"; };
+		2D1055A10000000000000007 /* NotificationOptIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationOptIn.swift; sourceTree = "<group>"; };
 		2D1055A10000000000000003 /* ReaderCoachMarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderCoachMarks.swift; sourceTree = "<group>"; };
 		2D1055A10000000000000005 /* FeedDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedDiscoveryView.swift; sourceTree = "<group>"; };
 		2D1060000000000000000004 /* NookShareDiscoverExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NookShareDiscoverExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -303,6 +305,7 @@
 				2D1051B318278E8EC498651C /* AddFeedView.swift */,
 				2D10517EDF4172A50DC4DC2C /* ReaderView.swift */,
 				2D1055A10000000000000001 /* WelcomeTour.swift */,
+				2D1055A10000000000000007 /* NotificationOptIn.swift */,
 				2D1055A10000000000000003 /* ReaderCoachMarks.swift */,
 				2D1055A10000000000000005 /* FeedDiscoveryView.swift */,
 			);
@@ -590,6 +593,7 @@
 				2D1051F8859EA4B314398BBA /* AddFeedView.swift in Sources */,
 				2D1051CD906D767ED4F5EA6C /* ReaderView.swift in Sources */,
 				2D1055A10000000000000002 /* WelcomeTour.swift in Sources */,
+				2D1055A10000000000000008 /* NotificationOptIn.swift in Sources */,
 				2D1055A10000000000000004 /* ReaderCoachMarks.swift in Sources */,
 				2D1055A10000000000000006 /* FeedDiscoveryView.swift in Sources */,
 			);

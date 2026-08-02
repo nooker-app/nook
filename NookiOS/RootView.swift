@@ -13,8 +13,8 @@ struct RootView: View {
     @Bindable private var store = ReaderStore.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = true
-    @AppStorage("showUnreadBadge") private var showUnreadBadge = true
+    @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = false
+    @AppStorage("showUnreadBadge") private var showUnreadBadge = false
     @AppStorage("markReadOnOpen") private var markReadOnOpen = true
     @AppStorage("markReadDelaySeconds") private var markReadDelaySeconds = 3
     @AppStorage(BackgroundRefresh.enabledKey) private var newArticleNotifications = false
@@ -23,6 +23,10 @@ struct RootView: View {
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
     @State private var isReady = false
     @State private var showWelcome = false
+    @State private var showNotificationOptIn = false
+    /// Answered once and never asked again — replaying the tutorial must not
+    /// re-ask a question the reader has already answered.
+    @AppStorage(NotificationOptInSheet.seenKey) private var hasSeenNotificationOptIn = false
     @State private var showTranslatePromo = false
     /// Drives the tutorial's hand-off from the welcome cover into the live app
     /// (add the sample feed, then hint the list). In-memory, shared via environment.
@@ -39,8 +43,19 @@ struct RootView: View {
                 // First-run tutorial, mounted here so one cover reaches both the
                 // iPhone tab shell and the iPad split view. Swipe-to-dismiss also
                 // completes it (onDismiss), so it won't re-appear next launch.
-                .fullScreenCover(isPresented: $showWelcome, onDismiss: { hasCompletedWelcome = true }) {
+                .fullScreenCover(isPresented: $showWelcome, onDismiss: {
+                    hasCompletedWelcome = true
+                    // Asked here and nowhere else. The tutorial is over, so the
+                    // reader knows what Nook is before being asked what it may
+                    // notify them about — and nothing is on to ask about until
+                    // they say so. Swiping the tutorial away also lands here, so
+                    // the question is not lost by skipping it.
+                    if !hasSeenNotificationOptIn { showNotificationOptIn = true }
+                }) {
                     WelcomeSheet(store: store, onFinish: { showWelcome = false })
+                }
+                .sheet(isPresented: $showNotificationOptIn) {
+                    NotificationOptInSheet()
                 }
                 // One-time promo introducing list-title translation, shown only
                 // once the tutorial is behind the user (see `.task` below).
@@ -115,9 +130,17 @@ struct RootView: View {
                     } else {
                         maybePresentTranslateTitlesPromo()
                     }
-                    // Ask for notification permission after the UI is shown (so the
-                    // prompt doesn't cover the splash), only for the features in use.
-                    await requestNotificationAuthorizationIfNeeded()
+                    // No permission prompt here, and this is the whole point of the
+                    // change. The badge used to default on, which was enough to
+                    // satisfy the "are any notification features in use" check — so
+                    // the system prompt appeared on the very first launch of every
+                    // install, over the tutorial, before the reader knew what Nook
+                    // was. A prompt is asked once and answered forever.
+                    //
+                    // Every notification setting now starts off, and asking happens
+                    // in two places only: the sheet after the tutorial, and a toggle
+                    // being switched on. Scheduling below is not a prompt and is a
+                    // no-op until new-article alerts are on.
                     BackgroundRefresh.schedule()
                 }
                 .onChange(of: showUnreadBadge) { _, newValue in
@@ -245,17 +268,21 @@ struct RootView: View {
         }
     }
 
-    /// Requests notification authorization once, for either notification feature —
-    /// the unread badge or new-article alerts.
+    /// Requests notification authorization, called only from a setting being
+    /// switched on — never at launch.
     ///
     /// iOS shows the permission prompt only the first time, so we request the full
     /// set both features need (`alert`, `sound`, `badge`) up front. Requesting just
-    /// `.badge` first (the badge is on by default) would spend the one-time prompt
-    /// and permanently foreclose alerts — so later enabling new-article
-    /// notifications could never get banner/sound authorization.
+    /// `.badge` first would spend the one-time prompt and permanently foreclose
+    /// alerts, so later enabling new-article notifications could never get
+    /// banner/sound authorization.
+    ///
+    /// No `showUnreadBadge || newArticleNotifications` guard any more. It existed
+    /// for the launch call, and because the badge defaulted on it was true on a
+    /// fresh install — which is exactly how an unasked-for prompt appeared. The
+    /// remaining callers are the two toggles, and reaching either one is the
+    /// reader asking.
     private func requestNotificationAuthorizationIfNeeded() async {
-        guard showUnreadBadge || newArticleNotifications else { return }
-
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .notDetermined else { return }

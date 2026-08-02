@@ -301,7 +301,7 @@ private struct DataActionsModifier: ViewModifier {
 
 private struct GeneralSettingsScreen: View {
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
-    @AppStorage("showUnreadBadge") private var showUnreadBadge = true
+    @AppStorage("showUnreadBadge") private var showUnreadBadge = false
 
     var body: some View {
         List {
@@ -633,7 +633,7 @@ private struct ReaderControlPositionChoice: View {
 private struct FeedsSettingsScreen: View {
     @Bindable var store: ReaderStore
     @Environment(\.openURL) private var openURL
-    @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = true
+    @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = false
     @AppStorage("refreshIntervalMinutes") private var refreshIntervalMinutes = 30
     @AppStorage(ReaderStore.resolveMissingDatesKey) private var resolveMissingDates = true
     @AppStorage(BackgroundRefresh.enabledKey) private var newArticleNotifications = false

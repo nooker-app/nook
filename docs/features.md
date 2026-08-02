@@ -57,12 +57,15 @@ List-title translation expands a row and reveals the translated title beneath th
 - Background refreshes use lower priority and merge new items without jolting the visible list.
 - Show the total unread count on the macOS Dock and iOS app icon, or turn the badge off.
 - Opt into new-article notifications separately from unread badges.
+- On iOS, ask for notification permission only after a setting that needs it has been switched on — never at launch. Every such setting starts off, and the one place they are offered together is a screen shown once, after the tutorial.
 - Synchronize seen state so an article noticed on one device does not produce a later new-article alert on another.
 - Keep device-local delivery receipts so the same device alerts at most once for an article.
 - Treat a Mac as engaged only while the app and reader window are active, visible, the login session is awake, and system input has occurred within ten minutes. Otherwise iOS background refresh can own the alert even if Nook remains open on the Mac.
 - Open smart sources from the iOS home-screen widget.
 
 iOS controls the exact background refresh schedule, so notifications are best effort rather than an exact polling promise. Settings includes authorization and background-refresh diagnostics plus a test notification.
+
+The permission prompt is asked once by iOS and answered for good, so Nook does not spend it on someone who has not asked for anything. Nothing notification-shaped is on when the app is installed; the screen after the tutorial explains what each setting does and turns on only what is chosen, and the prompt follows that choice rather than preceding it. Declining leaves every setting off and asks iOS for nothing, and the same settings remain in Settings afterwards.
 
 ### Platform fit and appearance
 
@@ -77,10 +80,10 @@ iOS controls the exact background refresh schedule, so notifications are best ef
 
 | Capability | Default | Scope and behavior | Network or privacy impact |
 | --- | --- | --- | --- |
-| Automatic feed refresh | On, every 30 minutes | Local schedule; also refreshes at launch and foreground return | Fetches subscribed feeds |
+| Automatic feed refresh | macOS on, iOS off | Local schedule, 30 minutes by default; also refreshes at launch and foreground return. On iOS this is offered once after the tutorial and is off until accepted | Fetches subscribed feeds |
 | Native reader content extraction | On | Local experimental preference; falls back to feed content when extraction fails | Fetches the article page when full content is needed |
 | Mark read on open | On, after 3 seconds | Local reading preference | None |
-| Unread app-icon or Dock badge | On | Local toggle; count comes from the merged library | iOS requires notification authorization for app-icon badges |
+| Unread app-icon or Dock badge | macOS on, iOS off | Local toggle; count comes from the merged library. Off on iOS until accepted, because the badge is what iOS calls a notification and switching it on is what asks | iOS requires notification authorization for app-icon badges |
 | New-article notifications | Off | Opt-in on each platform; iOS also requires notification permission and Background App Refresh | Background feed requests; local notifications only |
 | Full-article translation | On demand | Runs only when the reader's Translate action is used | Apple stays on-device; Gemini sends article text to Google |
 | Translation provider | Apple Intelligence | Selected independently for reader, list titles, and categorization | Gemini requires explicit selection and a device-local API key |

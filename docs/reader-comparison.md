@@ -39,6 +39,7 @@ NetNewsWire and Reeder can also use iCloud, but their storage formats and merge 
 Nook deliberately separates features that are often bundled together:
 
 - New-article notifications are off by default and independent from the unread badge.
+- On iOS nothing that needs notification permission is on when the app is installed, and the system prompt only follows a setting the reader switched on — it is never spent at launch.
 - Automatic list-title translation is off by default and independent from manual article translation.
 - Apple Intelligence, Gemini article translation, Gemini title translation, and Gemini categorization are selected per surface.
 - Gemini is never used until the reader selects it and stores an API key on that device.
