@@ -66,6 +66,8 @@ public struct PlusComposeView: View {
 
     /// Asked when leaving with writing that has never been published.
     @State private var askAboutDraft = false
+    /// Whether the writer is being asked to confirm deleting the draft they opened.
+    @State private var confirmingDelete = false
 
     /// Only the title. The body's focus lives in the text view, and a case here for it
     /// was a value that could be set but never took effect.
@@ -252,6 +254,16 @@ public struct PlusComposeView: View {
                             }
                             .accessibilityLabel(Text("Markdown help", bundle: .module))
                         }
+                        // Only when there is a draft to delete. Until now the only way
+                        // out of a draft was to publish it or leave it in the list.
+                        if editingDraft != nil {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button(role: .destructive) { confirmingDelete = true } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .accessibilityLabel(Text("Delete draft", bundle: .module))
+                            }
+                        }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button { Task { await publish() } } label: {
                                 if store.isWorking {
@@ -285,7 +297,23 @@ public struct PlusComposeView: View {
                     } message: {
                         Text("It stays on this device and is not published until you say so.", bundle: .module)
                     }
+                    .confirmationDialog(
+                        Text("Delete this draft?", bundle: .module),
+                        isPresented: $confirmingDelete,
+                        titleVisibility: .visible
+                    ) {
+                        Button(role: .destructive) { deleteDraft() } label: {
+                            Text("Delete Draft", bundle: .module)
+                        }
+                        Button(role: .cancel) {} label: { Text("Keep Writing", bundle: .module) }
+                    } message: {
+                        Text("This draft is only on this device, so deleting it cannot be undone.", bundle: .module)
+                    }
             }
+            // A swipe asks what Cancel asks. Without this the sheet closed on the
+            // gesture and unsaved writing went with it, while the button two
+            // centimetres away was careful about exactly that.
+            .confirmSheetDismissal(when: hasUnsavedChanges) { cancel() }
             .onAppear { if title.isEmpty { focus = .title } }
         #else
             VStack(alignment: .leading, spacing: 0) {
@@ -313,6 +341,18 @@ public struct PlusComposeView: View {
                 Button(role: .cancel) {} label: { Text("Keep Writing", bundle: .module) }
             } message: {
                 Text("It stays on this device and is not published until you say so.", bundle: .module)
+            }
+            .confirmationDialog(
+                Text("Delete this draft?", bundle: .module),
+                isPresented: $confirmingDelete,
+                titleVisibility: .visible
+            ) {
+                Button(role: .destructive) { deleteDraft() } label: {
+                    Text("Delete Draft", bundle: .module)
+                }
+                Button(role: .cancel) {} label: { Text("Keep Writing", bundle: .module) }
+            } message: {
+                Text("This draft is only on this device, so deleting it cannot be undone.", bundle: .module)
             }
         #endif
     }
@@ -639,6 +679,18 @@ public struct PlusComposeView: View {
                 Button { cancel() } label: { Text("Cancel", bundle: .module) }
                     .keyboardShortcut(.cancelAction)
 
+                if editingDraft != nil {
+                    Button(role: .destructive) { confirmingDelete = true } label: {
+                        Label {
+                            Text("Delete draft", bundle: .module)
+                        } icon: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                    .labelStyle(.iconOnly)
+                    .help(Text("Delete draft", bundle: .module))
+                }
+
                 screenTitle
                     .font(.headline)
                     .lineLimit(1)
@@ -947,6 +999,24 @@ public struct PlusComposeView: View {
         slugField.reset()
         summary = ""
         markdown = ""
+        onFinished()
+    }
+
+    /// The draft this screen opened, when it opened one.
+    ///
+    /// Deleting is only offered here: a new post has nothing to delete, and an edit to
+    /// something already published is not the post — taking that down is a different
+    /// action, on the post itself, in Settings.
+    private var editingDraft: PlusDraft? {
+        if case .draft(let draft) = target { return draft }
+        return nil
+    }
+
+    /// Throws the draft away and leaves.
+    private func deleteDraft() {
+        guard let draft = editingDraft else { return }
+        store.discard(draft)
+        guard store.failure == nil else { return }
         onFinished()
     }
 
