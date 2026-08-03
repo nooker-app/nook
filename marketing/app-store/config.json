@@ -1,5 +1,10 @@
 {
-  "locales": ["ko", "en", "ja", "zh-Hans"],
+  "locales": [
+    "ko",
+    "en",
+    "ja",
+    "zh-Hans"
+  ],
   "iphone": {
     "width": 1290,
     "height": 2796,
@@ -7,6 +12,9 @@
       {
         "id": "01-library",
         "source": "docs/screenshots/ios-library.png",
+        "localizedSources": {
+          "en": "marketing/app-store/captures/en/iphone-6.9/01-library.png"
+        },
         "localized": {
           "ko": {
             "title": "피드는 내가 고릅니다",
@@ -29,6 +37,9 @@
       {
         "id": "02-articles",
         "source": "docs/screenshots/ios-articles.png",
+        "localizedSources": {
+          "en": "marketing/app-store/captures/en/iphone-6.9/02-articles.png"
+        },
         "localized": {
           "ko": {
             "title": "새 글을 빠르게 훑어보세요",
@@ -51,6 +62,9 @@
       {
         "id": "03-reader",
         "source": "docs/screenshots/ios-reader.png",
+        "localizedSources": {
+          "en": "marketing/app-store/captures/en/iphone-6.9/03-reader.png"
+        },
         "localized": {
           "ko": {
             "title": "읽는 데만 집중하세요",
@@ -73,6 +87,9 @@
       {
         "id": "04-starred",
         "source": "docs/screenshots/ios-starred.png",
+        "localizedSources": {
+          "en": "marketing/app-store/captures/en/iphone-6.9/04-starred.png"
+        },
         "localized": {
           "ko": {
             "title": "좋은 글은 다시 찾기 쉽게",
@@ -95,6 +112,9 @@
       {
         "id": "05-settings",
         "source": "docs/screenshots/ios-settings.png",
+        "localizedSources": {
+          "en": "marketing/app-store/captures/en/iphone-6.9/05-settings.png"
+        },
         "localized": {
           "ko": {
             "title": "내 방식에 맞춘 Nook",
@@ -207,7 +227,12 @@
       {
         "id": "02-reader",
         "source": "docs/screenshots/main.png",
-        "crop": { "x": 0.35, "y": 0.02, "width": 0.65, "height": 0.65 },
+        "crop": {
+          "x": 0.35,
+          "y": 0.02,
+          "width": 0.65,
+          "height": 0.65
+        },
         "localized": {
           "ko": {
             "title": "더 편안한\n네이티브 리더",
@@ -230,7 +255,12 @@
       {
         "id": "03-library",
         "source": "docs/screenshots/main.png",
-        "crop": { "x": 0.0, "y": 0.04, "width": 0.65, "height": 0.65 },
+        "crop": {
+          "x": 0.0,
+          "y": 0.04,
+          "width": 0.65,
+          "height": 0.65
+        },
         "localized": {
           "ko": {
             "title": "폴더와 피드를\n내 방식대로",

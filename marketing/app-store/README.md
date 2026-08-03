@@ -25,28 +25,37 @@ output/
     ipad-13/     # 2048 x 2732 PNG
     mac/         # 2880 x 1800 PNG
   en/
-    iphone-6.9/
-    mac/
   ja/
-    iphone-6.9/
-    mac/
   zh-Hans/
-    iphone-6.9/
-    mac/
 ```
+
+Every locale gets the same platforms and the same slides.
 
 PNG files are rendered without an alpha channel, as required by App Store Connect.
 
 ## Capture from Simulator
 
-Prepare the desired screen in the booted 13-inch iPad simulator, then capture its native pixels:
+Prepare the desired screen in a booted simulator, then capture its native pixels:
 
 ```sh
 make app-store-capture LOCALE=ko NAME=01-library
 make app-store-capture LOCALE=ko NAME=03-reader
 ```
 
-Use `SIMULATOR='iPad Pro 13-inch (M5)'` when capturing from a different device. Repeat with `LOCALE=en`, `ja`, or `zh-Hans` after changing Nook's app language and relaunching it. The script fixes the status bar, validates the App Store-compatible dimensions, and writes into `captures/<locale>/ipad-13/`.
+Pass `SIMULATOR='iPhone 16 Pro Max'` (or another 6.9-inch iPhone) for the phone set and `SIMULATOR='iPad Pro 13-inch (M5)'` for the tablet set. The script fixes the status bar, validates the App Store-compatible dimensions, and chooses the folder from the capture's own size: a 6.9-inch iPhone lands in `captures/<locale>/iphone-6.9/`, a 13-inch iPad in `captures/<locale>/ipad-13/`.
+
+Capture a locale from a device in that language, not only from Nook's in-app language setting — a new simulator inherits the Mac's language. With the device shut down, set its language and relaunch:
+
+```sh
+xcrun simctl shutdown <device>
+plutil -replace AppleLanguages -json '["en"]' \
+  ~/Library/Developer/CoreSimulator/Devices/<udid>/data/Library/Preferences/.GlobalPreferences.plist
+xcrun simctl boot <device>
+```
+
+`simctl erase` first for a true first launch: `simctl uninstall` leaves preferences behind in `cfprefsd`, so the welcome tour does not reappear. The `en` set comes from an erased device whose welcome tour subscribed the English starter bundles — Hacker News, The Verge, Ars Technica, Daring Fireball, Quanta, and NASA — so the lists hold real content and no personal data.
+
+Turn "Translate titles in the list" off (Settings › Experimental) before capturing a locale whose feeds are already in that language, then clear the translation cache. With nothing to translate, every row keeps a "Translating…" badge.
 
 ## Update
 
