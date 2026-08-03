@@ -26,6 +26,9 @@ public struct PlusSettingsContent: View {
     /// dialog, so also not attached here — and worth confirming, because the file is
     /// the only copy of that writing.
     let onDiscardFolderEdit: (PlusPostMirror.Edit) -> Void
+    /// Asks the host to open an image picker for the site icon. A picker is a
+    /// presentation, so it belongs to the host for the reason above.
+    let onChooseIcon: () -> Void
     /// The post currently being removed, so its row can show it. Owned by the host,
     /// which is where the work is run from.
     let removing: String?
@@ -38,6 +41,7 @@ public struct PlusSettingsContent: View {
         onTakeDown: @escaping (ATRecord<ArticleRecord>) -> Void,
         onLeave: @escaping () -> Void,
         onDiscardFolderEdit: @escaping (PlusPostMirror.Edit) -> Void,
+        onChooseIcon: @escaping () -> Void,
         removing: String?
     ) {
         self.store = store
@@ -47,6 +51,7 @@ public struct PlusSettingsContent: View {
         self.onTakeDown = onTakeDown
         self.onLeave = onLeave
         self.onDiscardFolderEdit = onDiscardFolderEdit
+        self.onChooseIcon = onChooseIcon
         self.removing = removing
     }
 
@@ -154,6 +159,7 @@ public struct PlusSettingsContent: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                iconRow
                 Button(role: .destructive) { store.signOut() } label: { Text("Sign Out on This Device", bundle: .module) }
             } header: {
                 Text("Your account", bundle: .module)
@@ -376,6 +382,66 @@ public struct PlusSettingsContent: View {
     ///
     /// Tapping the row opens it, which is what a row of writing should do; publishing
     /// and discarding are swipes, so the destructive one is never the default gesture.
+    /// The site icon: what a browser tab and a feed reader show for the writer's
+    /// site. Offered here rather than in the composer because it belongs to the
+    /// site, not to a post.
+    /// The icon as it is now — the writer's own, or the mark their site shows
+    /// without one. Shown rather than described: "Set" told somebody nothing about
+    /// what was actually on their site.
+    @ViewBuilder private var iconPreview: some View {
+        let side: CGFloat = 28
+        Group {
+            if let url = store.publicationIconURL {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFit()
+                } placeholder: {
+                    // A quiet placeholder rather than a spinner: this is a 28-point
+                    // square, and a spinner at that size is a flicker.
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(.quaternary)
+                }
+            } else {
+                // What the site shows without an icon of its own.
+                Image(systemName: "globe")
+                    .imageScale(.medium)
+                    .foregroundStyle(.secondary)
+                    .frame(width: side, height: side)
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(.separator, lineWidth: 0.5)
+        )
+        .accessibilityLabel(
+            store.hasPublicationIcon
+                ? Text("Your site icon", bundle: .module)
+                : Text("No icon set; your site shows Nook's mark", bundle: .module))
+    }
+
+    @ViewBuilder private var iconRow: some View {
+        LabeledContent {
+            HStack(spacing: 12) {
+                iconPreview
+                Button { onChooseIcon() } label: {
+                    Text(store.hasPublicationIcon ? "Change" : "Choose", bundle: .module)
+                }
+                .disabled(!store.canPublish)
+                if store.hasPublicationIcon {
+                    Button(role: .destructive) {
+                        Task { await store.setPublicationIcon(nil) }
+                    } label: {
+                        Text("Remove", bundle: .module)
+                    }
+                    .disabled(store.isWorking)
+                }
+            }
+        } label: {
+            Text("Site icon", bundle: .module)
+        }
+    }
+
     @ViewBuilder
     private func draftRow(_ draft: PlusDraft) -> some View {
         Button {

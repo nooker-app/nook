@@ -4,6 +4,91 @@
     "" : {
       "shouldTranslate" : false
     },
+    "'%@' is not a valid URL." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "'%@' is not a valid URL."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」は有効な URL ではありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유효한 URL이 아닙니다: '%@'"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”不是有效的网址。"
+          }
+        }
+      }
+    },
+    "“%@” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どちらの場合も「%@」は Web から削除されます。下書きとして保存すると本文はこの端末に残り、再び公開できます。本文も削除すると、どこにも複製は残りません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "어느 쪽이든 “%@”은(는) 웹에서 내려갑니다. 초안으로 보관하면 본문이 이 기기에 남아 다시 발행할 수 있고, 본문까지 삭제하면 어디에도 사본이 남지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无论选择哪种方式，“%@”都会从网络上移除。保存为草稿会将正文留在此设备上，以便再次发布；同时删除正文则不会在任何地方保留副本。"
+          }
+        }
+      }
+    },
+    "“%@” will be removed from your repository and from the web. This cannot be undone." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” will be removed from your repository and from the web. This cannot be undone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」がリポジトリと Web から削除されます。取り消せません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”이(가) 내 저장소와 웹에서 제거됩니다. 되돌릴 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”将从你的仓库和网络上移除。此操作无法撤销。"
+          }
+        }
+      }
+    },
     "%@%@" : {
       "shouldTranslate" : false
     },
@@ -78,34 +163,6 @@
     "%lld/%lld" : {
       "shouldTranslate" : false
     },
-    "'%@' is not a valid URL." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "'%@' is not a valid URL."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「%@」は有効な URL ではありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "유효한 URL이 아닙니다: '%@'"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@”不是有效的网址。"
-          }
-        }
-      }
-    },
     "1 article downloaded" : {
       "localizations" : {
         "en" : {
@@ -134,28 +191,6 @@
         }
       }
     },
-    "A Gemini API key is saved on this device." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この端末に Gemini API キーが保存されています。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 기기에 Gemini API 키가 저장되어 있습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此设备上已保存 Gemini API 密钥。"
-          }
-        }
-      }
-    },
     "A filter hides any story that matches it — usually just a word or phrase. Turn on **Regex** on a filter for pattern matching. Matches ignore case unless you turn on **Aa**." : {
       "localizations" : {
         "en" : {
@@ -180,6 +215,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "过滤器会隐藏所有匹配的文章——通常一个单词或短语就够了。需要模式匹配时，为该过滤器开启 **Regex**。除非开启 **Aa**，否则匹配不区分大小写。"
+          }
+        }
+      }
+    },
+    "A Gemini API key is saved on this device." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末に Gemini API キーが保存されています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기에 Gemini API 키가 저장되어 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备上已保存 Gemini API 密钥。"
           }
         }
       }
@@ -230,56 +287,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "简单了解一下用 Nook 发布是怎么回事。"
-          }
-        }
-      }
-    },
-    "AI Summary" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI要約"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 요약"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 摘要"
-          }
-        }
-      }
-    },
-    "AI provider" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI provider"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AIプロバイダ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 제공자"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 提供方"
           }
         }
       }
@@ -504,6 +511,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "2周后"
+          }
+        }
+      }
+    },
+    "AI provider" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI provider"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AIプロバイダ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 제공자"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 提供方"
+          }
+        }
+      }
+    },
+    "AI Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 摘要"
           }
         }
       }
@@ -1125,6 +1182,7 @@
       }
     },
     "Can't show the original" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -1358,6 +1416,9 @@
         }
       }
     },
+    "Change" : {
+
+    },
     "Changes in your folder" : {
       "localizations" : {
         "en" : {
@@ -1464,6 +1525,9 @@
         }
       }
     },
+    "Choose" : {
+
+    },
     "Choose a name." : {
       "localizations" : {
         "ja" : {
@@ -1487,6 +1551,7 @@
       }
     },
     "Choose an account type instead" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -1988,6 +2053,28 @@
         }
       }
     },
+    "Could not reach the service: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サービスに接続できませんでした: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서비스에 연결할 수 없습니다: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接服务：%@"
+          }
+        }
+      }
+    },
     "Could not reach the service." : {
       "localizations" : {
         "en" : {
@@ -2012,28 +2099,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法连接到服务。"
-          }
-        }
-      }
-    },
-    "Could not reach the service: %@" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "サービスに接続できませんでした: %@"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "서비스에 연결할 수 없습니다: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法连接服务：%@"
           }
         }
       }
@@ -2263,6 +2328,7 @@
       }
     },
     "Delete" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2397,6 +2463,7 @@
       }
     },
     "Delete this post" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2425,6 +2492,7 @@
       }
     },
     "Delete this post?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2531,6 +2599,7 @@
       }
     },
     "Developer" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2726,34 +2795,6 @@
         }
       }
     },
-    "Download Articles…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Download Articles…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "記事をダウンロード…"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "글 다운로드…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载文章…"
-          }
-        }
-      }
-    },
     "Download a Copy of Your Writing" : {
       "localizations" : {
         "en" : {
@@ -2778,6 +2819,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载你的写作副本"
+          }
+        }
+      }
+    },
+    "Download Articles…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download Articles…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記事をダウンロード…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글 다운로드…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载文章…"
           }
         }
       }
@@ -4049,6 +4118,7 @@
       }
     },
     "I know my full handle" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -4066,6 +4136,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "我知道完整 handle"
+          }
+        }
+      }
+    },
+    "ignore case (prefix)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ignore case (prefix)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大文字小文字を無視（接頭辞）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대소문자 무시 (접두사)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略大小写（前缀）"
           }
         }
       }
@@ -4366,62 +4464,6 @@
         }
       }
     },
-    "Keep Editing" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep Editing"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "編集を続ける"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "계속 편집"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继续编辑"
-          }
-        }
-      }
-    },
-    "Keep Writing" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep Writing"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "書き続ける"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "계속 쓰기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继续写"
-          }
-        }
-      }
-    },
     "Keep as Draft" : {
       "localizations" : {
         "en" : {
@@ -4446,6 +4488,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存为草稿"
+          }
+        }
+      }
+    },
+    "Keep Editing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Editing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集を続ける"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계속 편집"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续编辑"
           }
         }
       }
@@ -4502,6 +4572,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要保存为草稿吗？"
+          }
+        }
+      }
+    },
+    "Keep Writing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Writing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書き続ける"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계속 쓰기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续写"
           }
         }
       }
@@ -4853,6 +4951,7 @@
       }
     },
     "Lowercase letters, numbers, and hyphens. At least three characters." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4931,6 +5030,7 @@
       }
     },
     "Markdown. Headings, lists, links, quotes, and code all work; images are not supported yet." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -4948,34 +5048,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 Markdown。标题、列表、链接、引用和代码都可用；暂不支持图片。"
-          }
-        }
-      }
-    },
-    "Match Appearance" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Match Appearance"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "外観に合わせる"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "화면 모드 따름"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跟随外观"
           }
         }
       }
@@ -5008,6 +5080,34 @@
         }
       }
     },
+    "Match Appearance" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Match Appearance"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外観に合わせる"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "화면 모드 따름"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随外观"
+          }
+        }
+      }
+    },
     "Match in" : {
       "localizations" : {
         "ja" : {
@@ -5026,6 +5126,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "匹配范围"
+          }
+        }
+      }
+    },
+    "matches a or b" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "matches a or b"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a または b に一致"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a 또는 b와 일치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "匹配 a 或 b"
           }
         }
       }
@@ -5314,84 +5442,6 @@
         }
       }
     },
-    "No Gemini API key saved yet." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存された Gemini API キーはまだありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "아직 저장된 Gemini API 키가 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚未保存 Gemini API 密钥。"
-          }
-        }
-      }
-    },
-    "No RSS or Atom entries were found at %@." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No RSS or Atom entries were found at %@."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ に RSS／Atom のエントリが見つかりませんでした。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@에서 RSS나 Atom 항목을 찾지 못했습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 %@ 未找到 RSS 或 Atom 条目。"
-          }
-        }
-      }
-    },
-    "No RSS or Atom feed link was found at %@." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No RSS or Atom feed link was found at %@."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ に RSS／Atom フィードのリンクが見つかりませんでした。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@에서 RSS나 Atom 피드 링크를 찾지 못했습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 %@ 未找到 RSS 或 Atom 订阅源链接。"
-          }
-        }
-      }
-    },
     "No article matches." : {
       "localizations" : {
         "en" : {
@@ -5416,6 +5466,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有匹配的文章。"
+          }
+        }
+      }
+    },
+    "No categories — add some in Article Rules" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No categories — add some in Article Rules"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カテゴリなし — Article Rules で追加"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카테고리 없음 — Article Rules에서 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无类别 — 在 Article Rules 中添加"
           }
         }
       }
@@ -5448,30 +5526,24 @@
         }
       }
     },
-    "No categories — add some in Article Rules" : {
+    "No Gemini API key saved yet." : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No categories — add some in Article Rules"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "カテゴリなし — Article Rules で追加"
+            "value" : "保存された Gemini API キーはまだありません。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "카테고리 없음 — Article Rules에서 추가"
+            "value" : "아직 저장된 Gemini API 키가 없습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "暂无类别 — 在 Article Rules 中添加"
+            "value" : "尚未保存 Gemini API 密钥。"
           }
         }
       }
@@ -5598,6 +5670,62 @@
         }
       }
     },
+    "No RSS or Atom entries were found at %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No RSS or Atom entries were found at %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ に RSS／Atom のエントリが見つかりませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 RSS나 Atom 항목을 찾지 못했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 未找到 RSS 或 Atom 条目。"
+          }
+        }
+      }
+    },
+    "No RSS or Atom feed link was found at %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No RSS or Atom feed link was found at %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ に RSS／Atom フィードのリンクが見つかりませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 RSS나 Atom 피드 링크를 찾지 못했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 未找到 RSS 或 Atom 订阅源链接。"
+          }
+        }
+      }
+    },
     "None" : {
       "localizations" : {
         "en" : {
@@ -5622,28 +5750,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无"
-          }
-        }
-      }
-    },
-    "Nook Plus (%@)" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook Plus（%@）"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook Plus (%@)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook Plus（%@）"
           }
         }
       }
@@ -5776,6 +5882,29 @@
         }
       }
     },
+    "Nook Plus (%@)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook Plus（%@）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook Plus (%@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook Plus（%@）"
+          }
+        }
+      }
+    },
     "Nook stores your posts in a repository on its own server, and publishing needs an account there. Support for other servers is not decided yet." : {
       "localizations" : {
         "ja" : {
@@ -5798,7 +5927,11 @@
         }
       }
     },
+    "Nook's mark" : {
+
+    },
     "Nook's reading samples" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5948,28 +6081,6 @@
         }
       }
     },
-    "OK" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "확인"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "好"
-          }
-        }
-      }
-    },
     "Off — this filter isn't hiding anything." : {
       "localizations" : {
         "en" : {
@@ -5994,6 +6105,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已关闭 — 此过滤器未隐藏任何内容。"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好"
           }
         }
       }
@@ -6049,6 +6182,7 @@
       }
     },
     "Only change this if you are testing Nook Plus itself. Accounts do not carry across servers, so switching signs you out." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6160,28 +6294,6 @@
         }
       }
     },
-    "Open Original" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "原文を開く"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "원문 열기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开原文"
-          }
-        }
-      }
-    },
     "Open in Browser" : {
       "localizations" : {
         "en" : {
@@ -6234,6 +6346,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Nook 中打开"
+          }
+        }
+      }
+    },
+    "Open Original" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原文を開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원문 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开原文"
           }
         }
       }
@@ -6596,6 +6730,28 @@
         }
       }
     },
+    "Publish it" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "発行する"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발행하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发布"
+          }
+        }
+      }
+    },
     "Publish This Change" : {
       "localizations" : {
         "en" : {
@@ -6620,28 +6776,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "发布此更改"
-          }
-        }
-      }
-    },
-    "Publish it" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "発行する"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "발행하기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "发布"
           }
         }
       }
@@ -6675,6 +6809,7 @@
       }
     },
     "Publishing" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7088,6 +7223,9 @@
         }
       }
     },
+    "Remove" : {
+
+    },
     "Remove All Downloads" : {
       "localizations" : {
         "en" : {
@@ -7244,28 +7382,6 @@
         }
       }
     },
-    "Save Key" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "キーを保存"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "키 저장"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存密钥"
-          }
-        }
-      }
-    },
     "Save as Markdown" : {
       "localizations" : {
         "en" : {
@@ -7317,6 +7433,7 @@
       }
     },
     "Save it somewhere safe. It is the only way back into your repository, and Nook cannot reset it for you." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -7334,6 +7451,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请妥善保存。这是进入你的仓库的唯一方式，Nook 无法为你重置。"
+          }
+        }
+      }
+    },
+    "Save Key" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーを保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키 저장"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存密钥"
           }
         }
       }
@@ -7473,6 +7612,7 @@
       }
     },
     "Server" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7500,6 +7640,9 @@
         }
       }
     },
+    "Set" : {
+
+    },
     "Set New Password" : {
       "localizations" : {
         "ja" : {
@@ -7518,34 +7661,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置新密码"
-          }
-        }
-      }
-    },
-    "Set Up Publishing" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Set Up Publishing"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "公開を設定"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "발행 설정하기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置发布"
           }
         }
       }
@@ -7590,6 +7705,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "발행 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置发布"
+          }
+        }
+      }
+    },
+    "Set Up Publishing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set Up Publishing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公開を設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발행 설정하기"
           }
         },
         "zh-Hans" : {
@@ -7706,6 +7849,56 @@
         }
       }
     },
+    "Show in Finder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Finder"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder に表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder에서 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示"
+          }
+        }
+      }
+    },
+    "Show password" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスワードを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비밀번호 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示密码"
+          }
+        }
+      }
+    },
     "Show Posts in Files" : {
       "localizations" : {
         "en" : {
@@ -7762,57 +7955,8 @@
         }
       }
     },
-    "Show in Finder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show in Finder"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finder に表示"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finder에서 보기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 Finder 中显示"
-          }
-        }
-      }
-    },
-    "Show password" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "パスワードを表示"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "비밀번호 보기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示密码"
-          }
-        }
-      }
-    },
     "Showing the saved copy. If the article was removed from the source, you can delete it." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -7830,62 +7974,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在显示已保存的副本。如果文章已从来源删除，你可以将其删除。"
-          }
-        }
-      }
-    },
-    "Sign In" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign In"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "サインイン"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "로그인"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录"
-          }
-        }
-      }
-    },
-    "Sign Out on This Device" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign Out on This Device"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この端末からサインアウト"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 기기에서 로그아웃"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在此设备上退出登录"
           }
         }
       }
@@ -7918,6 +8006,37 @@
         }
       }
     },
+    "Sign In" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign In"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サインイン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录"
+          }
+        }
+      }
+    },
+    "Sign in to change the icon." : {
+
+    },
     "Sign in with" : {
       "localizations" : {
         "ja" : {
@@ -7936,6 +8055,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录方式"
+          }
+        }
+      }
+    },
+    "Sign Out on This Device" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign Out on This Device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末からサインアウト"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기에서 로그아웃"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此设备上退出登录"
           }
         }
       }
@@ -7995,6 +8142,9 @@
           }
         }
       }
+    },
+    "Site icon" : {
+
     },
     "Someone already has that name." : {
       "localizations" : {
@@ -8108,34 +8258,6 @@
         }
       }
     },
-    "Start Writing" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start Writing"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "書きはじめる"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "글쓰기 시작"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开始写作"
-          }
-        }
-      }
-    },
     "Start a quoted line with > and a space." : {
       "localizations" : {
         "en" : {
@@ -8216,6 +8338,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每一项以数字、句点和一个空格开头。"
+          }
+        }
+      }
+    },
+    "Start Writing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Writing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "書きはじめる"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글쓰기 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始写作"
           }
         }
       }
@@ -8459,6 +8609,7 @@
       }
     },
     "Switch to" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -8916,6 +9067,12 @@
         }
       }
     },
+    "That image could not be read. Try choosing it again." : {
+
+    },
+    "That image is too large. Pick one under 500 KB." : {
+
+    },
     "That invitation has already been used up. Ask for a new one." : {
       "localizations" : {
         "ja" : {
@@ -9077,6 +9234,7 @@
       }
     },
     "The %@ server is not reachable: there is no such host as %@. Check the server in Developer settings." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -9094,34 +9252,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法连接 %1$@ 服务器：不存在名为 %2$@ 的主机。请在开发者设置中检查服务器。"
-          }
-        }
-      }
-    },
-    "The Quiet Craft of Reading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The Quiet Craft of Reading"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "読むという静かな技術"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "읽기라는 조용한 기술"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "阅读这门安静的手艺"
           }
         }
       }
@@ -9454,6 +9584,34 @@
         }
       }
     },
+    "The Quiet Craft of Reading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Quiet Craft of Reading"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読むという静かな技術"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "읽기라는 조용한 기술"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阅读这门安静的手艺"
+          }
+        }
+      }
+    },
     "The same everywhere" : {
       "localizations" : {
         "en" : {
@@ -9561,6 +9719,7 @@
       }
     },
     "The server could not send the email. It may not be able to send to this address yet — ask whoever runs the server." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -9683,6 +9842,7 @@
       }
     },
     "The web address becomes the last part of the link to this post. Lowercase letters, numbers, and hyphens." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9737,6 +9897,9 @@
           }
         }
       }
+    },
+    "There is no publication to give an icon to yet." : {
+
     },
     "These are copies. Nook keeps them up to date from your repository, so editing one does not change the published post and deleting one does not unpublish it — use the post's own row for that." : {
       "localizations" : {
@@ -9923,6 +10086,7 @@
       }
     },
     "This is the real service. Anything you create here is real: a signup spends an invitation and cannot be undone." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10368,6 +10532,34 @@
         }
       }
     },
+    "Use a regular expression" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use a regular expression"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正規表現を使う"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정규식 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用正则表达式"
+          }
+        }
+      }
+    },
     "Use Apple Intelligence" : {
       "localizations" : {
         "en" : {
@@ -10508,62 +10700,6 @@
         }
       }
     },
-    "Use This Server" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Use This Server"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このサーバーを使う"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 서버 사용"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用此服务器"
-          }
-        }
-      }
-    },
-    "Use a regular expression" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Use a regular expression"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正規表現を使う"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "정규식 사용"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用正则表达式"
-          }
-        }
-      }
-    },
     "Use lowercase English letters, numbers, and hyphens. A handle is a web address, so it cannot contain Korean, Japanese, Chinese, or accented letters." : {
       "localizations" : {
         "ja" : {
@@ -10687,6 +10823,7 @@
       }
     },
     "Use the handle and password you chose when you set up publishing." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10710,6 +10847,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入你在设置发布时选择的 handle 和密码。"
+          }
+        }
+      }
+    },
+    "Use This Server" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use This Server"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このサーバーを使う"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 서버 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用此服务器"
           }
         }
       }
@@ -10932,6 +11098,34 @@
         }
       }
     },
+    "whole word only" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "whole word only"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "単語全体のみ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단어 전체만"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅整词"
+          }
+        }
+      }
+    },
     "Word or phrase to hide" : {
       "localizations" : {
         "en" : {
@@ -11123,6 +11317,7 @@
       }
     },
     "Write here. **Bold**, *italic*, and [links](https://example.com) work." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11597,6 +11792,7 @@
       }
     },
     "Your full handle" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -11753,6 +11949,7 @@
       }
     },
     "Your password could not be saved to Passwords. Write it down somewhere safe — it cannot be reset." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -11775,6 +11972,7 @@
       }
     },
     "Your password is saved in Passwords, under your handle." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ja" : {
           "stringUnit" : {
@@ -12032,146 +12230,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的站点带有 RSS 订阅源，任何阅读器都能关注。"
-          }
-        }
-      }
-    },
-    "ignore case (prefix)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ignore case (prefix)"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "大文字小文字を無視（接頭辞）"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "대소문자 무시 (접두사)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "忽略大小写（前缀）"
-          }
-        }
-      }
-    },
-    "matches a or b" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "matches a or b"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "a または b に一致"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "a 또는 b와 일치"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "匹配 a 或 b"
-          }
-        }
-      }
-    },
-    "whole word only" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "whole word only"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "単語全体のみ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "단어 전체만"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅整词"
-          }
-        }
-      }
-    },
-    "“%@” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” comes off the web either way. Keeping a draft leaves the text on this device so you can publish it again; deleting the text keeps no copy anywhere."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "どちらの場合も「%@」は Web から削除されます。下書きとして保存すると本文はこの端末に残り、再び公開できます。本文も削除すると、どこにも複製は残りません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "어느 쪽이든 “%@”은(는) 웹에서 내려갑니다. 초안으로 보관하면 본문이 이 기기에 남아 다시 발행할 수 있고, 본문까지 삭제하면 어디에도 사본이 남지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无论选择哪种方式，“%@”都会从网络上移除。保存为草稿会将正文留在此设备上，以便再次发布；同时删除正文则不会在任何地方保留副本。"
-          }
-        }
-      }
-    },
-    "“%@” will be removed from your repository and from the web. This cannot be undone." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” will be removed from your repository and from the web. This cannot be undone."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「%@」がリポジトリと Web から削除されます。取り消せません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@”이(가) 내 저장소와 웹에서 제거됩니다. 되돌릴 수 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@”将从你的仓库和网络上移除。此操作无法撤销。"
           }
         }
       }

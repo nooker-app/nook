@@ -116,6 +116,60 @@ public struct PlusPDSClient: Sendable {
         try await list(did: did, collection: ArticleRecord.typeNSID)
     }
 
+    /// Where a blob in a repository can be read from.
+    ///
+    /// Built rather than fetched so a view can hand it to `AsyncImage` and let the
+    /// system do the loading and caching. Unauthenticated: a blob referenced by a
+    /// public record is public.
+    ///
+    /// The repository is the right source for showing an icon back to its owner. The
+    /// served copy under the publication's prefix is derived, and it does not exist
+    /// until the service has rendered — so a writer who has just chosen an image
+    /// would be looking at nothing.
+    public func blobURL(did: String, cid: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = host
+        components.path = "/xrpc/com.atproto.sync.getBlob"
+        components.queryItems = [
+            .init(name: "did", value: did),
+            .init(name: "cid", value: cid),
+        ]
+        return components.url
+    }
+
+    /// Uploads an image to the signed-in writer's own repository and returns the
+    /// reference to store in a record.
+    ///
+    /// The bytes go straight from this device to the writer's PDS. They do not pass
+    /// through the Nook service: the session is already at the PDS boundary, so
+    /// routing user content through a second host would add a place for it to be
+    /// without adding anything, and would make uploading depend on the service
+    /// being reachable.
+    ///
+    /// The blob is the source image. Producing the sizes a page and a feed need is
+    /// the service's work, so nothing here resizes or re-encodes.
+    public func uploadBlob(
+        _ data: Data, mimeType: String, bearer: String
+    ) async throws -> Blob {
+        guard let url = URL(string: "https://\(host)/xrpc/com.atproto.repo.uploadBlob") else {
+            throw PlusPDSError.badRequest
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        // The raw bytes with their own type — uploadBlob takes the image itself,
+        // not a JSON envelope around it.
+        request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+
+        let (responseData, response) = try await reach {
+            try await session.data(for: request)
+        }
+        try check(response, responseData)
+        return try JSONDecoder().decode(UploadedBlob.self, from: responseData).blob
+    }
+
     private func list<Value: Codable & Sendable & Equatable>(
         did: String, collection: String
     ) async throws -> [ATRecord<Value>] {
@@ -278,4 +332,9 @@ public enum PlusPDSError: Error, LocalizedError, Sendable {
             return String(localized: "The server could not complete that request.", bundle: .module)
         }
     }
+}
+
+/// The `com.atproto.repo.uploadBlob` response: the stored blob's reference.
+private struct UploadedBlob: Decodable {
+    let blob: Blob
 }

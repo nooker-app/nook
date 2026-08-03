@@ -53,6 +53,10 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     /// Whether the writer is being asked to confirm leaving the service.
     @State private var confirmingLeave = false
 
+    /// Whether the icon picker is open. A presentation, so it lives here rather than
+    /// on the row that opens it.
+    @State private var choosingIcon = false
+
     /// The fetched archive, as a sheet item.
     ///
     /// Derived from the store rather than mirrored into local state, so there is one
@@ -73,6 +77,28 @@ public struct PlusSettingsScreenContent<Container: View>: View {
         self.container = container
     }
 
+    /// Reads the chosen file and hands it to the store.
+    ///
+    /// Reading is scoped: a file the writer picked outside the app's own container is
+    /// only readable while its security scope is held, and on macOS a sandboxed app
+    /// gets nothing back without it.
+    private func useIcon(at url: URL) async {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            store.reportIconReadFailure()
+            return
+        }
+        // The type comes from the extension the picker enforced, not from sniffing:
+        // allowedContentTypes already limited this to PNG and JPEG.
+        let mimeType = url.pathExtension.lowercased() == "png" ? "image/png" : "image/jpeg"
+        await store.setPublicationIcon(data, mimeType: mimeType)
+    }
+
     public var body: some View {
         container(
             PlusSettingsContent(
@@ -83,9 +109,18 @@ public struct PlusSettingsScreenContent<Container: View>: View {
                 onTakeDown: { record in pendingTakeDown = record },
                 onLeave: { confirmingLeave = true },
                 onDiscardFolderEdit: { edit in pendingDiscard = edit },
+                onChooseIcon: { choosingIcon = true },
                 removing: removing
             )
         )
+        .fileImporter(
+            isPresented: $choosingIcon,
+            allowedContentTypes: [.png, .jpeg],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            Task { await useIcon(at: url) }
+        }
         // Confirmed, because the file is the only copy of that writing — the record
         // has the old version, and discarding replaces the file with it.
         .confirmationDialog(

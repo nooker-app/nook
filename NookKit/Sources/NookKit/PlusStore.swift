@@ -569,6 +569,91 @@ public final class PlusStore {
         if disconnected { disconnected = false }
     }
 
+    /// The largest image the contract accepts for an icon.
+    public static let maxIconBytes = 512_000
+
+    /// Sets the publication's icon from image data, or removes it when data is nil.
+    ///
+    /// Two steps, in this order for a reason. The bytes go to the writer's own
+    /// repository first, because that is where they belong and because a failed
+    /// upload should leave the record untouched. Only then is the record replaced,
+    /// carrying the reference the repository handed back.
+    ///
+    /// Replacing means replacing: the request rebuilds the record from what is sent,
+    /// so this sends the publication's current name, slug, language, and description
+    /// alongside the icon. Sending only the icon would erase the rest.
+    public func setPublicationIcon(_ data: Data?, mimeType: String = "image/png") async {
+        guard let record = publications.first, let rkey = record.recordKey else {
+            failure = String(
+                localized: "There is no publication to give an icon to yet.",
+                bundle: .module)
+            return
+        }
+        guard let credential = session ?? PlusCredential.current else {
+            failure = String(localized: "Sign in to change the icon.", bundle: .module)
+            return
+        }
+        if let data, data.count > Self.maxIconBytes {
+            failure = String(
+                localized: "That image is too large. Pick one under 500 KB.",
+                bundle: .module)
+            return
+        }
+
+        isWorking = true
+        failure = nil
+        do {
+            var reference: Components.Schemas.BlobRef?
+            if let data {
+                let blob = try await pds.uploadBlob(
+                    data, mimeType: mimeType, bearer: credential.accessJWT)
+                reference = .init(
+                    ref: blob.ref.link, mimeType: blob.mimeType, size: Int64(blob.size))
+            }
+            let updated = try await service.updatePublication(
+                recordKey: rkey,
+                cid: record.cid,
+                name: record.value.name,
+                slug: record.value.slug,
+                language: record.value.language,
+                description: record.value.description ?? "",
+                icon: reference
+            )
+            // Re-read rather than patch the local copy: the record now has a new
+            // CID, and a stale one makes the next conditional write fail.
+            _ = updated
+            await loadContent()
+        } catch {
+            failure = message(for: error)
+        }
+        isWorking = false
+    }
+
+    /// Says the chosen file could not be read, in the one place failures are shown.
+    public func reportIconReadFailure() {
+        failure = String(
+            localized: "That image could not be read. Try choosing it again.",
+            bundle: .module)
+    }
+
+    /// Whether the publication currently carries its own icon.
+    public var hasPublicationIcon: Bool {
+        publications.first?.value.icon != nil
+    }
+
+    /// Where to read the publication's current icon, for showing it back to its
+    /// owner. Nil when there is none.
+    ///
+    /// Points at the repository rather than at the served copy: the served one is
+    /// derived and does not exist until the service has rendered, so a writer who has
+    /// just chosen an image would be shown nothing.
+    public var publicationIconURL: URL? {
+        guard let icon = publications.first?.value.icon,
+            let did = session?.did ?? PlusCredential.current?.did
+        else { return nil }
+        return pds.blobURL(did: did, cid: icon.ref.link)
+    }
+
     /// Reads publications and articles from the PDS, which is authoritative.
     public func loadContent() async {
         guard let did = session?.did else { return }

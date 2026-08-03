@@ -152,4 +152,44 @@ struct PlusPDSRequestTests {
         #expect(decoded["password"] == "hunter2")
         #expect(seen.url?.query == nil, "credentials must never travel in a query string")
     }
+
+    /// uploadBlob takes the image itself, not a JSON envelope around it. Sending
+    /// JSON here would store a base64 string as the blob and every derived icon
+    /// would fail to decode — invisibly, because the record would still be valid.
+    @Test("uploading a blob sends the raw bytes with the image's own type")
+    func uploadBlobSendsRawBytes() async throws {
+        Recorder.responseJSON = """
+            {"blob":{"$type":"blob",
+             "ref":{"$link":"bafkreibw6qsz3yg5q7pilv6y3jj3ra5frflo4y42the5me3i7kptibte7m"},
+             "mimeType":"image/png","size":4096}}
+            """
+        let bytes = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let blob = try await client().uploadBlob(
+            bytes, mimeType: "image/png", bearer: "access-token")
+
+        let seen = try #require(Recorder.seen)
+        #expect(seen.url?.path == "/xrpc/com.atproto.repo.uploadBlob")
+        #expect(seen.body == bytes, "the image itself must be the body")
+        #expect(seen.headers["Content-Type"] == "image/png")
+        #expect(seen.headers["Authorization"] == "Bearer access-token")
+
+        // And the reference comes back in the shape a record stores.
+        #expect(blob.ref.link.hasPrefix("bafkrei"))
+        #expect(blob.mimeType == "image/png")
+        #expect(blob.size == 4096)
+    }
+
+    /// Uploading writes to the writer's own repository, so it must be authorized as
+    /// them. An unauthenticated upload is refused, and refusing quietly would look
+    /// like a network problem.
+    @Test("uploading a blob fails loudly when the host refuses it")
+    func uploadBlobSurfacesRefusal() async throws {
+        Recorder.status = 401
+        Recorder.responseJSON = #"{"error":"AuthMissing","message":"not authorized"}"#
+
+        await #expect(throws: (any Error).self) {
+            _ = try await client().uploadBlob(
+                Data([0x89]), mimeType: "image/png", bearer: "stale")
+        }
+    }
 }

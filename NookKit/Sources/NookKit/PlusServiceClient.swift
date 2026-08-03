@@ -225,6 +225,47 @@ public struct PlusServiceClient: Sendable {
         }
     }
 
+    /// Replaces a publication record, carrying the icon it should keep.
+    ///
+    /// Everything is sent, not just what changed: the request replaces the record,
+    /// so an omitted field is removed. That is why the icon is a parameter rather
+    /// than something a caller can leave out — passing nil is how an icon is
+    /// removed, and forgetting to pass one would remove it by accident.
+    public func updatePublication(
+        recordKey: String,
+        cid: String?,
+        name: String,
+        slug: String,
+        language: String,
+        description: String,
+        icon: Components.Schemas.BlobRef?
+    ) async throws -> Components.Schemas.Publication {
+        guard session() != nil else { throw PlusServiceError.sessionInvalid }
+        var input = Components.Schemas.PublicationInput(
+            name: name,
+            slug: slug,
+            language: language
+        )
+        if !description.isEmpty {
+            input.description = description
+        }
+        input.icon = icon
+        let body = input
+        let output = try await send({
+            try await client.updatePublication(
+                path: .init(rkey: recordKey),
+                headers: .init(If_hyphen_Match: cid.map(quoted)),
+                body: .json(body)
+            )
+        })
+        switch output {
+        case .ok(let updated):
+            return try updated.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
+        }
+    }
+
     /// Deletes an article, conditioned on the CID the caller last read.
     ///
     /// Passing the CID is what prevents deleting a revision the user has not seen.

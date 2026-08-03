@@ -1,13 +1,13 @@
 {
-  "originHash" : "2e166f2fa8f2b8c1472cd49f25cfc9b4747d99164a71c9c9396d959042c9196c",
+  "originHash" : "cb1134d8e270dcc8bb61f0a79726fc1fed43a34db4cff4e2959fc2172dfd3485",
   "pins" : [
     {
       "identity" : "nook-plus-protocol",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nooker-app/nook-plus-protocol.git",
       "state" : {
-        "revision" : "ee41fdb072c79a08c5fb1fbf1371027135f56b76",
-        "version" : "0.2.2"
+        "revision" : "c6eb476b1e114fcb9edbbd8b7c40e67efadca7cb",
+        "version" : "0.3.1"
       }
     },
     {

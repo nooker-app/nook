@@ -4,6 +4,84 @@
     "" : {
       "shouldTranslate" : false
     },
+    "— Diagnostics (helps with troubleshooting; feel free to delete) —" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "— Diagnostics (helps with troubleshooting; feel free to delete) —"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "— 診断情報（トラブルシューティングに役立ちます。不要なら削除してかまいません）—"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "— 진단 정보 (문제 해결에 도움이 됩니다. 원치 않으면 지워 주세요) —"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "— 诊断信息（有助于排查问题，可随意删除）—"
+          }
+        }
+      }
+    },
+    "·" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "·"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "·"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "·"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "·"
+          }
+        }
+      }
+    },
+    "“From” and “Until” are the same time, so notifications can arrive all day." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「開始」と「終了」が同じ時刻のため、一日中通知が届きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘시작’과 ‘종료’가 같은 시각이라 하루 종일 알림이 올 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“开始”与“结束”为同一时刻，因此全天都可能收到通知。"
+          }
+        }
+      }
+    },
     "%lld" : {
       "shouldTranslate" : false
     },
@@ -67,6 +145,34 @@
     "%lld/%lld" : {
       "shouldTranslate" : false
     },
+    "• What were you trying to do?\n\n• What actually happened?\n\n• What did you expect instead?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "• What were you trying to do?\n\n• What actually happened?\n\n• What did you expect instead?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "• 何をしようとしましたか？\n\n• 実際には何が起きましたか？\n\n• 本来はどうなると思っていましたか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "• 무엇을 하려고 하셨나요?\n\n• 실제로 어떤 일이 일어났나요?\n\n• 기대하신 동작은 무엇인가요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "• 您想做什么？\n\n• 实际发生了什么？\n\n• 您期望的结果是什么？"
+          }
+        }
+      }
+    },
     "99+" : {
       "shouldTranslate" : false
     },
@@ -122,28 +228,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "字体一半是个人喜好，选看着舒服的就好。"
-          }
-        }
-      }
-    },
-    "AI Summary" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI要約"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 요약"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI 摘要"
           }
         }
       }
@@ -232,15 +316,9 @@
         }
       }
     },
-    "Add Feed" : {
+    "Add a feed" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Feed"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -261,9 +339,15 @@
         }
       }
     },
-    "Add a feed" : {
+    "Add Feed" : {
       "extractionState" : "manual",
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Feed"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -308,6 +392,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已添加"
+          }
+        }
+      }
+    },
+    "AI Summary" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI要約"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 요약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 摘要"
           }
         }
       }
@@ -925,34 +1031,6 @@
         }
       }
     },
-    "Choose Sync Folder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose Sync Folder"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同期フォルダを選択"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "동기화 폴더 선택"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择同步文件夹"
-          }
-        }
-      }
-    },
     "Choose a sync folder so Nook keeps your feeds in sync across your devices." : {
       "localizations" : {
         "en" : {
@@ -1055,6 +1133,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择 iCloud 文件夹"
+          }
+        }
+      }
+    },
+    "Choose Sync Folder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Sync Folder"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同期フォルダを選択"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "동기화 폴더 선택"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择同步文件夹"
           }
         }
       }
@@ -2296,28 +2402,6 @@
         }
       }
     },
-    "Follow This Site" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このサイトをフォロー"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 사이트 구독"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关注此网站"
-          }
-        }
-      }
-    },
     "Follow a Site" : {
       "localizations" : {
         "ja" : {
@@ -2402,6 +2486,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关注你喜爱的网站，新文章会自动汇聚到这里——没有账号，没有算法，只有阅读。不知道从哪开始？下一步我们来推荐。"
+          }
+        }
+      }
+    },
+    "Follow This Site" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このサイトをフォロー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 사이트 구독"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关注此网站"
           }
         }
       }
@@ -2757,6 +2863,38 @@
         }
       }
     },
+    "https://example.com" : {
+      "shouldTranslate" : false
+    },
+    "https://example.com/feed.xml" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://example.com/feed.xml"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://example.com/feed.xml"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://example.com/feed.xml"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://example.com/feed.xml"
+          }
+        }
+      }
+    },
     "Import %lld" : {
       "localizations" : {
         "en" : {
@@ -2869,6 +3007,34 @@
         }
       }
     },
+    "iOS will ask you to allow notifications next." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS will ask you to allow notifications next."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このあと iOS が通知の許可を尋ねます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 화면에서 iOS가 알림 허용을 물어봅니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接下来 iOS 会询问是否允许通知。"
+          }
+        }
+      }
+    },
     "It was" : {
       "localizations" : {
         "en" : {
@@ -2947,34 +3113,6 @@
         }
       }
     },
-    "Keep Gemini API key" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep Gemini API key"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini APIキーを保持"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemini API 키 유지"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保留 Gemini API 密钥"
-          }
-        }
-      }
-    },
     "Keep current settings" : {
       "localizations" : {
         "en" : {
@@ -2999,6 +3137,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保留当前设置"
+          }
+        }
+      }
+    },
+    "Keep Gemini API key" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Gemini API key"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini APIキーを保持"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemini API 키 유지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留 Gemini API 密钥"
           }
         }
       }
@@ -3137,6 +3303,34 @@
         }
       }
     },
+    "Last fit: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last fit: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前回の調整: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 맞춤: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次适配：%@"
+          }
+        }
+      }
+    },
     "Last Refresh" : {
       "localizations" : {
         "en" : {
@@ -3205,34 +3399,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上次调度"
-          }
-        }
-      }
-    },
-    "Last fit: %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Last fit: %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "前回の調整: %@"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "마지막 맞춤: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上次适配：%@"
           }
         }
       }
@@ -3651,34 +3817,6 @@
         }
       }
     },
-    "Mark Read" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mark Read"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "既読にする"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "읽음으로 표시"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "标记为已读"
-          }
-        }
-      }
-    },
     "Mark articles as read when opened" : {
       "localizations" : {
         "en" : {
@@ -3735,6 +3873,34 @@
         }
       }
     },
+    "Mark as read after %lld seconds" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mark as read after %lld seconds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒後に既読にする"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld초 후 읽음으로 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒后标记为已读"
+          }
+        }
+      }
+    },
     "Mark as Unread" : {
       "localizations" : {
         "en" : {
@@ -3763,30 +3929,30 @@
         }
       }
     },
-    "Mark as read after %lld seconds" : {
+    "Mark Read" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mark as read after %lld seconds"
+            "value" : "Mark Read"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld 秒後に既読にする"
+            "value" : "既読にする"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld초 후 읽음으로 표시"
+            "value" : "읽음으로 표시"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld 秒后标记为已读"
+            "value" : "标记为已读"
           }
         }
       }
@@ -3931,6 +4097,34 @@
         }
       }
     },
+    "New articles" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New articles"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新着記事"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 글 알림"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新文章"
+          }
+        }
+      }
+    },
     "New Folder" : {
       "localizations" : {
         "en" : {
@@ -3977,34 +4171,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建文件夹…"
-          }
-        }
-      }
-    },
-    "New articles" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New articles"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新着記事"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "새 글 알림"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新文章"
           }
         }
       }
@@ -4349,34 +4515,6 @@
         }
       }
     },
-    "Nook Feedback" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook Feedback"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook へのフィードバック"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook 피드백"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nook 反馈"
-          }
-        }
-      }
-    },
     "Nook checks for new articles in the background and sends a notification when some arrive. iOS decides exactly when to run this, so timing is approximate." : {
       "localizations" : {
         "en" : {
@@ -4429,6 +4567,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nook 会在后台检查你的订阅，有新内容时通知你。需要通知权限。"
+          }
+        }
+      }
+    },
+    "Nook Feedback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook Feedback"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook へのフィードバック"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook 피드백"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook 反馈"
           }
         }
       }
@@ -4689,28 +4855,6 @@
         }
       }
     },
-    "Notification Result" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通知結果"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "알림 결과"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通知结果"
-          }
-        }
-      }
-    },
     "Notification banners are turned off for Nook, so new-article alerts won't appear. Enable them in Settings › Nook › Notifications." : {
       "localizations" : {
         "en" : {
@@ -4735,6 +4879,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nook 的通知横幅已关闭，新文章提醒将不会显示。请在“设置 › Nook › 通知”中开启。"
+          }
+        }
+      }
+    },
+    "Notification Result" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知結果"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알림 결과"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知结果"
           }
         }
       }
@@ -4795,34 +4961,6 @@
         }
       }
     },
-    "OK" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "확인"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "好"
-          }
-        }
-      }
-    },
     "Offline" : {
       "localizations" : {
         "en" : {
@@ -4875,6 +5013,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "离线阅读"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好"
           }
         }
       }
@@ -4973,6 +5139,28 @@
         }
       }
     },
+    "Open a story" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記事を開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开文章"
+          }
+        }
+      }
+    },
     "Open Article" : {
       "localizations" : {
         "en" : {
@@ -5025,6 +5213,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开订阅源"
+          }
+        }
+      }
+    },
+    "Open in Browser" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in Browser"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブラウザで開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브라우저에서 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在浏览器中打开"
+          }
+        }
+      }
+    },
+    "Open in Safari" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safariで開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safari에서 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Safari 中打开"
           }
         }
       }
@@ -5109,78 +5347,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开网站"
-          }
-        }
-      }
-    },
-    "Open a story" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "記事を開く"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "글 열기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开文章"
-          }
-        }
-      }
-    },
-    "Open in Browser" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open in Browser"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ブラウザで開く"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "브라우저에서 열기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在浏览器中打开"
-          }
-        }
-      }
-    },
-    "Open in Safari" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Safariで開く"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Safari에서 열기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 Safari 中打开"
           }
         }
       }
@@ -5882,6 +6048,34 @@
         }
       }
     },
+    "Reading speed was uneven — holding off on this one." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reading speed was uneven — holding off on this one."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読む速さが安定せず、この項目のおすすめは見送ります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "읽는 속도가 고르지 않아, 이 항목은 추천을 미룰게요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阅读速度不稳定——此项暂不推荐。"
+          }
+        }
+      }
+    },
     "Reading Time" : {
       "localizations" : {
         "en" : {
@@ -5934,34 +6128,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "阅读视图"
-          }
-        }
-      }
-    },
-    "Reading speed was uneven — holding off on this one." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reading speed was uneven — holding off on this one."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "読む速さが安定せず、この項目のおすすめは見送ります。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "읽는 속도가 고르지 않아, 이 항목은 추천을 미룰게요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "阅读速度不稳定——此项暂不推荐。"
           }
         }
       }
@@ -6459,6 +6625,28 @@
         }
       }
     },
+    "Right now your library lives on this iPhone. Pick a folder in iCloud Drive and every device — Mac included — shares the same sites, articles, and read status. You can also do this anytime in Settings." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今はライブラリがこのiPhoneだけにあります。iCloud Driveのフォルダを選ぶと、Macを含むすべてのデバイスで同じサイト・記事・既読状態を共有できます。あとで設定から行うこともできます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금은 라이브러리가 이 iPhone에만 있어요. iCloud Drive에서 폴더를 고르면 Mac을 포함한 모든 기기가 같은 사이트, 같은 글, 같은 읽음 상태를 공유해요. 설정에서 나중에 해도 돼요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前你的书库只保存在这台 iPhone 上。在 iCloud 云盘中选择一个文件夹后，包括 Mac 在内的所有设备都会共享同样的网站、文章和已读状态。也可以以后在设置中操作。"
+          }
+        }
+      }
+    },
     "Right Side" : {
       "localizations" : {
         "en" : {
@@ -6483,28 +6671,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "右侧"
-          }
-        }
-      }
-    },
-    "Right now your library lives on this iPhone. Pick a folder in iCloud Drive and every device — Mac included — shares the same sites, articles, and read status. You can also do this anytime in Settings." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今はライブラリがこのiPhoneだけにあります。iCloud Driveのフォルダを選ぶと、Macを含むすべてのデバイスで同じサイト・記事・既読状態を共有できます。あとで設定から行うこともできます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "지금은 라이브러리가 이 iPhone에만 있어요. iCloud Drive에서 폴더를 고르면 Mac을 포함한 모든 기기가 같은 사이트, 같은 글, 같은 읽음 상태를 공유해요. 설정에서 나중에 해도 돼요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "目前你的书库只保存在这台 iPhone 上。在 iCloud 云盘中选择一个文件夹后，包括 Mac 在内的所有设备都会共享同样的网站、文章和已读状态。也可以以后在设置中操作。"
           }
         }
       }
@@ -6537,28 +6703,6 @@
         }
       }
     },
-    "Save Page as Article Instead" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "代わりにページを記事として保存"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "대신 페이지를 글로 저장"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "改为将页面保存为文章"
-          }
-        }
-      }
-    },
     "Save for Offline" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6584,6 +6728,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存以离线阅读"
+          }
+        }
+      }
+    },
+    "Save Page as Article Instead" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代わりにページを記事として保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대신 페이지를 글로 저장"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改为将页面保存为文章"
           }
         }
       }
@@ -8085,28 +8251,6 @@
         }
       }
     },
-    "Try It with Your Site" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自分のサイトで試す"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "내 사이트로 해보기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用你的网站试试"
-          }
-        }
-      }
-    },
     "Try again another time" : {
       "localizations" : {
         "en" : {
@@ -8131,6 +8275,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "以后再试"
+          }
+        }
+      }
+    },
+    "Try It with Your Site" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自分のサイトで試す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 사이트로 해보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用你的网站试试"
           }
         }
       }
@@ -8595,6 +8761,7 @@
       }
     },
     "What you read today" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8772,34 +8939,6 @@
         }
       }
     },
-    "Your Post Is Published" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your Post Is Published"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "投稿を公開しました"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "글이 발행되었습니다"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文章已发布"
-          }
-        }
-      }
-    },
     "Your current settings already fit" : {
       "localizations" : {
         "en" : {
@@ -8906,6 +9045,34 @@
         }
       }
     },
+    "Your Post Is Published" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Post Is Published"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "投稿を公開しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "글이 발행되었습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文章已发布"
+          }
+        }
+      }
+    },
     "Your post is published. Nook couldn't reach your feed to show it: %@" : {
       "localizations" : {
         "en" : {
@@ -9008,172 +9175,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在检查你关注网站的最新文章。"
-          }
-        }
-      }
-    },
-    "https://example.com" : {
-      "shouldTranslate" : false
-    },
-    "https://example.com/feed.xml" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "https://example.com/feed.xml"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "https://example.com/feed.xml"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "https://example.com/feed.xml"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "https://example.com/feed.xml"
-          }
-        }
-      }
-    },
-    "iOS will ask you to allow notifications next." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "iOS will ask you to allow notifications next."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このあと iOS が通知の許可を尋ねます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다음 화면에서 iOS가 알림 허용을 물어봅니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "接下来 iOS 会询问是否允许通知。"
-          }
-        }
-      }
-    },
-    "·" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "·"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "·"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "·"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "·"
-          }
-        }
-      }
-    },
-    "— Diagnostics (helps with troubleshooting; feel free to delete) —" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "— Diagnostics (helps with troubleshooting; feel free to delete) —"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "— 診断情報（トラブルシューティングに役立ちます。不要なら削除してかまいません）—"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "— 진단 정보 (문제 해결에 도움이 됩니다. 원치 않으면 지워 주세요) —"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "— 诊断信息（有助于排查问题，可随意删除）—"
-          }
-        }
-      }
-    },
-    "“From” and “Until” are the same time, so notifications can arrive all day." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「開始」と「終了」が同じ時刻のため、一日中通知が届きます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "‘시작’과 ‘종료’가 같은 시각이라 하루 종일 알림이 올 수 있습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“开始”与“结束”为同一时刻，因此全天都可能收到通知。"
-          }
-        }
-      }
-    },
-    "• What were you trying to do?\n\n• What actually happened?\n\n• What did you expect instead?" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "• What were you trying to do?\n\n• What actually happened?\n\n• What did you expect instead?"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "• 何をしようとしましたか？\n\n• 実際には何が起きましたか？\n\n• 本来はどうなると思っていましたか？"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "• 무엇을 하려고 하셨나요?\n\n• 실제로 어떤 일이 일어났나요?\n\n• 기대하신 동작은 무엇인가요?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "• 您想做什么？\n\n• 实际发生了什么？\n\n• 您期望的结果是什么？"
           }
         }
       }
