@@ -53,32 +53,50 @@ plutil -replace AppleLanguages -json '["en"]' \
 xcrun simctl boot <device>
 ```
 
-`simctl erase` first for a true first launch: `simctl uninstall` leaves preferences behind in `cfprefsd`, so the welcome tour does not reappear. The `en` set comes from an erased device whose welcome tour subscribed the English starter bundles — Hacker News, The Verge, Ars Technica, Daring Fireball, Quanta, and NASA — so the lists hold real content and no personal data.
+`simctl erase` first for a true first launch: `simctl uninstall` leaves preferences behind in `cfprefsd`, so the welcome tour does not reappear.
+
+Every set starts from an erased device, so the lists hold real feed content and no personal data. Where the articles come from depends on the language, because the welcome tour offers Korean-first starter bundles only to Korean-language users and the English set to everyone else:
+
+- `ko` — the tour's "IT·개발" and "기술 블로그" bundles (GeekNews, 우아한형제들 기술블로그, tech.kakao.com).
+- `en` — the tour's three English bundles (Hacker News, The Verge, Ars Technica, Daring Fireball, Quanta, NASA).
+- `ja`, `zh-Hans` — no bundle. Use "Or follow a site by its address" on the tour's last page to subscribe sites that publish in that language, otherwise a Japanese or Chinese listing shows English headlines. The current sets use gihyo.jp, Publickey, and the Hatena developer blog; and 少数派, 爱范儿, and 奇客 Solidot.
 
 Turn "Translate titles in the list" off (Settings › Experimental) before capturing a locale whose feeds are already in that language, then clear the translation cache. With nothing to translate, every row keeps a "Translating…" badge.
 
+## Check before publishing
+
+```sh
+make app-store-check-faces
+```
+
+Store screenshots show live feeds, and a live feed eventually serves a portrait — an author photo, a conference stage, a product page with someone in it. Screenshots must not show a person, so this scans every file under `captures/` and `output/` with Vision's face detector and fails with the offending paths. Recapture those scenes on a different article rather than cropping around the face.
+
+Also read the visible headlines. A capture is only as good as whatever the feed published that hour, and a list is easy to reframe: scroll a row or two, or select a single feed, until nothing on screen is something the listing should not carry.
+
 ## Update
 
-1. Replace captures in `docs/screenshots/` or `captures/<locale>/`, or change each slide's `source` path in `config.json`.
+1. Recapture into `captures/<locale>/<device>/<slide id>.png`, or change the slide's paths in `config.json`.
 2. Edit localized titles and subtitles in `config.json`.
-3. To add a language, add its identifier to `locales` and add matching copy under every slide's `localized` object.
+3. To add a language, add its identifier to `locales`, add matching copy under every slide's `localized` object, and capture it on a device in that language.
 4. Add, remove, or reorder slides in `config.json`.
-5. Run `make app-store-screenshots` again.
+5. Run `make app-store-screenshots`, then `make app-store-check-faces`.
 
-`source` is the fallback app capture. When the app UI itself should be localized, add per-language captures with `localizedSources`:
+Both iOS platforms carry the same five scenes, and every one of them is captured per language, so a slide names all four:
 
 ```json
 {
-  "source": "docs/screenshots/ios-library.png",
+  "id": "01-library",
+  "source": "marketing/app-store/captures/ko/iphone-6.9/01-library.png",
   "localizedSources": {
-    "ko": "marketing/app-store/captures/ko/ios-library.png",
-    "ja": "marketing/app-store/captures/ja/ios-library.png",
-    "zh-Hans": "marketing/app-store/captures/zh-Hans/ios-library.png"
+    "ko": "marketing/app-store/captures/ko/iphone-6.9/01-library.png",
+    "en": "marketing/app-store/captures/en/iphone-6.9/01-library.png",
+    "ja": "marketing/app-store/captures/ja/iphone-6.9/01-library.png",
+    "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/01-library.png"
   }
 }
 ```
 
-Locales without an entry continue to use `source`, so captures can be localized incrementally.
+`source` is the fallback for a locale with no `localizedSources` entry, which lets a new language render before its captures exist — but a listing should not ship that way, since the screenshots would be in the wrong language.
 
 The optional `crop` values are normalized fractions of the source image and use a top-left origin. For example:
 

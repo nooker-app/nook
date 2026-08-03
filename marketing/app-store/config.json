@@ -11,9 +11,12 @@
     "slides": [
       {
         "id": "01-library",
-        "source": "docs/screenshots/ios-library.png",
+        "source": "marketing/app-store/captures/ko/iphone-6.9/01-library.png",
         "localizedSources": {
-          "en": "marketing/app-store/captures/en/iphone-6.9/01-library.png"
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/01-library.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/01-library.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/01-library.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/01-library.png"
         },
         "localized": {
           "ko": {
@@ -36,9 +39,12 @@
       },
       {
         "id": "02-articles",
-        "source": "docs/screenshots/ios-articles.png",
+        "source": "marketing/app-store/captures/ko/iphone-6.9/02-articles.png",
         "localizedSources": {
-          "en": "marketing/app-store/captures/en/iphone-6.9/02-articles.png"
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/02-articles.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/02-articles.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/02-articles.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/02-articles.png"
         },
         "localized": {
           "ko": {
@@ -61,9 +67,12 @@
       },
       {
         "id": "03-reader",
-        "source": "docs/screenshots/ios-reader.png",
+        "source": "marketing/app-store/captures/ko/iphone-6.9/03-reader.png",
         "localizedSources": {
-          "en": "marketing/app-store/captures/en/iphone-6.9/03-reader.png"
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/03-reader.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/03-reader.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/03-reader.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/03-reader.png"
         },
         "localized": {
           "ko": {
@@ -86,9 +95,12 @@
       },
       {
         "id": "04-starred",
-        "source": "docs/screenshots/ios-starred.png",
+        "source": "marketing/app-store/captures/ko/iphone-6.9/04-starred.png",
         "localizedSources": {
-          "en": "marketing/app-store/captures/en/iphone-6.9/04-starred.png"
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/04-starred.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/04-starred.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/04-starred.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/04-starred.png"
         },
         "localized": {
           "ko": {
@@ -111,9 +123,12 @@
       },
       {
         "id": "05-settings",
-        "source": "docs/screenshots/ios-settings.png",
+        "source": "marketing/app-store/captures/ko/iphone-6.9/05-settings.png",
         "localizedSources": {
-          "en": "marketing/app-store/captures/en/iphone-6.9/05-settings.png"
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/05-settings.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/05-settings.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/05-settings.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/05-settings.png"
         },
         "localized": {
           "ko": {
@@ -169,7 +184,35 @@
         }
       },
       {
-        "id": "02-reader",
+        "id": "02-articles",
+        "source": "marketing/app-store/captures/ko/ipad-13/02-articles.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/02-articles.png",
+          "en": "marketing/app-store/captures/en/ipad-13/02-articles.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/02-articles.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/02-articles.png"
+        },
+        "localized": {
+          "ko": {
+            "title": "새 글을 빠르게 훑어보세요",
+            "subtitle": "읽지 않음·오늘·전체를 한 번에 정리합니다."
+          },
+          "en": {
+            "title": "Catch up at a glance",
+            "subtitle": "Move between unread, today, and every article."
+          },
+          "ja": {
+            "title": "新着記事をすばやくチェック",
+            "subtitle": "未読・今日・すべてをかんたんに整理。"
+          },
+          "zh-Hans": {
+            "title": "快速浏览新文章",
+            "subtitle": "未读、今日与全部文章，一目了然。"
+          }
+        }
+      },
+      {
+        "id": "03-reader",
         "source": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
         "localizedSources": {
           "ko": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
@@ -193,6 +236,62 @@
           "zh-Hans": {
             "title": "文章列表与正文并排呈现",
             "subtitle": "无需来回切换，始终保持顺畅的阅读节奏。"
+          }
+        }
+      },
+      {
+        "id": "04-starred",
+        "source": "marketing/app-store/captures/ko/ipad-13/04-starred.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/04-starred.png",
+          "en": "marketing/app-store/captures/en/ipad-13/04-starred.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/04-starred.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/04-starred.png"
+        },
+        "localized": {
+          "ko": {
+            "title": "좋은 글은 다시 찾기 쉽게",
+            "subtitle": "별표 하나로 나만의 읽을거리 보관함."
+          },
+          "en": {
+            "title": "Keep the good ones close",
+            "subtitle": "Save anything worth returning to with one tap."
+          },
+          "ja": {
+            "title": "良い記事を、いつでも読み返せる",
+            "subtitle": "星を付けて、自分だけの読みものリストへ。"
+          },
+          "zh-Hans": {
+            "title": "好文章，随时回来读",
+            "subtitle": "轻点星标，收藏值得重读的内容。"
+          }
+        }
+      },
+      {
+        "id": "05-settings",
+        "source": "marketing/app-store/captures/ko/ipad-13/05-settings.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/05-settings.png",
+          "en": "marketing/app-store/captures/en/ipad-13/05-settings.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/05-settings.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/05-settings.png"
+        },
+        "localized": {
+          "ko": {
+            "title": "내 방식에 맞춘 Nook",
+            "subtitle": "동기화, 번역, 읽기 설정까지 세밀하게."
+          },
+          "en": {
+            "title": "Make Nook yours",
+            "subtitle": "Fine-tune sync, translation, and the way you read."
+          },
+          "ja": {
+            "title": "自分好みのNookに",
+            "subtitle": "同期、翻訳、読み方まで細かく設定。"
+          },
+          "zh-Hans": {
+            "title": "让 Nook 适合你的习惯",
+            "subtitle": "同步、翻译与阅读方式，均可细致调整。"
           }
         }
       }
