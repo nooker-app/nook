@@ -426,6 +426,9 @@ private struct RegularShell: View {
             ReaderDetailView(store: store)
         }
         .navigationSplitViewStyle(.balanced)
+        // The tutorial's spotlight, the same one the phone shows. The split view
+        // always has the list in its middle column, so it is always visible.
+        .modifier(ListSpotlight(store: store, listIsVisible: true))
         // Writing gets a screen of its own here too, reached from the sidebar rather
         // than from a tab bar this shell does not have.
         .sheet(item: $compose, onDismiss: revealPublishedPost) { session in
@@ -667,9 +670,7 @@ private struct CompactShell: View {
     /// (waiting to be on Home with articles). Owned here — the shell is always
     /// mounted, unlike the Home tab child whose lifecycle callbacks aren't
     /// guaranteed when it becomes the selected tab.
-    @State private var listHintPending = false
     /// The spotlight is currently showing.
-    @State private var showListHint = false
     /// The first article row's measured global frame, for an exact spotlight.
     /// When the Home tab was last re-tapped, for double-tap segment cycling.
     @State private var lastHomeReselect: ContinuousClock.Instant?
@@ -734,6 +735,16 @@ private struct CompactShell: View {
                 onCompose: startComposing
             )
         )
+        // The tutorial's spotlight, shared with the iPad shell. The list is on Home,
+        // so that is what "visible" means here.
+        .modifier(ListSpotlight(store: store, listIsVisible: selection == .home))
+        // Route to Home on the hand-off, and show "All" so the spotlight always has
+        // a row to point at — even on a replay where every starter article is read.
+        .onChange(of: tour.pendingFirstStoryHint) { _, requested in
+            guard requested, !seenListHint else { return }
+            homeFilter = .all
+            selection = .home
+        }
         // Writing gets a screen of its own, reached from the bar rather than from
         // Settings. The store is built on first use so a reader who never
         // publishes does not pay for it, and it is kept so a cancelled draft is
@@ -790,58 +801,12 @@ private struct CompactShell: View {
         } message: { why in
             Text("Your post is published. Nook couldn't reach your feed to show it: \(why)")
         }
-        // The list spotlight is owned and drawn here at the shell — always mounted,
-        // so unlike a TabView child it reliably reacts to the tutorial hand-off and
-        // renders on top. Keep it showing as long as we're on Home (don't tie the
-        // *keep* condition to the article count, which can blip empty on a scope
-        // switch); the *start* condition below checks for articles.
-        .overlay {
-            if showListHint, selection == .home, store.isStorageConfigured {
-                ListTapHint(
-                    rowFrame: tour.firstRowFrame == .zero ? nil : tour.firstRowFrame,
-                    onDismiss: dismissListHint)
-                    .transition(.opacity)
-            }
-        }
         .onAppear { applySelection(selection) }
         .onChange(of: selection) { _, tab in
             applySelection(tab)
-            tryStartListHint()
             // Switching tabs always restores the full bar (matches the native
             // minimize behavior and Instagram's).
             tabChrome.expand()
-        }
-        // Tutorial hand-off: the welcome cover subscribed the starter picks and
-        // flipped `pendingFirstStoryHint`; the "route to Home → wait for
-        // articles → spotlight the list" sequence is serialized here.
-        .onChange(of: tour.pendingFirstStoryHint) { _, pending in
-            guard pending else { return }
-            tour.pendingFirstStoryHint = false
-            guard !seenListHint else { return }
-            listHintPending = true
-            tour.listHintActive = true
-            // Show "All" so the spotlight always has a row to point at — even on a
-            // replay where every article in the starter feed is already read.
-            homeFilter = .all
-            selection = .home
-            // Adding a feed leaves its first article selected; clear it so the next
-            // non-nil selection is the user's own tap on a spotlighted row.
-            store.selectedArticleID = nil
-            tryStartListHint()
-        }
-        // Articles may arrive after the switch (async filtering / network) — retry.
-        // Mounted only while the spotlight is requested: reading
-        // `store.visibleArticles.count` in this body would otherwise make the
-        // whole shell re-evaluate on every article-list change forever.
-        .background {
-            if tour.listHintActive {
-                ListHintRetrigger(store: store, retry: tryStartListHint)
-            }
-        }
-        // The user tapped a story (a selection appears) — dismiss; the reader and
-        // its coach marks take over.
-        .onChange(of: store.selectedArticleID) { _, id in
-            if id != nil, showListHint { dismissListHint() }
         }
         .onChange(of: homeFilter) { _, _ in
             if selection == .home {
@@ -867,16 +832,6 @@ private struct CompactShell: View {
     /// The shell-wide `onChange` this replaced was always mounted, so it always saw
     /// the transition; scoping it to the hint's lifetime removed the very edge it
     /// depended on.
-    private struct ListHintRetrigger: View {
-        var store: ReaderStore
-        var retry: () -> Void
-
-        var body: some View {
-            Color.clear
-                .onAppear { retry() }
-                .onChange(of: store.visibleArticles.count) { _, _ in retry() }
-        }
-    }
 
     /// The reader over a just-published post.
     ///
@@ -1077,21 +1032,6 @@ private struct CompactShell: View {
     /// Starts the spotlight once we're actually on Home with something to open.
     /// Consumes the pending request only when it actually shows, so a momentary
     /// empty scope can't drop it on the floor.
-    private func tryStartListHint() {
-        guard listHintPending, !seenListHint,
-              selection == .home,
-              store.isStorageConfigured,
-              !store.visibleArticles.isEmpty else { return }
-        listHintPending = false
-        withAnimation { showListHint = true }
-    }
-
-    private func dismissListHint() {
-        seenListHint = true
-        listHintPending = false
-        tour.listHintActive = false
-        withAnimation { showListHint = false }
-    }
 
     /// Points the shared store at the scope the given tab shows. Also clears the
     /// shared search text, which would otherwise leak a query from the tab you
@@ -2262,6 +2202,103 @@ struct OwnNookLabel: View {
             if unread > 0 {
                 Text(unread, format: .number).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+/// The tutorial's spotlight over the first story, for either shell.
+///
+/// Extracted because it lived entirely inside `CompactShell`: the state, the retry,
+/// the overlay, all of it. The tutorial runs on an iPad exactly as it does on a
+/// phone and asks for this spotlight the same way, and nothing on that side was
+/// listening — so on an iPad it has never appeared. This is the same shape as the
+/// Plus features the iPad was missing, and the same fix: one implementation, both
+/// shells.
+///
+/// `listIsVisible` is what each shell knows and this does not — the phone shows the
+/// list only on its Home tab, the iPad's split view always has it in the middle
+/// column.
+struct ListSpotlight: ViewModifier {
+    var store: ReaderStore
+    var listIsVisible: Bool
+
+    @Environment(TourCoordinator.self) private var tour
+    @AppStorage(TourFlags.seenListHintKey) private var seenListHint = false
+    /// The notification question is asked first, on the same hand-off. Until it is
+    /// answered the spotlight waits: on an iPad the sheet is a centred form and the
+    /// scrim showed around it, two things asking at once.
+    @AppStorage(NotificationOptInSheet.seenKey) private var answeredNotificationOptIn = false
+    /// Requested, waiting for articles to arrive.
+    @State private var pending = false
+    /// On screen.
+    @State private var showing = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if showing, listIsVisible, store.isStorageConfigured {
+                    ListTapHint(
+                        rowFrame: tour.firstRowFrame == .zero ? nil : tour.firstRowFrame,
+                        onDismiss: dismiss)
+                        .transition(.opacity)
+                }
+            }
+            // The tutorial finished and handed off. Kept as a standing request rather
+            // than an edge so it survives the shell settling.
+            .onChange(of: tour.pendingFirstStoryHint) { _, requested in
+                guard requested else { return }
+                tour.pendingFirstStoryHint = false
+                guard !seenListHint else { return }
+                pending = true
+                tour.listHintActive = true
+                // Adding feeds leaves the first article selected; clear it so the next
+                // selection is the reader's own tap on a spotlighted row.
+                store.selectedArticleID = nil
+                start()
+            }
+            .onChange(of: listIsVisible) { _, _ in start() }
+            .onChange(of: answeredNotificationOptIn) { _, _ in start() }
+            // Articles may arrive after the hand-off, so the attempt is retried.
+            // Mounted only while the spotlight is pending: reading the article count
+            // in a shell's body would make it re-evaluate on every list change for a
+            // hint shown once.
+            .background {
+                if tour.listHintActive {
+                    Retrigger(store: store, retry: start)
+                }
+            }
+            // A story was opened; the reader's own coach marks take over.
+            .onChange(of: store.selectedArticleID) { _, id in
+                if id != nil, showing { dismiss() }
+            }
+    }
+
+    private func start() {
+        guard pending, !seenListHint, listIsVisible, answeredNotificationOptIn,
+            store.isStorageConfigured, !store.visibleArticles.isEmpty
+        else { return }
+        pending = false
+        withAnimation { showing = true }
+    }
+
+    private func dismiss() {
+        seenListHint = true
+        pending = false
+        tour.listHintActive = false
+        withAnimation { showing = false }
+    }
+
+    /// Checks on appear as well as on change: `onChange` fires on transitions, not on
+    /// the state it mounts with, so when the articles were already there — a replayed
+    /// tutorial, always — there is no transition left to observe.
+    private struct Retrigger: View {
+        var store: ReaderStore
+        var retry: () -> Void
+
+        var body: some View {
+            Color.clear
+                .onAppear { retry() }
+                .onChange(of: store.visibleArticles.count) { _, _ in retry() }
         }
     }
 }
