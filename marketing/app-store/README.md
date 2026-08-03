@@ -63,6 +63,57 @@ Every set starts from an erased device, so the lists hold real feed content and 
 
 Turn "Translate titles in the list" off (Settings › Experimental) before capturing a locale whose feeds are already in that language, then clear the translation cache. With nothing to translate, every row keeps a "Translating…" badge.
 
+## Capture the Mac app
+
+The Mac app has no simulator, so its captures come from the installed app driven
+through accessibility. Two tools split the work because each is only reliable at
+one half of it:
+
+- `agent-device` reads this app's accessibility tree accurately and clicks a ref
+  taken from the snapshot immediately before the click. Never click by label —
+  a label that fails to match can land on a neighbouring window button, and
+  "minimize" is one of them.
+- Its text entry sends keystrokes, which land on the window when a sheet's field
+  is not focused and minimize it. Set the field's value through AppleScript
+  instead: `set value of text field 1 of group 1 of sheet 1 of window 1`.
+
+AppleScript needs Accessibility, and that permission belongs to the *process*
+that asks. A shell inherits the terminal's, which is usually denied, so wrap the
+script in its own applet and grant that once:
+
+```sh
+osacompile -o NookAXRunner.app runner.applescript   # runner does: run script <file>
+open NookAXRunner.app                                # prompts as "NookAXRunner"
+```
+
+The app reads its language and storage from launch arguments, not preferences —
+it rewrites its own defaults as it quits, so anything set beforehand is lost:
+
+```sh
+open -a /Applications/Nook.app --args -AppleLanguages '(ja)' -appLanguage ja \
+  -usesLocalLibrary 1 -translateListTitles 0 -translateTitlesPromoSeen 1
+```
+
+`-appLanguage` matters as much as `-AppleLanguages`: dates format from the stored
+preference, so without it an English UI still prints Korean dates. Pass
+`-translateTitlesPromoSeen 1` or the translation promo covers the window and every
+click misses. Each language is one uninterrupted run: the override lives only in
+that process, and a second script attaching later may find a different instance.
+
+Capture the window, never the screen:
+
+```sh
+screencapture -x -o -l "$(xcrun swift check-window.swift Nook)" out.png
+```
+
+`-l` takes a CGWindowID and works on a background window, so nothing has to come
+forward — and nothing else on the desktop can end up in a public asset.
+
+Known gap: the reader frame needs the sidebar and inspector hidden, and those
+toggles are titled in English only, so a non-English run captures the overview
+twice. The Mac set is therefore two frames per language. Japanese has no Mac
+captures yet and falls back to `source`.
+
 ## Check before publishing
 
 ```sh
