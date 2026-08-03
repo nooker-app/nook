@@ -2789,6 +2789,14 @@ private struct ArticleList: View {
                     }
                 }
                 .tag(article.id)
+                // Paint the selection ourselves. A selected row's text is drawn
+                // in the white SwiftUI expects to sit on a filled highlight, but
+                // this plain list hides its own background for the warm one
+                // behind it — so the fill never appeared and the row read as an
+                // empty outlined box with white text on cream. Only the iPad
+                // split view keeps a selection; the compact shell's binding is
+                // nil whenever its list is on screen, so nothing changes there.
+                .listRowBackground(article.id == selection ? Color.accentColor : Color.clear)
                 .swipeActions(edge: .leading) {
                     Button {
                         store.setRead(articleID: article.id, isRead: !article.isRead)
