@@ -32,13 +32,14 @@ final class SendableNSCache<Value: AnyObject>: @unchecked Sendable {
 /// kept in document order and rendered as dedicated native views.
 public struct HTMLContentView: View {
     private let blocks: [HTMLContentBlock]
-    /// Element id to block index, for links that point inside this document.
-    private let anchors: [String: Int]
+    /// Element id to where it sits, for links that point inside this document.
+    private let anchors: [String: AnchorTarget]
     /// Keeps this document's block identities distinct from any other on screen.
     private let anchorNamespace = UUID()
 
-    /// The block a link just jumped to, held while it announces itself.
+    /// Where a link just jumped to, held while it announces itself.
     @State private var flashingBlock: Int?
+    @State private var flashingItem: Int?
     @State private var flashStrength: Double = 0
     /// A flash is motion, and some readers have asked for less of it.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -84,6 +85,7 @@ public struct HTMLContentView: View {
                 selectable: selectable,
                 anchorNamespace: anchorNamespace,
                 highlighted: flashingBlock,
+                highlightedItem: flashingItem,
                 highlightStrength: flashStrength,
                 lazy: true,
                 // A completed Markdown document already contains every replacement.
@@ -97,15 +99,12 @@ public struct HTMLContentView: View {
                 guard let fragment = HTMLContentAnchor.fragment(of: url) else {
                     return .systemAction
                 }
-                guard let index = anchorIndex(for: fragment, in: anchors) else {
+                guard let target = anchorTarget(for: fragment, in: anchors) else {
                     // A link to an id this document does not contain. Doing nothing
                     // is better than opening a scheme no application handles.
                     return .handled
                 }
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    proxy.scrollTo(anchorID(namespace: anchorNamespace, index: index), anchor: .top)
-                }
-                flash(block: index)
+                jump(to: target, using: proxy)
                 return .handled
             })
         }
@@ -150,8 +149,46 @@ extension HTMLContentView {
     ///
     /// Reduce Motion gets the same information without the blinking: one fade in and
     /// a slow fade out. The point is to locate, and locating does not require motion.
-    fileprivate func flash(block index: Int) {
+    /// How long a jump takes, and so also how long the second step waits.
+    fileprivate static let scrollDuration: Double = 0.25
+
+    /// Scrolls to a landing and marks it.
+    ///
+    /// An item is reached in two steps. The article is a `LazyVStack`, which can
+    /// scroll to a block without building it but knows nothing of an id nested
+    /// inside one that has never been realized — so the block is scrolled to first,
+    /// and the item once that block exists.
+    ///
+    /// If the second step were ever to miss, the mark is still on the right item:
+    /// the list is in view and the item announces itself, which is the information
+    /// the jump was for.
+    fileprivate func jump(to target: AnchorTarget, using proxy: ScrollViewProxy) {
+        let blockID = anchorID(namespace: anchorNamespace, index: target.block)
+        withAnimation(.easeInOut(duration: Self.scrollDuration)) {
+            proxy.scrollTo(blockID, anchor: .top)
+        }
+        guard let item = target.item else {
+            flash(block: target.block, item: nil)
+            return
+        }
+        flash(block: target.block, item: item)
+        Task { @MainActor in
+            // After the first scroll has run, not merely after a runloop turn: the
+            // item's id does not exist until its block has been laid out, and asking
+            // for one that is not registered scrolls nowhere.
+            try? await Task.sleep(for: .seconds(Self.scrollDuration))
+            withAnimation(.easeInOut(duration: Self.scrollDuration)) {
+                proxy.scrollTo(
+                    anchorItemID(namespace: anchorNamespace, block: target.block, item: item),
+                    anchor: .top
+                )
+            }
+        }
+    }
+
+    fileprivate func flash(block index: Int, item: Int?) {
         flashingBlock = index
+        flashingItem = item
         flashStrength = 0
 
         let flash = AnchorFlash.forReader(reduceMotion: reduceMotion)
@@ -185,10 +222,22 @@ extension HTMLContentView {
             // transparent layer it no longer needs.
             if flashingBlock == index {
                 flashingBlock = nil
+                flashingItem = nil
                 flashStrength = 0
             }
         }
     }
+}
+
+/// Where an in-document link lands.
+///
+/// A block index alone could not tell one footnote from another: a footnote list
+/// is a single list block, so every note in it resolved to the same place and the
+/// whole list announced itself. `item` names the list item when there is one.
+struct AnchorTarget: Equatable, Sendable {
+    let block: Int
+    /// The list item inside that block, when the id belongs to one.
+    var item: Int?
 }
 
 /// The block an in-document link points at.
@@ -200,8 +249,8 @@ extension HTMLContentView {
 ///
 /// The raw form is tried first because an id may legitimately contain a percent
 /// sign, and decoding is skipped when it would fail on a stray `%`.
-func anchorIndex(for fragment: String, in anchors: [String: Int]) -> Int? {
-    if let index = anchors[fragment] { return index }
+func anchorTarget(for fragment: String, in anchors: [String: AnchorTarget]) -> AnchorTarget? {
+    if let target = anchors[fragment] { return target }
     guard let decoded = fragment.removingPercentEncoding, decoded != fragment else { return nil }
     return anchors[decoded]
 }
@@ -210,6 +259,11 @@ func anchorIndex(for fragment: String, in anchors: [String: Int]) -> Int? {
 /// list and a reader, say — cannot answer for each other's anchors.
 func anchorID(namespace: UUID, index: Int) -> String {
     "nook-anchor-\(namespace.uuidString)-\(index)"
+}
+
+/// A list item's scroll identity, under the block that holds it.
+func anchorItemID(namespace: UUID, block: Int, item: Int) -> String {
+    "\(anchorID(namespace: namespace, index: block))-item-\(item)"
 }
 
 /// Renders an ordered list of parsed blocks. Reused for nested content such as
@@ -222,6 +276,10 @@ struct HTMLBlockList: View {
     var anchorNamespace: UUID? = nil
     /// The block currently announcing itself after a jump, and how strongly.
     var highlighted: Int? = nil
+    /// The item inside that block, when a jump landed on one rather than the whole
+    /// of it. A footnote list is a single block, so without this every note in it
+    /// lights up together.
+    var highlightedItem: Int? = nil
     var highlightStrength: Double = 0
     /// Lazy only for the top-level article list, so off-screen blocks defer their
     /// heavy per-block work. Nested lists/quotes stay eager (small, bounded, and
@@ -257,7 +315,10 @@ struct HTMLBlockList: View {
         // Present for the whole landing rather than only while visible: keying the
         // `if` on the strength inserts and removes the shape instead of fading it,
         // which is a pop in and a cut out with nothing in between.
-        if highlighted == index {
+        //
+        // Skipped when the landing named an item: the item draws its own mark, and
+        // both would tint the same pixels twice.
+        if highlighted == index, highlightedItem == nil {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.accentColor.opacity(0.16 * highlightStrength))
                 .padding(.horizontal, -8)
@@ -271,7 +332,7 @@ struct HTMLBlockList: View {
         ForEach(blocks.indices, id: \.self) { index in
             let block = displayedBlock(at: index)
             let previous = index > blocks.startIndex ? displayedBlock(at: index - 1) : nil
-            blockView(block)
+            blockView(block, at: index)
                 .padding(.top, HTMLBlockSpacing.gap(
                     from: previous,
                     to: block,
@@ -292,7 +353,7 @@ struct HTMLBlockList: View {
     }
 
     @ViewBuilder
-    private func blockView(_ block: HTMLContentBlock) -> some View {
+    private func blockView(_ block: HTMLContentBlock, at index: Int) -> some View {
         switch block {
         case .text(let html):
             HTMLContentText(html: html, selectable: selectable, typography: typography)
@@ -309,7 +370,19 @@ struct HTMLBlockList: View {
         case .mixedText(let parts, let headingLevel):
             NativeMixedText(parts: parts, selectable: selectable, typography: typography, headingLevel: headingLevel)
         case .list(let ordered, let items):
-            NativeArticleList(ordered: ordered, items: items, selectable: selectable, typography: typography)
+            NativeArticleList(
+                ordered: ordered,
+                items: items,
+                selectable: selectable,
+                typography: typography,
+                // Only the top-level list can be an anchor's destination, and only
+                // the block a jump landed on passes its item down — a nested list
+                // inside a quote gets neither, so it cannot answer for an id.
+                anchorNamespace: anchorNamespace,
+                blockIndex: index,
+                highlightedItem: highlighted == index ? highlightedItem : nil,
+                highlightStrength: highlightStrength
+            )
         case .image(let media):
             NativeArticleImage(media: media)
         case .video(let media):
@@ -573,7 +646,7 @@ final class HTMLBlockCache: @unchecked Sendable {
 struct HTMLParsedContent: Sendable {
     let blocks: [HTMLContentBlock]
     /// Element id to the index of the block containing it.
-    let anchors: [String: Int]
+    let anchors: [String: AnchorTarget]
 
     static let empty = HTMLParsedContent(blocks: [], anchors: [:])
 }
@@ -776,11 +849,11 @@ enum HTMLContentParser {
     /// First writer wins: a duplicate id is invalid HTML, and the earlier one is
     /// what a browser resolves to.
     private static func record(
-        _ identifiers: [String], to anchors: inout [String: Int], blockIndex: Int
+        _ identifiers: [String], to anchors: inout [String: AnchorTarget], target: AnchorTarget
     ) {
-        guard blockIndex >= 0 else { return }
+        guard target.block >= 0 else { return }
         for identifier in identifiers where anchors[identifier] == nil {
-            anchors[identifier] = blockIndex
+            anchors[identifier] = target
         }
     }
 
@@ -790,7 +863,7 @@ enum HTMLContentParser {
         let fullRange = NSRange(html.startIndex..<html.endIndex, in: html)
         let matches = regex.matches(in: html, range: fullRange)
         var blocks: [HTMLContentBlock] = []
-        var anchors: [String: Int] = [:]
+        var anchors: [String: AnchorTarget] = [:]
         var cursor = html.startIndex
 
         for match in matches {
@@ -814,12 +887,19 @@ enum HTMLContentParser {
             let between = String(html[cursor..<fragmentRange.lowerBound])
             appendText(between, to: &blocks, anchors: &anchors)
             let fragment = String(html[fragmentRange])
-            if let block = classify(fragment, baseURL: baseURL) {
-                blocks.append(block)
-                // One block, so every id inside it lands on the same index. First
-                // writer wins: a duplicate id is invalid HTML, and the earlier one is
-                // what a browser resolves to.
-                record(identifiers(in: fragment), to: &anchors, blockIndex: blocks.count - 1)
+            if let classified = classify(fragment, baseURL: baseURL) {
+                blocks.append(classified.block)
+                let index = blocks.count - 1
+                // Items first: a footnote list is one block, so an id recorded
+                // against the block would make every note in it resolve to the same
+                // place. First writer wins, and the more precise target is the one
+                // worth keeping.
+                for (item, identifiers) in classified.itemIdentifiers.enumerated() {
+                    record(identifiers, to: &anchors, target: AnchorTarget(block: index, item: item))
+                }
+                // Whatever is left belongs to the block as a whole — a heading's own
+                // id, or a list's.
+                record(identifiers(in: fragment), to: &anchors, target: AnchorTarget(block: index))
             } else {
                 appendText(fragment, to: &blocks, anchors: &anchors)
             }
@@ -828,12 +908,34 @@ enum HTMLContentParser {
 
         let trailing = String(html[cursor...])
         appendText(trailing, to: &blocks, anchors: &anchors)
-        record(identifiers(in: trailing), to: &anchors, blockIndex: blocks.count - 1)
+        // A net for an id in a run that carried no text of its own, which
+        // `appendText` skips. First writer wins, so nothing it recorded moves.
+        record(identifiers(in: trailing), to: &anchors, target: AnchorTarget(block: blocks.count - 1))
         if blocks.isEmpty { return HTMLParsedContent(blocks: [.text(html)], anchors: [:]) }
         return HTMLParsedContent(blocks: blocks, anchors: anchors)
     }
 
-    private static func classify(_ fragment: String, baseURL: URL?) -> HTMLContentBlock? {
+    /// A structural block, plus the ids belonging to each of its list items.
+    ///
+    /// `itemIdentifiers` is empty for everything but a list, and its indices line up
+    /// with the block's `items` — both come from the same traversal, so an item that
+    /// is dropped for being empty is dropped from both.
+    struct ClassifiedBlock {
+        let block: HTMLContentBlock
+        var itemIdentifiers: [[String]] = []
+    }
+
+    private static func classify(_ fragment: String, baseURL: URL?) -> ClassifiedBlock? {
+        switch tagName(of: fragment) {
+        case "ul", "ol":
+            return listBlock(from: fragment, baseURL: baseURL)
+        default:
+            return structuralBlock(fragment, baseURL: baseURL).map { ClassifiedBlock(block: $0) }
+        }
+    }
+
+    /// Every block whose ids belong to it as a whole, which is all of them but lists.
+    private static func structuralBlock(_ fragment: String, baseURL: URL?) -> HTMLContentBlock? {
         switch tagName(of: fragment) {
         case "figure", "img", "video", "iframe", "audio":
             return mediaBlock(from: fragment, baseURL: baseURL)
@@ -844,8 +946,6 @@ enum HTMLContentParser {
             let inner = firstTagContent(named: "blockquote", in: fragment) ?? ""
             let nested = parse(inner, baseURL: baseURL)
             return nested.isEmpty ? nil : .blockquote(nested)
-        case "ul", "ol":
-            return listBlock(from: fragment, baseURL: baseURL)
         case "table":
             let table = tableBlock(from: fragment, baseURL: baseURL)
             return table.rows.isEmpty ? nil : .table(table)
@@ -928,11 +1028,15 @@ enum HTMLContentParser {
     /// Builds an ordered/unordered list block. Each `<li>` is parsed recursively
     /// so nested lists, images, and inline formatting inside items all survive as
     /// native content.
-    private static func listBlock(from fragment: String, baseURL: URL?) -> HTMLContentBlock? {
+    private static func listBlock(from fragment: String, baseURL: URL?) -> ClassifiedBlock? {
         let ordered = tagName(of: fragment) == "ol"
         let inner = firstTagContent(named: ordered ? "ol" : "ul", in: fragment) ?? fragment
         let items = listItems(in: inner, baseURL: baseURL)
-        return items.isEmpty ? nil : .list(ordered: ordered, items: items)
+        guard !items.isEmpty else { return nil }
+        return ClassifiedBlock(
+            block: .list(ordered: ordered, items: items.map(\.blocks)),
+            itemIdentifiers: items.map(\.identifiers)
+        )
     }
 
     // MARK: Compiled-regex caching
@@ -974,10 +1078,20 @@ enum HTMLContentParser {
     /// Extracts the top-level `<li>` items of a list's inner HTML, skipping the
     /// `<li>`s that belong to nested lists (they're captured inside their parent
     /// item and handled by the recursive `parse`).
-    private static func listItems(in inner: String, baseURL: URL?) -> [[HTMLContentBlock]] {
+    /// One list item: its rendered blocks, and the ids it holds.
+    ///
+    /// The two travel together because an item with no blocks is dropped, so an id
+    /// list built by a second traversal would sooner or later disagree about which
+    /// item is which.
+    struct ParsedListItem {
+        let blocks: [HTMLContentBlock]
+        let identifiers: [String]
+    }
+
+    private static func listItems(in inner: String, baseURL: URL?) -> [ParsedListItem] {
         let regex = listItemOpenRegex
         let full = NSRange(inner.startIndex..<inner.endIndex, in: inner)
-        var items: [[HTMLContentBlock]] = []
+        var items: [ParsedListItem] = []
         var cursor = inner.startIndex
         for match in regex.matches(in: inner, range: full) {
             guard let openRange = Range(match.range, in: inner), openRange.lowerBound >= cursor else { continue }
@@ -985,7 +1099,9 @@ enum HTMLContentParser {
             let liFragment = String(inner[openRange.lowerBound..<end])
             let liInner = firstTagContent(named: "li", in: liFragment) ?? ""
             let blocks = parse(liInner, baseURL: baseURL)
-            if !blocks.isEmpty { items.append(blocks) }
+            if !blocks.isEmpty {
+                items.append(ParsedListItem(blocks: blocks, identifiers: identifiers(in: liFragment)))
+            }
             cursor = end
         }
         return items
@@ -1090,7 +1206,7 @@ enum HTMLContentParser {
     // MARK: Text collection
 
     private static func appendText(_ html: String, to blocks: inout [HTMLContentBlock]) {
-        var ignored: [String: Int] = [:]
+        var ignored: [String: AnchorTarget] = [:]
         appendText(html, to: &blocks, anchors: &ignored)
     }
 
@@ -1101,7 +1217,7 @@ enum HTMLContentParser {
     /// gave them all to the last of those, so a footnote marker in the middle of a
     /// section sent the reader to the paragraph below the one it was in.
     private static func appendText(
-        _ html: String, to blocks: inout [HTMLContentBlock], anchors: inout [String: Int]
+        _ html: String, to blocks: inout [HTMLContentBlock], anchors: inout [String: AnchorTarget]
     ) {
         guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !plainText(html).isEmpty else { return }
@@ -1114,10 +1230,14 @@ enum HTMLContentParser {
                 continue
             }
             blocks.append(.text(fragment))
-            record(carried + identifiers(in: fragment), to: &anchors, blockIndex: blocks.count - 1)
+            record(
+                carried + identifiers(in: fragment),
+                to: &anchors,
+                target: AnchorTarget(block: blocks.count - 1)
+            )
             carried.removeAll()
         }
-        record(carried, to: &anchors, blockIndex: blocks.count - 1)
+        record(carried, to: &anchors, target: AnchorTarget(block: blocks.count - 1))
     }
 
     /// Splits a run of body HTML into one fragment per top-level `<p>`, so every
@@ -2443,6 +2563,12 @@ private struct NativeArticleList: View {
     let items: [[HTMLContentBlock]]
     let selectable: Bool
     var typography: ReaderTypography = .platformDefault
+    /// Set only for a top-level list, whose items an anchor can point at.
+    var anchorNamespace: UUID? = nil
+    var blockIndex: Int = 0
+    /// The item announcing itself after a jump, and how strongly.
+    var highlightedItem: Int? = nil
+    var highlightStrength: Double = 0
 
     /// Exact, not a minimum. A list item's body must be measured at the width it
     /// is drawn at, and the only way to guarantee that is to leave the layout no
@@ -2450,6 +2576,18 @@ private struct NativeArticleList: View {
     /// gutter, known on the first pass.
     private var markerWidth: CGFloat {
         HTMLBlockSpacing.markerColumnWidth(typography, ordered: ordered, itemCount: items.count)
+    }
+
+    /// The mark behind the item a jump landed on, matching the one blocks draw.
+    @ViewBuilder
+    private func highlight(for index: Int) -> some View {
+        if highlightedItem == index {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.accentColor.opacity(0.16 * highlightStrength))
+                .padding(.horizontal, -8)
+                .padding(.vertical, -4)
+                .allowsHitTesting(false)
+        }
     }
 
     var body: some View {
@@ -2475,6 +2613,11 @@ private struct NativeArticleList: View {
                     HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                // Identity per item so a footnote can be scrolled to rather than the
+                // list that holds it. Only where an anchor can reach: a nested list
+                // has no namespace and stays as it was.
+                .id(anchorNamespace.map { anchorItemID(namespace: $0, block: blockIndex, item: index) })
+                .background(highlight(for: index))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

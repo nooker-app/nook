@@ -313,9 +313,9 @@ struct HTMLContentParserTests {
         """
         let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
 
-        #expect(anchorIndex(for: "nook-plus", in: parsed.anchors) != nil)
+        #expect(anchorTarget(for: "nook-plus", in: parsed.anchors) != nil)
         #expect(
-            anchorIndex(
+            anchorTarget(
                 for: "%EB%A7%8C%EB%93%A4%EA%B2%8C-%EB%90%9C-%EC%9D%B4%EC%9C%A0",
                 in: parsed.anchors
             ) != nil,
@@ -328,11 +328,15 @@ struct HTMLContentParserTests {
     // encoded would send the reader somewhere else.
     @Test("Anchor lookup prefers the literal id and tolerates a stray percent")
     func anchorLookupPrefersTheLiteralIdentifier() {
-        let anchors = ["100%-done": 1, "100%-done".removingPercentEncoding ?? "x": 2, "한글": 3]
-        #expect(anchorIndex(for: "100%-done", in: anchors) == 1)
-        #expect(anchorIndex(for: "한글", in: anchors) == 3)
-        #expect(anchorIndex(for: "%ED%95%9C%EA%B8%80", in: anchors) == 3)
-        #expect(anchorIndex(for: "missing", in: anchors) == nil)
+        let anchors: [String: AnchorTarget] = [
+            "100%-done": AnchorTarget(block: 1),
+            "100%-done".removingPercentEncoding ?? "x": AnchorTarget(block: 2),
+            "한글": AnchorTarget(block: 3),
+        ]
+        #expect(anchorTarget(for: "100%-done", in: anchors)?.block == 1)
+        #expect(anchorTarget(for: "한글", in: anchors)?.block == 3)
+        #expect(anchorTarget(for: "%ED%95%9C%EA%B8%80", in: anchors)?.block == 3)
+        #expect(anchorTarget(for: "missing", in: anchors) == nil)
     }
 
 
@@ -353,7 +357,7 @@ struct HTMLContentParserTests {
         """
         let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
 
-        guard let index = anchorIndex(for: "fnref:6", in: parsed.anchors) else {
+        guard let index = anchorTarget(for: "fnref:6", in: parsed.anchors)?.block else {
             Issue.record("fnref:6 was not recorded at all")
             return
         }
@@ -378,7 +382,7 @@ struct HTMLContentParserTests {
         """
         let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
 
-        guard let index = anchorIndex(for: "nook-plus", in: parsed.anchors) else {
+        guard let index = anchorTarget(for: "nook-plus", in: parsed.anchors)?.block else {
             Issue.record("the heading id was not recorded")
             return
         }
@@ -387,6 +391,50 @@ struct HTMLContentParserTests {
             return
         }
         #expect(landed.contains("Nook Plus?"), "landed on \(landed)")
+    }
+
+
+    // Trimmed from the footnote list of https://nooker.app/@tim/hello-nook. The
+    // whole list is one block, so before items were addressable every note in it
+    // resolved to the same place and the entire list announced itself.
+    @Test("Each footnote resolves to its own item, not the list holding them")
+    func footnotesResolveToTheirOwnListItem() {
+        let html = """
+        <div class="footnotes" role="doc-endnotes">
+        <hr>
+        <ol>
+        <li id="fn:1"><p>첫 주석<a href="#fnref:1" class="footnote-backref"         role="doc-backlink">↩</a></p></li>
+        <li id="fn:2"><p>둘째 주석<a href="#fnref:2" class="footnote-backref"         role="doc-backlink">↩</a></p></li>
+        <li id="fn:3"><p>셋째 주석<a href="#fnref:3" class="footnote-backref"         role="doc-backlink">↩</a></p></li>
+        </ol>
+        </div>
+        """
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        let targets = ["fn:1", "fn:2", "fn:3"].map { anchorTarget(for: $0, in: parsed.anchors) }
+        #expect(targets.allSatisfy { $0 != nil }, "a footnote was not recorded: \(targets)")
+        #expect(targets.map(\.?.item) == [0, 1, 2], "footnotes share a target: \(targets)")
+
+        // All three are in one list block, which is what makes the item necessary.
+        #expect(Set(targets.compactMap(\.?.block)).count == 1)
+        guard let block = targets[0]?.block, case .list(_, let items) = parsed.blocks[block] else {
+            Issue.record("the footnotes are not a list block")
+            return
+        }
+        #expect(items.count == 3, "item indices only mean something against the rendered items")
+    }
+
+    // An id on the list itself still belongs to the list, and must not be captured
+    // by its first item.
+    @Test("A list's own id targets the list, not its first item")
+    func listIdentifierTargetsTheListItself() {
+        let html = """
+        <ul id="whole-list"><li id="only-item">하나</li></ul>
+        """
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        #expect(anchorTarget(for: "whole-list", in: parsed.anchors)?.item == nil)
+        #expect(anchorTarget(for: "only-item", in: parsed.anchors)?.item == 0)
     }
 
 }

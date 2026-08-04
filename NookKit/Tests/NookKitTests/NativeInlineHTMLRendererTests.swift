@@ -495,12 +495,13 @@ struct NativeInlineHTMLAnchorTests {
         let heading = parsed.anchors["p-first"]
         #expect(heading != nil, "a heading's id must be recorded")
         if let heading {
-            #expect(parsed.blocks[heading].isHeading, "the id must point at the heading itself")
+            #expect(parsed.blocks[heading.block].isHeading, "the id must point at the heading itself")
+            #expect(heading.item == nil, "a heading is not inside a list item")
         }
         // The marker's own id, so the note can link back to the sentence.
         #expect(parsed.anchors["p-fnref:1"] != nil)
-        // And the note, which lives inside the list block.
-        #expect(parsed.anchors["p-fn:1"] != nil)
+        // And the note, which is one item inside the list block.
+        #expect(parsed.anchors["p-fn:1"]?.item == 0)
     }
 }
 
