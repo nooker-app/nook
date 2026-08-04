@@ -175,35 +175,57 @@ If it comes back:
 
 ## Signing and notarizing the Mac app
 
-Not an App Store submission, and independent of everything above. The release
-workflow currently builds **ad-hoc signed with hardened runtime off**, because a
-personal team could not do better — so every download shows an unidentified
-developer warning. Enrolment changes that.
+Not an App Store submission, and independent of everything above. Live as of
+0.1.51 — the release workflow signs with a Developer ID, notarizes, staples, and
+then asks Gatekeeper whether it worked rather than assuming.
 
-`release.yml` now takes the signed path when the secrets exist and the old ad-hoc
-path when they do not, so nothing breaks until they are added:
+Before that, builds were ad-hoc signed with hardened runtime off, which is all a
+personal team could do, so every download warned about an unidentified developer.
 
-```text
-MACOS_CERTIFICATE_P12       base64 of a Developer ID Application .p12
-MACOS_CERTIFICATE_PASSWORD  its export password
-MACOS_NOTARY_KEY_P8         base64 of an App Store Connect API key (.p8)
-MACOS_NOTARY_KEY_ID         the key's ID
-MACOS_NOTARY_ISSUER_ID      the issuer UUID from the Keys page
-```
+### What it took, so a future change does not undo it
 
-An API key rather than an Apple ID and app-specific password: it is scoped, it does
-not carry the account's own credentials, and it can be revoked alone.
+**Sparkle's nested helpers have to be re-signed.** Xcode signs the app and the
+frameworks it embeds, but not bundles nested inside a framework — and Sparkle
+arrives from SwiftPM as a prebuilt binary carrying four of them: `Autoupdate`,
+`Updater.app`, `Downloader.xpc`, `Installer.xpc`. Notarization rejected the first
+two attempts on exactly those, for no Developer ID and no secure timestamp.
 
-Run it once with **workflow_dispatch**, not a tag. Turning hardened runtime on
-changes how Sparkle's installer XPC services are loaded, and the entitlements for
-them (`temporary-exception.mach-lookup.global-name`) have never been exercised
-under it. Verify on the produced DMG before cutting a release:
+They are signed inside-out, because signing a container seals what is inside it.
+Each keeps its own entitlements, read from what is already there: the downloader is
+the only part allowed to reach the network, and dropping that gives an app that
+notarizes cleanly and then cannot update.
 
-```sh
-spctl -a -vvv -t install /Volumes/Nook*/Nook.app   # must say "accepted, Notarized Developer ID"
-codesign -dv --verbose=4 /Volumes/Nook*/Nook.app   # must show "runtime" in flags
-xcrun stapler validate Nook-*.dmg
-```
+If Sparkle is upgraded and gains or renames a helper, that step is what needs
+looking at. It globs `Versions/*/XPCServices/*.xpc` plus `Updater.app` and
+`Autoupdate`, so a new *kind* of nested bundle would be missed — and the symptom
+is a rejected notarization naming the file.
 
-Then confirm an update still installs from the previous version, because that is
-the path hardened runtime is most likely to have broken.
+**A tag release fails without the signing secrets.** Sparkle refuses an update
+signed less well than what is installed, so once someone runs a Developer ID build,
+an ad-hoc release is one they can never update to — and that failure appears on
+their machine, not in CI. A manual run still falls back to ad-hoc, which is what
+the fallback was for.
+
+### The secrets
+
+`make macos-signing-secrets` stores the five the workflow looks for. It creates
+neither the certificate nor the API key: each puts a private key on a machine, and
+which machine is not a script's decision.
+
+Export the certificate from Keychain Access, not with `security export` — that
+command takes every identity in the keychain, which would put the development
+signing key into CI as well.
+
+### Verifying a release
+
+The workflow already checks the staple, Gatekeeper's verdict, and the hardened
+runtime flag, and fails on any of them. Two things it cannot check:
+
+1. **The update path.** Install the previous version and press Check for Updates.
+   Whether `Downloader.xpc` fetches and `Installer.xpc` swaps the bundle under
+   hardened runtime does not show up in a signature check. Verified by hand for
+   0.1.50 → 0.1.51, including the ad-hoc-to-signed transition every existing
+   install went through.
+2. **`codesign -dv` alone will not tell you.** It is verbosity 1 and prints no
+   `Authority` line, so a correctly signed helper reads as unsigned. Use
+   `--verbose=4`.
