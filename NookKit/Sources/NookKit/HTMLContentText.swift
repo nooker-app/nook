@@ -149,41 +149,22 @@ extension HTMLContentView {
     ///
     /// Reduce Motion gets the same information without the blinking: one fade in and
     /// a slow fade out. The point is to locate, and locating does not require motion.
-    /// How long a jump takes, and so also how long the second step waits.
-    fileprivate static let scrollDuration: Double = 0.25
-
     /// Scrolls to a landing and marks it.
     ///
-    /// An item is reached in two steps. The article is a `LazyVStack`, which can
-    /// scroll to a block without building it but knows nothing of an id nested
-    /// inside one that has never been realized — so the block is scrolled to first,
-    /// and the item once that block exists.
+    /// The scroll goes to the block, including when the id belongs to an item inside
+    /// it. Scrolling to the item itself was tried and taken out again: a
+    /// `ScrollViewReader` reaches the children of its `LazyVStack`, not an id nested
+    /// inside one, and a second call naming an id the stack does not know undid the
+    /// first — the jump stopped moving at all and only the mark was left.
     ///
-    /// If the second step were ever to miss, the mark is still on the right item:
-    /// the list is in view and the item announces itself, which is the information
-    /// the jump was for.
+    /// The mark is what distinguishes the item, and it is enough for what a footnote
+    /// list is: the list arrives at the top of the screen with one line lit. A note
+    /// far down a long list is the case this does not fully answer.
     fileprivate func jump(to target: AnchorTarget, using proxy: ScrollViewProxy) {
-        let blockID = anchorID(namespace: anchorNamespace, index: target.block)
-        withAnimation(.easeInOut(duration: Self.scrollDuration)) {
-            proxy.scrollTo(blockID, anchor: .top)
+        withAnimation(.easeInOut(duration: 0.25)) {
+            proxy.scrollTo(anchorID(namespace: anchorNamespace, index: target.block), anchor: .top)
         }
-        guard let item = target.item else {
-            flash(block: target.block, item: nil)
-            return
-        }
-        flash(block: target.block, item: item)
-        Task { @MainActor in
-            // After the first scroll has run, not merely after a runloop turn: the
-            // item's id does not exist until its block has been laid out, and asking
-            // for one that is not registered scrolls nowhere.
-            try? await Task.sleep(for: .seconds(Self.scrollDuration))
-            withAnimation(.easeInOut(duration: Self.scrollDuration)) {
-                proxy.scrollTo(
-                    anchorItemID(namespace: anchorNamespace, block: target.block, item: item),
-                    anchor: .top
-                )
-            }
-        }
+        flash(block: target.block, item: target.item)
     }
 
     fileprivate func flash(block index: Int, item: Int?) {
@@ -261,10 +242,6 @@ func anchorID(namespace: UUID, index: Int) -> String {
     "nook-anchor-\(namespace.uuidString)-\(index)"
 }
 
-/// A list item's scroll identity, under the block that holds it.
-func anchorItemID(namespace: UUID, block: Int, item: Int) -> String {
-    "\(anchorID(namespace: namespace, index: block))-item-\(item)"
-}
 
 /// Renders an ordered list of parsed blocks. Reused for nested content such as
 /// blockquotes so quoted images, code, and text all render natively.
@@ -375,11 +352,8 @@ struct HTMLBlockList: View {
                 items: items,
                 selectable: selectable,
                 typography: typography,
-                // Only the top-level list can be an anchor's destination, and only
-                // the block a jump landed on passes its item down — a nested list
-                // inside a quote gets neither, so it cannot answer for an id.
-                anchorNamespace: anchorNamespace,
-                blockIndex: index,
+                // Only the block a jump landed on passes an item down, so a nested
+                // list inside a quote never lights up for an id it does not hold.
                 highlightedItem: highlighted == index ? highlightedItem : nil,
                 highlightStrength: highlightStrength
             )
@@ -2563,9 +2537,6 @@ private struct NativeArticleList: View {
     let items: [[HTMLContentBlock]]
     let selectable: Bool
     var typography: ReaderTypography = .platformDefault
-    /// Set only for a top-level list, whose items an anchor can point at.
-    var anchorNamespace: UUID? = nil
-    var blockIndex: Int = 0
     /// The item announcing itself after a jump, and how strongly.
     var highlightedItem: Int? = nil
     var highlightStrength: Double = 0
@@ -2613,10 +2584,6 @@ private struct NativeArticleList: View {
                     HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                // Identity per item so a footnote can be scrolled to rather than the
-                // list that holds it. Only where an anchor can reach: a nested list
-                // has no namespace and stays as it was.
-                .id(anchorNamespace.map { anchorItemID(namespace: $0, block: blockIndex, item: index) })
                 .background(highlight(for: index))
             }
         }
