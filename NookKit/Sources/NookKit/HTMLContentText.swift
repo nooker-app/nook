@@ -125,7 +125,9 @@ struct AnchorFlash: Equatable {
     /// Whether it blinks at all.
     let animates: Bool
 
-    var duration: Double { animates ? cycle * Double(halfCycles) : 2.0 }
+    /// Total time on screen. The closing half-cycle is stretched so the mark fades
+    /// out rather than being cut.
+    var duration: Double { animates ? cycle * (Double(halfCycles) + 0.6) : 2.1 }
 
     /// Flashes per second, which is the number that decides whether this is safe.
     /// Two half-cycles make one flash.
@@ -154,16 +156,26 @@ extension HTMLContentView {
 
         let flash = AnchorFlash.forReader(reduceMotion: reduceMotion)
 
+        // Stepped explicitly rather than with `repeatCount(_:autoreverses:)`.
+        // That drives one property through a repeating curve, and this value is read
+        // by a child view a level down: what arrived there was the start and the end,
+        // so the mark appeared once and then cut out. A scheduled step per half-cycle
+        // is a state change the child can see each time.
+        //
+        // The last step is longer and eases out, so the mark leaves rather than
+        // vanishes — the cut at the end was the other half of what looked wrong.
         if flash.animates {
-            withAnimation(
-                .easeInOut(duration: flash.cycle)
-                    .repeatCount(flash.halfCycles, autoreverses: true)
-            ) {
-                flashStrength = 1
+            for step in 0..<flash.halfCycles {
+                let target: Double = step.isMultiple(of: 2) ? 1 : 0
+                let isLast = step == flash.halfCycles - 1
+                let duration = isLast ? flash.cycle * 1.6 : flash.cycle
+                withAnimation(.easeInOut(duration: duration).delay(flash.cycle * Double(step))) {
+                    flashStrength = target
+                }
             }
         } else {
-            withAnimation(.easeOut(duration: 0.2)) { flashStrength = 1 }
-            withAnimation(.easeInOut(duration: 1.4).delay(0.6)) { flashStrength = 0 }
+            withAnimation(.easeOut(duration: 0.25)) { flashStrength = 1 }
+            withAnimation(.easeInOut(duration: 1.4).delay(0.7)) { flashStrength = 0 }
         }
 
         // Cleared after the animation so the highlight stops being applied at all,

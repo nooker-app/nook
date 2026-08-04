@@ -435,6 +435,43 @@ struct NativeInlineHTMLAnchorTests {
         #expect(HTMLContentAnchor.fragment(of: link) == "fnref:1")
     }
 
+    /// A second site's footnote markup, which spells the same thing differently.
+    /// Naming ignorable attributes one at a time missed this entirely: the marker
+    /// carries `data-footnote-ref` and `aria-describedby` rather than `role`.
+    @Test("A footnote marker written with data/aria attributes still renders")
+    func dataAndAriaFootnote() throws {
+        let html = ##"""
+            SIMD can be simple<sup><a href="#user-content-fn-1" id="user-content-fnref-1" \
+            data-footnote-ref="true" aria-describedby="footnote-label">1</a></sup>
+            """##.replacingOccurrences(of: "\\\n", with: "")
+        let rendered = try #require(render(html), "the paragraph bailed over metadata")
+
+        let marker = try run("1", in: rendered)
+        #expect(baselineOffset(marker) > 0)
+        let link = try #require(marker.link)
+        #expect(HTMLContentAnchor.fragment(of: link) == "user-content-fn-1")
+    }
+
+    /// And its way back, which carries its own spelling again.
+    @Test("A data-attribute back-link renders and links")
+    func dataBackLink() throws {
+        let html = ##"""
+            <a href="#user-content-fnref-1" data-footnote-backref="" \
+            aria-label="Back to reference 1" class="data-footnote-backref">back</a>
+            """##.replacingOccurrences(of: "\\\n", with: "")
+        let rendered = try #require(render(html))
+        let link = try #require(try run("back", in: rendered).link)
+        #expect(HTMLContentAnchor.fragment(of: link) == "user-content-fnref-1")
+    }
+
+    /// The rule is about metadata, not a hole in the whitelist: an attribute that
+    /// changes how something renders must still bail.
+    @Test("A style attribute still bails")
+    func styleStillBails() {
+        #expect(render(#"<a href="https://e.com/" style="color:red">x</a>"#) == nil)
+        #expect(render(#"<span style="background:yellow">x</span>"#) == nil)
+    }
+
     @Test("An ordinary link is still an ordinary link")
     func externalLinkUnchanged() throws {
         let rendered = try #require(render(#"<a href="https://example.com/">x</a>"#))

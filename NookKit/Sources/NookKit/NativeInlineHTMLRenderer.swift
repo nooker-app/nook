@@ -414,7 +414,20 @@ enum NativeInlineHTMLRenderer {
     }
 
     private static func attributesAreIgnorable(_ attributes: [(name: String, value: String?)], allowed: Set<String>) -> Bool {
-        attributes.allSatisfy { allowed.contains($0.name) }
+        attributes.allSatisfy { allowed.contains($0.name) || isInertAttribute($0.name) }
+    }
+
+    /// Attributes that describe rather than render.
+    ///
+    /// Matched by prefix rather than by name, because naming them one at a time is a
+    /// losing game: `role` had to be added when a footnote marker would not render,
+    /// and the next site's markup carried `data-footnote-ref` and `aria-describedby`
+    /// instead — same footnote, same failure, different spelling. A `data-` attribute
+    /// is inert by definition, and an `aria-` one is meaning for assistive technology,
+    /// neither of which this renderer acts on. Rejecting them bailed whole paragraphs
+    /// to the WebKit path over metadata.
+    private static func isInertAttribute(_ name: String) -> Bool {
+        name.hasPrefix("aria-") || name.hasPrefix("data-")
     }
 
     /// A single, parseable `href` (other cosmetic anchor attributes ignored).
@@ -427,7 +440,9 @@ enum NativeInlineHTMLRenderer {
             if attribute.name == "href" {
                 guard href == nil, let value = attribute.value else { return nil }
                 href = value
-            } else if !ignorableAnchorAttributes.contains(attribute.name) {
+            } else if !ignorableAnchorAttributes.contains(attribute.name),
+                !isInertAttribute(attribute.name)
+            {
                 return nil
             }
         }
