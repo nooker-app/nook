@@ -35,7 +35,15 @@ public struct HTMLContentView: View {
     /// Element id to where it sits, for links that point inside this document.
     private let anchors: [String: AnchorTarget]
     /// Keeps this document's block identities distinct from any other on screen.
-    private let anchorNamespace = UUID()
+    ///
+    /// `@State`, not a stored constant. A view is a struct that SwiftUI rebuilds
+    /// whenever anything above it changes, and a plain `let UUID()` is a fresh value
+    /// every one of those times — which changed the `.id` of every block, so each
+    /// rebuild threw away all of them and built them again. On screen that was a
+    /// flicker on any tap; underneath it was every paragraph losing its imported
+    /// text and every code block its highlighting. `@State` is initialized once per
+    /// view identity, which is what "this document" means here.
+    @State private var anchorNamespace = UUID()
 
     /// Where a link just jumped to, held while it announces itself.
     @State private var flashingBlock: Int?
