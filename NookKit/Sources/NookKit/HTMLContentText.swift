@@ -48,6 +48,11 @@ public struct HTMLContentView: View {
     /// Where a link just jumped to, held while it announces itself.
     @State private var flashingBlock: Int?
     @State private var flashingItem: Int?
+    /// The run in progress, so a second jump replaces it instead of sharing
+    /// `flashStrength` with it. Two of these alternating the same value produced a
+    /// broken pulse, and the older one's cleanup — which only checked the block —
+    /// wiped the newer mark early whenever both notes were in the same list.
+    @State private var flashRun: Task<Void, Never>?
     @State private var flashStrength: Double = 0
     /// A flash is motion, and some readers have asked for less of it.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -92,7 +97,7 @@ public struct HTMLContentView: View {
                 blocks: translator?.completedMarkdownBlocks() ?? blocks,
                 selectable: selectable,
                 anchorNamespace: anchorNamespace,
-                highlighted: flashingBlock,
+                highlightedBlock: flashingBlock,
                 highlightedItem: flashingItem,
                 highlightStrength: flashStrength,
                 lazy: true,
@@ -107,7 +112,13 @@ public struct HTMLContentView: View {
                 guard let fragment = HTMLContentAnchor.fragment(of: url) else {
                     return .systemAction
                 }
-                guard let target = anchorTarget(for: fragment, in: anchors) else {
+                // A finished translation is a different set of blocks, parsed from
+                // the translated Markdown rather than from this HTML, so the indices
+                // the anchors were built from no longer describe what is on screen.
+                // Streaming is fine: an override replaces one block in place.
+                guard translator?.completedMarkdownBlocks() == nil else { return .handled }
+                guard let target = anchorTarget(for: fragment, in: anchors),
+                      target.block < blocks.count else {
                     // A link to an id this document does not contain. Doing nothing
                     // is better than opening a scheme no application handles.
                     return .handled
@@ -176,6 +187,7 @@ extension HTMLContentView {
     }
 
     fileprivate func flash(block index: Int, item: Int?) {
+        flashRun?.cancel()
         flashingBlock = index
         flashingItem = item
         flashStrength = 0
@@ -191,7 +203,7 @@ extension HTMLContentView {
         //
         // The closing half-cycle is stretched and eased so the mark leaves rather
         // than being cut.
-        Task { @MainActor in
+        flashRun = Task { @MainActor in
             if flash.animates {
                 for step in 0..<flash.halfCycles {
                     let isLast = step == flash.halfCycles - 1
@@ -200,20 +212,22 @@ extension HTMLContentView {
                         flashStrength = step.isMultiple(of: 2) ? 1 : 0
                     }
                     try? await Task.sleep(for: .seconds(duration))
+                    if Task.isCancelled { return }
                 }
             } else {
                 withAnimation(.easeOut(duration: 0.25)) { flashStrength = 1 }
                 try? await Task.sleep(for: .seconds(0.7))
+                if Task.isCancelled { return }
                 withAnimation(.easeInOut(duration: 1.4)) { flashStrength = 0 }
                 try? await Task.sleep(for: .seconds(1.4))
+                if Task.isCancelled { return }
             }
             // Dropped only once it has faded, so the block stops carrying a
-            // transparent layer it no longer needs.
-            if flashingBlock == index {
-                flashingBlock = nil
-                flashingItem = nil
-                flashStrength = 0
-            }
+            // transparent layer it no longer needs. A cancelled run returns above
+            // rather than clearing, because by then the mark belongs to a newer jump.
+            flashingBlock = nil
+            flashingItem = nil
+            flashStrength = 0
         }
     }
 }
@@ -260,7 +274,7 @@ struct HTMLBlockList: View {
     /// resolves to. Nested lists (a blockquote's contents) carry no identity.
     var anchorNamespace: UUID? = nil
     /// The block currently announcing itself after a jump, and how strongly.
-    var highlighted: Int? = nil
+    var highlightedBlock: Int? = nil
     /// The item inside that block, when a jump landed on one rather than the whole
     /// of it. A footnote list is a single block, so without this every note in it
     /// lights up together.
@@ -303,7 +317,7 @@ struct HTMLBlockList: View {
         //
         // Skipped when the landing named an item: the item draws its own mark, and
         // both would tint the same pixels twice.
-        if highlighted == index, highlightedItem == nil {
+        if highlightedBlock == index, highlightedItem == nil {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.accentColor.opacity(0.16 * highlightStrength))
                 .padding(.horizontal, -8)
@@ -317,19 +331,27 @@ struct HTMLBlockList: View {
         ForEach(blocks.indices, id: \.self) { index in
             let block = displayedBlock(at: index)
             let previous = index > blocks.startIndex ? displayedBlock(at: index - 1) : nil
-            blockView(block, at: index)
+            let row = blockView(block, at: index)
                 .padding(.top, HTMLBlockSpacing.gap(
                     from: previous,
                     to: block,
                     compact: compactSpacing,
                     typography: typography
                 ))
-                // Identity only where an anchor can point: the top-level article
-                // list. Applied unconditionally there rather than only to blocks
-                // that own an id, because a LazyVStack can only scroll to a view it
-                // has an identity for, and the ids are known to the parse, not here.
-                .id(anchorNamespace.map { anchorID(namespace: $0, index: index) })
                 .background(highlight(for: index))
+            // Identity only where an anchor can point: the top-level article list.
+            // Applied unconditionally there rather than only to blocks that own an
+            // id, because a LazyVStack can only scroll to a view it has an identity
+            // for, and the ids are known to the parse, not here.
+            //
+            // The modifier itself is conditional, not its argument. `.id(nil)` is
+            // still an explicit identity, and giving every nested row the same one
+            // is the opposite of leaving them alone.
+            if let anchorNamespace {
+                row.id(anchorID(namespace: anchorNamespace, index: index))
+            } else {
+                row
+            }
         }
     }
 
@@ -362,7 +384,7 @@ struct HTMLBlockList: View {
                 typography: typography,
                 // Only the block a jump landed on passes an item down, so a nested
                 // list inside a quote never lights up for an id it does not hold.
-                highlightedItem: highlighted == index ? highlightedItem : nil,
+                highlightedItem: highlightedBlock == index ? highlightedItem : nil,
                 highlightStrength: highlightStrength
             )
         case .image(let media):
@@ -620,17 +642,16 @@ final class HTMLBlockCache: @unchecked Sendable {
 
 /// Blocks plus the ids found in them, so an in-document link has somewhere to go.
 ///
-/// Anchors are recorded per top-level block rather than per element. A heading is
-/// its own block, so a table of contents lands exactly; a footnote lives inside the
-/// notes list, so its marker lands at the top of that list. Element-level precision
-/// would mean giving list items identity, which changes the block model and every
-/// place that matches on it — worth doing when the imprecision is felt, not before.
+/// An anchor names a top-level block and, when the id belongs to a list item, that
+/// item — a heading is its own block, so a table of contents lands exactly, and a
+/// footnote is one line inside the notes list rather than the whole of it.
+///
+/// The scroll still goes to the block; the item is what the landing mark picks out.
+/// See `HTMLContentView.jump(to:using:)` for why.
 struct HTMLParsedContent: Sendable {
     let blocks: [HTMLContentBlock]
-    /// Element id to the index of the block containing it.
+    /// Element id to where it sits.
     let anchors: [String: AnchorTarget]
-
-    static let empty = HTMLParsedContent(blocks: [], anchors: [:])
 }
 
 /// Normalizes the platform HTML importer's document-oriented whitespace into a
@@ -894,6 +915,13 @@ enum HTMLContentParser {
         // `appendText` skips. First writer wins, so nothing it recorded moves.
         record(identifiers(in: trailing), to: &anchors, target: AnchorTarget(block: blocks.count - 1))
         if blocks.isEmpty { return HTMLParsedContent(blocks: [.text(html)], anchors: [:]) }
+        // An id in a text-empty run is pointed at the block that follows it, and at
+        // the end of a document nothing does. Those land on the last block rather
+        // than past it, so a link to one scrolls somewhere instead of nowhere.
+        let last = blocks.count - 1
+        for (identifier, target) in anchors where target.block > last {
+            anchors[identifier] = AnchorTarget(block: last)
+        }
         return HTMLParsedContent(blocks: blocks, anchors: anchors)
     }
 
@@ -1187,11 +1215,6 @@ enum HTMLContentParser {
 
     // MARK: Text collection
 
-    private static func appendText(_ html: String, to blocks: inout [HTMLContentBlock]) {
-        var ignored: [String: AnchorTarget] = [:]
-        appendText(html, to: &blocks, anchors: &ignored)
-    }
-
     /// Appends a run of body HTML, recording each id against the block that holds it.
     ///
     /// The recording belongs here rather than at the call site because this splits
@@ -1201,11 +1224,17 @@ enum HTMLContentParser {
     private static func appendText(
         _ html: String, to blocks: inout [HTMLContentBlock], anchors: inout [String: AnchorTarget]
     ) {
-        guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !plainText(html).isEmpty else { return }
+        guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // Ids from a fragment that produced no block of its own. The nearest block
         // after it is the closest thing to where that id sits on the page.
         var carried: [String] = []
+        // A run can be nothing but an anchor — `<span id="target"></span>` between
+        // two sections is a real pattern — and returning on empty text before this
+        // dropped those ids entirely.
+        guard !plainText(html).isEmpty else {
+            record(identifiers(in: html), to: &anchors, target: AnchorTarget(block: blocks.count))
+            return
+        }
         for fragment in paragraphFragments(of: html) {
             guard !plainText(fragment).isEmpty else {
                 carried.append(contentsOf: identifiers(in: fragment))

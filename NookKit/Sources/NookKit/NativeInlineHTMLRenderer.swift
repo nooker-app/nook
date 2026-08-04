@@ -649,11 +649,11 @@ enum NativeInlineHTMLRenderer {
 /// The scheme is ours and is never opened: the reader recognises it and scrolls,
 /// and anything that does not recognise it declines to open an unknown scheme,
 /// which is the right failure.
-public enum HTMLContentAnchor {
-    public static let scheme = "nook-anchor"
+enum HTMLContentAnchor {
+    static let scheme = "nook-anchor"
 
     /// A link to the element with this `id` in the same document.
-    public static func url(fragment: String) -> URL? {
+    static func url(fragment: String) -> URL? {
         var components = URLComponents()
         components.scheme = scheme
         // The id goes in the path rather than the host: ids are case-sensitive and
@@ -663,7 +663,7 @@ public enum HTMLContentAnchor {
     }
 
     /// The id a link points at, or nil when it is an ordinary link.
-    public static func fragment(of url: URL) -> String? {
+    static func fragment(of url: URL) -> String? {
         guard url.scheme == scheme else { return nil }
         let path = url.path
         guard path.hasPrefix("/") else { return nil }

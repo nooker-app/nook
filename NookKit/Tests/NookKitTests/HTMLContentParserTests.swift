@@ -437,4 +437,41 @@ struct HTMLContentParserTests {
         #expect(anchorTarget(for: "only-item", in: parsed.anchors)?.item == 0)
     }
 
+
+    // An anchor with no text of its own — a bare landing target between two
+    // sections — used to be dropped: the append bailed on empty text before it got
+    // as far as collecting ids.
+    @Test("A run that is only an anchor still resolves, to the block after it")
+    func anchorOnlyRunResolvesForward() {
+        // Between two structural blocks, so the run really is text-empty. Put the
+        // same span next to a paragraph and the two merge into one text block, which
+        // resolves through the ordinary path and proves nothing.
+        let html = "<h2 id=\"a\">A</h2>\n<span id=\"target\"></span>\n<h2 id=\"b\">B</h2>"
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        guard let target = anchorTarget(for: "target", in: parsed.anchors) else {
+            Issue.record("an anchor-only run was dropped")
+            return
+        }
+        guard case .heading(_, let landed) = parsed.blocks[target.block] else {
+            Issue.record("landed on \(parsed.blocks[target.block])")
+            return
+        }
+        #expect(landed.contains("B"), "landed on \(landed), expected the block after the anchor")
+    }
+
+    // The same anchor at the very end has no block after it. It must land on the
+    // last one rather than past the end, where a scroll would find nothing.
+    @Test("A trailing anchor-only run lands on the last block, not past it")
+    func trailingAnchorOnlyRunIsClamped() {
+        let html = "<h2 id=\"a\">A</h2>\n<span id=\"tail\"></span>"
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        guard let target = anchorTarget(for: "tail", in: parsed.anchors) else {
+            Issue.record("a trailing anchor-only run was dropped")
+            return
+        }
+        #expect(target.block < parsed.blocks.count, "target \(target) is past \(parsed.blocks.count) blocks")
+    }
+
 }
