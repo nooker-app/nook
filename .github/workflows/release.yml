@@ -105,6 +105,57 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--timestamp" \
             ENABLE_HARDENED_RUNTIME=YES
 
+      # Xcode signs the app and the frameworks it embeds, but not bundles nested
+      # inside a framework. Sparkle arrives from SwiftPM as a prebuilt binary
+      # carrying four of them — Autoupdate, Updater.app, and two XPC services —
+      # which keep whatever signature they shipped with. Notarization rejected the
+      # build on exactly those four: no Developer ID, no secure timestamp.
+      #
+      # Signed inside-out, because signing a container seals what is inside it and
+      # re-signing an inner piece afterwards would invalidate the seal.
+      - name: Re-sign Sparkle's nested helpers
+        if: steps.signing.outputs.mode == 'developer-id'
+        run: |
+          APP="$RUNNER_TEMP/Nook.xcarchive/Products/Applications/Nook.app"
+          SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+          IDENTITY="Developer ID Application"
+
+          # Each piece keeps its own entitlements. The XPC services have them for a
+          # reason — the downloader is the only part allowed to reach the network —
+          # and dropping them would leave an app that notarizes and cannot update.
+          resign() {
+            local item="$1"
+            local ent="$RUNNER_TEMP/ent.plist"
+            rm -f "$ent"
+            if codesign -d --entitlements - --xml "$item" 2>/dev/null \
+                 | plutil -convert xml1 -o "$ent" - 2>/dev/null && [ -s "$ent" ]; then
+              codesign --force --sign "$IDENTITY" --options runtime --timestamp \
+                --entitlements "$ent" "$item"
+              echo "  re-signed with entitlements: ${item#"$APP"/}"
+            else
+              codesign --force --sign "$IDENTITY" --options runtime --timestamp "$item"
+              echo "  re-signed: ${item#"$APP"/}"
+            fi
+          }
+
+          shopt -s nullglob
+          for xpc in "$SPARKLE"/Versions/*/XPCServices/*.xpc; do resign "$xpc"; done
+          for helper in "$SPARKLE"/Versions/*/Updater.app "$SPARKLE"/Versions/*/Autoupdate; do
+            resign "$helper"
+          done
+          shopt -u nullglob
+          resign "$SPARKLE"
+          resign "$APP"
+
+          # --deep is wrong for signing and right for checking: it walks everything
+          # nested and is what notarization effectively does.
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # Nothing may be left over from before. A single ad-hoc signature in there
+          # is another rejected submission ten minutes later.
+          if codesign -dvv "$APP" 2>&1 | grep -q "Signature=adhoc"; then
+            echo "the app is still ad-hoc signed"; exit 1
+          fi
+
       - name: Archive app (ad-hoc signed)
         if: steps.signing.outputs.mode == 'ad-hoc'
         run: |
