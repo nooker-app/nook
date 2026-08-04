@@ -36,6 +36,12 @@ public struct HTMLContentView: View {
     private let anchors: [String: Int]
     /// Keeps this document's block identities distinct from any other on screen.
     private let anchorNamespace = UUID()
+
+    /// The block a link just jumped to, held while it announces itself.
+    @State private var flashingBlock: Int?
+    @State private var flashStrength: Double = 0
+    /// A flash is motion, and some readers have asked for less of it.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let selectable: Bool
     private var translator: NativeArticleTranslator?
     private let typography: ReaderTypography
@@ -77,6 +83,8 @@ public struct HTMLContentView: View {
                 blocks: translator?.completedMarkdownBlocks() ?? blocks,
                 selectable: selectable,
                 anchorNamespace: anchorNamespace,
+                highlighted: flashingBlock,
+                highlightStrength: flashStrength,
                 lazy: true,
                 // A completed Markdown document already contains every replacement.
                 translator: translator?.completedMarkdownBlocks() == nil ? translator : nil,
@@ -97,8 +105,75 @@ public struct HTMLContentView: View {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     proxy.scrollTo(anchorID(namespace: anchorNamespace, index: index), anchor: .top)
                 }
+                flash(block: index)
                 return .handled
             })
+        }
+    }
+}
+
+/// How a landing announces itself.
+///
+/// A value rather than numbers inside the animation call, so the two properties
+/// that matter can be checked: it flashes a few times and settles, and it stops
+/// flashing entirely when the reader has asked for less motion.
+struct AnchorFlash: Equatable {
+    /// Seconds per half-cycle.
+    let cycle: Double
+    /// Half-cycles. Even, so an autoreversing animation ends where it began.
+    let halfCycles: Int
+    /// Whether it blinks at all.
+    let animates: Bool
+
+    var duration: Double { animates ? cycle * Double(halfCycles) : 2.0 }
+
+    /// Flashes per second, which is the number that decides whether this is safe.
+    /// Two half-cycles make one flash.
+    var frequency: Double { animates ? 1 / (cycle * 2) : 0 }
+
+    static func forReader(reduceMotion: Bool) -> AnchorFlash {
+        // Three flashes: enough to catch the eye after the scroll settles, few
+        // enough not to become the thing you are looking at.
+        AnchorFlash(cycle: 0.35, halfCycles: 6, animates: !reduceMotion)
+    }
+}
+
+extension HTMLContentView {
+    /// Marks where the reader just landed.
+    ///
+    /// A jump moves the page under someone who did not scroll it, and the top of the
+    /// screen is not obviously the thing they asked for — particularly for a footnote,
+    /// where the destination is a list and the answer is one line inside it. A brief
+    /// mark says "here" without leaving anything behind.
+    ///
+    /// Reduce Motion gets the same information without the blinking: one fade in and
+    /// a slow fade out. The point is to locate, and locating does not require motion.
+    fileprivate func flash(block index: Int) {
+        flashingBlock = index
+        flashStrength = 0
+
+        let flash = AnchorFlash.forReader(reduceMotion: reduceMotion)
+
+        if flash.animates {
+            withAnimation(
+                .easeInOut(duration: flash.cycle)
+                    .repeatCount(flash.halfCycles, autoreverses: true)
+            ) {
+                flashStrength = 1
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) { flashStrength = 1 }
+            withAnimation(.easeInOut(duration: 1.4).delay(0.6)) { flashStrength = 0 }
+        }
+
+        // Cleared after the animation so the highlight stops being applied at all,
+        // rather than lingering as a transparent layer over the block.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(flash.duration + 0.1))
+            if flashingBlock == index {
+                flashingBlock = nil
+                flashStrength = 0
+            }
         }
     }
 }
@@ -117,6 +192,9 @@ struct HTMLBlockList: View {
     /// Set only for the top-level article list, whose blocks are what an anchor
     /// resolves to. Nested lists (a blockquote's contents) carry no identity.
     var anchorNamespace: UUID? = nil
+    /// The block currently announcing itself after a jump, and how strongly.
+    var highlighted: Int? = nil
+    var highlightStrength: Double = 0
     /// Lazy only for the top-level article list, so off-screen blocks defer their
     /// heavy per-block work. Nested lists/quotes stay eager (small, bounded, and
     /// nested-lazy layout is unreliable).
@@ -140,6 +218,23 @@ struct HTMLBlockList: View {
         }
     }
 
+    /// The mark drawn behind the block a jump landed on.
+    ///
+    /// Tinted with the accent rather than a yellow of its own: this is the reader's
+    /// own colour saying "this one", and a highlighter yellow would read as content
+    /// the writer marked up. Inset slightly wider than the text so the block looks
+    /// wrapped rather than underlaid.
+    @ViewBuilder
+    private func highlight(for index: Int) -> some View {
+        if highlighted == index, highlightStrength > 0 {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.accentColor.opacity(0.16 * highlightStrength))
+                .padding(.horizontal, -8)
+                .padding(.vertical, -4)
+                .allowsHitTesting(false)
+        }
+    }
+
     @ViewBuilder
     private var rows: some View {
         ForEach(blocks.indices, id: \.self) { index in
@@ -157,6 +252,7 @@ struct HTMLBlockList: View {
                 // that own an id, because a LazyVStack can only scroll to a view it
                 // has an identity for, and the ids are known to the parse, not here.
                 .id(anchorNamespace.map { anchorID(namespace: $0, index: index) })
+                .background(highlight(for: index))
         }
     }
 

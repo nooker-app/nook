@@ -473,3 +473,35 @@ extension HTMLContentBlock {
         return false
     }
 }
+
+/// The mark that says where a jump landed.
+@Suite("Anchor landing")
+struct AnchorFlashTests {
+    /// Three flashes and back to nothing: an odd number of half-cycles would leave
+    /// the highlight on, which is a mark the reader then has to dismiss.
+    @Test("it flashes a few times and settles")
+    func settles() {
+        let flash = AnchorFlash.forReader(reduceMotion: false)
+        #expect(flash.animates)
+        #expect(flash.halfCycles % 2 == 0, "an autoreversing animation must end where it began")
+        #expect(flash.halfCycles / 2 == 3)
+        #expect(flash.duration < 3, "a landing mark must not outstay the jump")
+    }
+
+    /// Flashing content becomes a hazard at three per second. This is the number
+    /// that keeps it well below, and it is worth failing a build over.
+    @Test("it stays far below the flash-rate threshold")
+    func safeRate() {
+        #expect(AnchorFlash.forReader(reduceMotion: false).frequency < 2)
+    }
+
+    /// Reduce Motion still gets told where it landed — the point is to locate, and
+    /// locating does not require motion.
+    @Test("Reduce Motion gets the mark without the blinking")
+    func reduceMotion() {
+        let flash = AnchorFlash.forReader(reduceMotion: true)
+        #expect(!flash.animates)
+        #expect(flash.frequency == 0)
+        #expect(flash.duration > 0, "it must still appear, just without flashing")
+    }
+}

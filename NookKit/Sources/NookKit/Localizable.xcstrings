@@ -1504,13 +1504,13 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "選ぶ"
+            "value": "選択"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "고르기"
+            "value": "선택"
           }
         },
         "zh-Hans": {
@@ -2636,19 +2636,19 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "すべて解除"
+            "value": "すべて選択解除"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "모두 해제"
+            "value": "전체 해제"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "全部取消"
+            "value": "取消全选"
           }
         }
       }
@@ -6345,7 +6345,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "原文を開く"
+            "value": "元のページを開く"
           }
         },
         "ko": {
@@ -7286,7 +7286,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "제거"
+            "value": "삭제"
           }
         },
         "zh-Hans": {
@@ -7615,7 +7615,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "모두 선택"
+            "value": "전체 선택"
           }
         },
         "zh-Hans": {
@@ -11476,7 +11476,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "写一篇文章"
+            "value": "写文章"
           }
         }
       }
