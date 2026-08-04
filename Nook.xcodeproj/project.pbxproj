@@ -31,6 +31,7 @@
 		2D1053000000000000000021 /* NookShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2D1053000000000000000004 /* NookShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2D10544597693E9EBB8A7A62 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2D10545C5225873E388FAABE /* Assets.xcassets */; };
 		2D10551F8EBEE1DB9668FE73 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2D10550B0EFDC776DFA2A5D1 /* LaunchScreen.storyboard */; };
+		2DFACE000000000000000102 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 2DFACE000000000000000101 /* PrivacyInfo.xcprivacy */; };
 		2D1055A10000000000000002 /* WelcomeTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1055A10000000000000001 /* WelcomeTour.swift */; };
 		2D1055A10000000000000004 /* ReaderCoachMarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1055A10000000000000003 /* ReaderCoachMarks.swift */; };
 		2D1055A10000000000000006 /* FeedDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1055A10000000000000005 /* FeedDiscoveryView.swift */; };
@@ -133,6 +134,7 @@
 		2D1053000000000000000004 /* NookShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NookShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D10545C5225873E388FAABE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2D10550B0EFDC776DFA2A5D1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		2DFACE000000000000000101 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2D1055A10000000000000001 /* WelcomeTour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeTour.swift; sourceTree = "<group>"; };
 		2D1055A10000000000000003 /* ReaderCoachMarks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderCoachMarks.swift; sourceTree = "<group>"; };
 		2D1055A10000000000000005 /* FeedDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedDiscoveryView.swift; sourceTree = "<group>"; };
@@ -293,6 +295,7 @@
 				2D105000000000000000000C /* RootView.swift */,
 				2D1051A555AB617CB74DE7F6 /* NestSplash.swift */,
 				2D10550B0EFDC776DFA2A5D1 /* LaunchScreen.storyboard */,
+				2DFACE000000000000000101 /* PrivacyInfo.xcprivacy */,
 				2D10545C5225873E388FAABE /* Assets.xcassets */,
 				2D105108612B054201B57E97 /* BackgroundRefresh.swift */,
 				2D105149B0FA45C5262BC079 /* HapticEngine.swift */,
@@ -527,6 +530,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2D10551F8EBEE1DB9668FE73 /* LaunchScreen.storyboard in Resources */,
+				2DFACE000000000000000102 /* PrivacyInfo.xcprivacy in Resources */,
 				2D10544597693E9EBB8A7A62 /* Assets.xcassets in Resources */,
 				2D105296C152C93200E60E80 /* Localizable.xcstrings in Resources */,
 				2DA1C0DF00000000000000E1 /* AppIcon.icon in Resources */,
@@ -853,7 +857,6 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Nook/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -883,7 +886,6 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Nook/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -911,7 +913,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NookiOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Nook;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -949,7 +950,6 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NookiOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Nook;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.news";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

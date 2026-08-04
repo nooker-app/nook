@@ -132,6 +132,7 @@ Requires **iOS/iPadOS 18** or later. Apple Intelligence translation requires a s
 - [Data ownership, cloud sync, and conflict handling](docs/data-and-sync.md)
 - [Building, architecture, and releasing](docs/development.md)
 - [Homebrew tap setup](docs/homebrew-tap.md)
+- [Submitting to the App Store](docs/app-store-submission.md)
 
 ## Build from source
 

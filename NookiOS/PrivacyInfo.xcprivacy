@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+	Apple requires this manifest for App Store submission, and rejects uploads that
+	use a "required reason" API without declaring why. Every entry below is here
+	because the code reaches for that API; nothing is declared speculatively.
+
+	Only the iOS app carries one. The Mac app is distributed with a Developer ID
+	outside the App Store, where the manifest is not read, and adding an
+	unenforced second copy would be one more thing to keep true.
+-->
+<plist version="1.0">
+<dict>
+	<!-- No tracking, and nothing to correlate a person across other companies'
+	     apps or sites with. There are no analytics, attribution, or crash-reporting
+	     SDKs in the app; the list of things it talks to is the user's own feeds,
+	     the Plus service, and — only if the user supplies their own key — Gemini. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!--
+		Reading feeds collects nothing: subscriptions, articles, and reading state
+		stay on the device. Everything below exists because of Plus, which is
+		optional, invitation-only, and off until somebody creates an account.
+
+		Article text sent for translation is deliberately absent. Apple
+		Intelligence runs on device, and Gemini is reached with an API key the user
+		supplies and holds in their own Keychain — their account with Google, not a
+		partner of this app's. Nothing about it is collected by the developer.
+	-->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<!-- Given when creating a Plus account: the repository host needs it to
+			     confirm the address and to send a password reset. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- The account's DID and handle. The DID is the identifier the user's
+			     own records belong to, so it is not something the service can avoid
+			     holding. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- What the user publishes. Publishing means sending it somewhere on
+			     purpose, and it is theirs: it lives in their AT Protocol records and
+			     leaves with them. Declared because it does leave the device. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- Settings, reading state, and per-feed preferences.
+			     CA92.1 rather than 1C8F.1: `UserDefaults.standard` with no suite
+			     name and no App Group entitlement anywhere in the project, so these
+			     defaults are readable by this app alone. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- Modification dates of cached translations and summaries, read to
+			     evict the oldest ones. C617.1 covers timestamps of files inside the
+			     app's own container, which is where the caches are. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

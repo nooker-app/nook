@@ -42,7 +42,71 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building Nook $VERSION"
 
+      # Enrolment made Developer ID signing possible; before it, ad-hoc was the
+      # only option a personal team had. Both paths stay: the signed one runs when
+      # the certificate and notary key are present, and the old one when they are
+      # not, so adding the secrets is what switches this over rather than merging
+      # this change.
+      - name: Decide signing mode
+        id: signing
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          NOTARY: ${{ secrets.MACOS_NOTARY_KEY_P8 }}
+        run: |
+          if [ -n "${CERT:-}" ] && [ -n "${NOTARY:-}" ]; then
+            echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=ad-hoc" >> "$GITHUB_OUTPUT"
+            echo "No signing secrets — building ad-hoc. Downloads will warn."
+          fi
+
+      # A throwaway keychain rather than the runner's login one: it is unlocked
+      # with a known password for this job only and dies with the runner.
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.mode == 'developer-id'
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          printf '%s' "$CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          # Without this, codesign stops to ask for permission and the job hangs
+          # until it times out rather than failing.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Archive app (Developer ID, hardened runtime)
+        if: steps.signing.outputs.mode == 'developer-id'
+        run: |
+          xcodebuild archive \
+            -skipPackagePluginValidation \
+            -project Nook.xcodeproj \
+            -scheme Nook \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$RUNNER_TEMP/Nook.xcarchive" \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM="F7WUT95TT6" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES \
+            OTHER_CODE_SIGN_FLAGS="--timestamp" \
+            ENABLE_HARDENED_RUNTIME=YES
+
       - name: Archive app (ad-hoc signed)
+        if: steps.signing.outputs.mode == 'ad-hoc'
         run: |
           xcodebuild archive \
             -skipPackagePluginValidation \
@@ -96,6 +160,34 @@ jobs:
           test -f "$DMG"
           echo "path=$DMG" >> "$GITHUB_OUTPUT"
 
+      # Notarizing the DMG staples the ticket to the thing people download, so a
+      # first launch works without a network round trip to Apple.
+      - name: Notarize and staple
+        if: steps.signing.outputs.mode == 'developer-id'
+        env:
+          KEY_P8: ${{ secrets.MACOS_NOTARY_KEY_P8 }}
+          KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          DMG="${{ steps.dmg.outputs.path }}"
+          printf '%s' "$KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool submit "$DMG" \
+            --key "$RUNNER_TEMP/notary.p8" \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
+            --wait --timeout 30m
+          rm -f "$RUNNER_TEMP/notary.p8"
+          xcrun stapler staple "$DMG"
+          # Gatekeeper's own answer, not ours. A build that signs and staples but
+          # is rejected here would otherwise ship looking fine.
+          xcrun stapler validate "$DMG"
+          MOUNT="$(mktemp -d)"
+          hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT"
+          spctl -a -vvv -t install "$MOUNT/Nook.app"
+          codesign -dv --verbose=4 "$MOUNT/Nook.app" 2>&1 | grep -q "flags=.*runtime" \
+            || { echo "hardened runtime missing"; exit 1; }
+          hdiutil detach "$MOUNT"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -114,14 +206,7 @@ jobs:
 
             1. Download `Nook-${{ steps.version.outputs.version }}.dmg` below.
             2. Open it and drag **Nook** into **Applications**.
-            3. On first launch, macOS Gatekeeper will warn that the app is from
-               an unidentified developer (this build is ad-hoc signed, not
-               notarized). To open it:
-               - **Right-click** `Nook.app` → **Open** → **Open**, or
-               - run once in Terminal:
-                 ```sh
-                 xattr -dr com.apple.quarantine /Applications/Nook.app
-                 ```
+            ${{ steps.signing.outputs.mode == 'ad-hoc' && '3. This build is ad-hoc signed, not notarized, so the first launch is blocked: right-click `Nook.app`, choose **Open**, then **Open** again.' || '' }}
 
             Requires macOS 26 or later.
 

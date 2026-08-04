@@ -28,6 +28,12 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Answers the export-compliance question at build time instead of on every
+	     upload. False is the accurate answer: the app's encryption is HTTPS and the
+	     Keychain through Apple's own APIs, which is exempt. It implements none of
+	     its own, and the AT Protocol keys it never handles live on the server. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- RSS feeds are arbitrary, user-chosen URLs; many are served over
