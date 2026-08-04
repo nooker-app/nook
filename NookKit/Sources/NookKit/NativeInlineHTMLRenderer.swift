@@ -121,12 +121,10 @@ enum NativeInlineHTMLRenderer {
                 baseSize: scaled, bold: isBold, italic: style.italic, design: design)
             attrs[.baselineOffset] = script == .superscript ? baseSize * 0.34 : -baseSize * 0.16
             // A marker is small; the underline crowds it and reads as a smudge at
-            // body sizes. A tinted field says the same thing with the space the
-            // padding already reserved, and it makes the target visible: the reader
-            // aims at something drawn rather than at a digit with blank margins.
+            // body sizes. Colour alone carries that it is tappable, which is what
+            // the web page does too.
             if style.link != nil {
                 attrs[.underlineStyle] = 0
-                attrs[.backgroundColor] = linkColor.withAlphaComponent(0.12)
             }
         }
         return attrs
@@ -143,8 +141,8 @@ enum NativeInlineHTMLRenderer {
     /// pair is never split by justification.
     ///
     /// This is the honest ceiling for a marker drawn as text: still an eighth of a
-    /// finger. It is paired with a background for that reason — what can be hit is
-    /// at least visible, rather than a target the reader has to guess at.
+    /// finger. The padding is deliberately not drawn — the marker stays a marker,
+    /// and the extra area is quiet.
     static let markerPadding = "\u{00A0}"
 
     /// A run's text, widened when it is a marker somebody has to hit.

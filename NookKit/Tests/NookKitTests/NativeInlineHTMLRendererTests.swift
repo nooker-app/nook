@@ -549,7 +549,8 @@ struct AnchorFlashTests {
     // square points and this asserts the target is now more than double that.
     //
     // It is still an eighth of a finger, which is the ceiling for a marker drawn as
-    // text. The background exists so that what can be hit is at least what is seen.
+    // text. The added area is deliberately undrawn, so this asserts the target grew
+    // and that nothing was painted to announce it.
     @Test("A footnote marker is a target big enough to aim at")
     func footnoteMarkerHasATappableArea() throws {
         let html = "<p>Sentence<sup id=\"fnref:1\"><a href=\"#fn:1\">1</a></sup> continues.</p>"
@@ -561,7 +562,7 @@ struct AnchorFlashTests {
 
         var measured: CGSize?
         var padded = false
-        var tinted = false
+        var tinted = true
         ns.enumerateAttribute(.link, in: NSRange(location: 0, length: ns.length)) { value, range, _ in
             guard value != nil else { return }
             let run = ns.attributedSubstring(from: range)
@@ -576,7 +577,7 @@ struct AnchorFlashTests {
             return
         }
         #expect(padded, "the link run is not padded, so the target is the digit alone")
-        #expect(tinted, "an enlarged target that is not drawn is a target nobody can aim at")
+        #expect(!tinted, "the marker is painted with a field; the padding must stay invisible")
         let area = measured.width * measured.height
         #expect(area > 180, "the marker measures \(area) square points; it was 83 before")
     }
