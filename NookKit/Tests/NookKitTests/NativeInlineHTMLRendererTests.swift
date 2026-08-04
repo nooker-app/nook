@@ -406,6 +406,35 @@ struct NativeInlineHTMLAnchorTests {
         #expect(HTMLContentAnchor.fragment(of: link) == "my-post-fn:1")
     }
 
+    /// The exact markup a published page carries. The footnote link declares its
+    /// role for a screen reader, and that attribute alone bailed the whole paragraph
+    /// to the WebKit path — so the marker rendered as body text and nothing was
+    /// tappable, while the contents list, whose links carry no role, worked.
+    @Test("A real footnote marker renders and links")
+    func realFootnoteMarkup() throws {
+        let html = ##"""
+            Nook is a reader.<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" \
+            role="doc-noteref">1</a></sup>
+            """##.replacingOccurrences(of: "\\\n", with: "")
+        let rendered = try #require(render(html), "the paragraph bailed to the WebKit path")
+
+        let marker = try run("1", in: rendered)
+        #expect(baselineOffset(marker) > 0, "the marker must be raised")
+        let link = try #require(marker.link)
+        #expect(HTMLContentAnchor.fragment(of: link) == "fn:1")
+    }
+
+    /// And the note's way back, which carries a role too.
+    @Test("A footnote back-link renders and links")
+    func realBackLinkMarkup() throws {
+        let html = ##"""
+            <a href="#fnref:1" class="footnote-backref" role="doc-backlink">back</a>
+            """##
+        let rendered = try #require(render(html))
+        let link = try #require(try run("back", in: rendered).link)
+        #expect(HTMLContentAnchor.fragment(of: link) == "fnref:1")
+    }
+
     @Test("An ordinary link is still an ordinary link")
     func externalLinkUnchanged() throws {
         let rendered = try #require(render(#"<a href="https://example.com/">x</a>"#))

@@ -153,7 +153,12 @@ enum NativeInlineHTMLRenderer {
     /// have no effect without a stylesheet; the importer drops them too). Any
     /// other tag, or any other attribute — `style=` above all — bails.
     private static let ignorableAttributes: Set<String> = ["class", "id"]
-    private static let ignorableAnchorAttributes: Set<String> = ["class", "id", "title", "rel", "target", "name"]
+    /// `role` is here because the footnote markup declares one — `doc-noteref` on
+    /// the marker, `doc-backlink` on the way back. It is meaning for a screen reader
+    /// and nothing for this renderer to act on, and rejecting it bailed the entire
+    /// paragraph to the WebKit path: the marker rendered as body text and nothing was
+    /// tappable, while a contents list, whose links carry no role, worked.
+    private static let ignorableAnchorAttributes: Set<String> = ["class", "id", "title", "rel", "target", "name", "role"]
     /// `role` joins the list for sup/sub: the footnote markup carries
     /// `role="doc-noteref"`, which is meaning for a screen reader and nothing for
     /// this renderer to act on.
