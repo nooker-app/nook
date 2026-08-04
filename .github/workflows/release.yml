@@ -55,9 +55,20 @@ jobs:
         run: |
           if [ -n "${CERT:-}" ] && [ -n "${NOTARY:-}" ]; then
             echo "mode=developer-id" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Never on a tag. Sparkle refuses an update that is signed less well
+            # than what is installed, so once someone is running a Developer ID
+            # build, an ad-hoc release is one they can never install — and the
+            # failure would appear on their machine, not here. A missing secret is
+            # a broken release, so it stops now.
+            echo "::error::Signing secrets are missing. A tag release must be signed"
+            echo "::error::and notarized, or installed copies will refuse the update."
+            echo "::error::Set them with: make macos-signing-secrets"
+            exit 1
           else
             echo "mode=ad-hoc" >> "$GITHUB_OUTPUT"
             echo "No signing secrets — building ad-hoc. Downloads will warn."
+            echo "Allowed here because this is a manual run, not a release."
           fi
 
       # A throwaway keychain rather than the runner's login one: it is unlocked
