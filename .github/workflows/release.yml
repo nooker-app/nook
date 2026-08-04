@@ -170,13 +170,35 @@ jobs:
           ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
           DMG="${{ steps.dmg.outputs.path }}"
-          printf '%s' "$KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
-          xcrun notarytool submit "$DMG" \
-            --key "$RUNNER_TEMP/notary.p8" \
-            --key-id "$KEY_ID" \
-            --issuer "$ISSUER_ID" \
-            --wait --timeout 30m
-          rm -f "$RUNNER_TEMP/notary.p8"
+          KEY="$RUNNER_TEMP/notary.p8"
+          printf '%s' "$KEY_P8" | base64 --decode > "$KEY"
+          # Removed however this step ends. A notary key can submit builds as this
+          # developer, so it must not survive on the runner's disk.
+          trap 'rm -f "$KEY"' EXIT
+
+          set +e
+          OUT="$(xcrun notarytool submit "$DMG" \
+            --key "$KEY" --key-id "$KEY_ID" --issuer "$ISSUER_ID" \
+            --wait --timeout 30m 2>&1)"
+          SUBMIT_STATUS=$?
+          set -e
+          printf '%s\n' "$OUT"
+
+          # `--wait` returning 0 does not mean the build was accepted: it means the
+          # wait finished. A rejected submission reports "status: Invalid" and used
+          # to fall through to stapling, which then failed with an unrelated
+          # "Record not found" and buried the actual reason.
+          ID="$(printf '%s' "$OUT" | awk '/^  id: /{print $2; exit}')"
+          if ! printf '%s' "$OUT" | grep -q "status: Accepted"; then
+            echo "::error::Notarization did not succeed. Apple's reasons follow."
+            if [ -n "$ID" ]; then
+              xcrun notarytool log "$ID" \
+                --key "$KEY" --key-id "$KEY_ID" --issuer "$ISSUER_ID" || true
+            fi
+            exit 1
+          fi
+          [ "$SUBMIT_STATUS" -eq 0 ] || exit "$SUBMIT_STATUS"
+
           xcrun stapler staple "$DMG"
           # Gatekeeper's own answer, not ours. A build that signs and staples but
           # is rejected here would otherwise ship looking fine.
