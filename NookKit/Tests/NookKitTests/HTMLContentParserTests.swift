@@ -291,4 +291,48 @@ struct HTMLContentParserTests {
         #expect(script.contains("normalizeMedia"))
         #expect(script.contains("attempts < 3"))
     }
+
+    // The markup below is copied from https://nooker.app/@tim/hello-nook, which is
+    // where this was found: the table of contents jumped for English headings and
+    // did nothing for Korean ones.
+    //
+    // The reason is visible in the pair — a fragment in an `href` is percent-encoded
+    // and an `id` attribute is not, so they are equal as strings only when encoding
+    // leaves the text alone. Which is to say, only for ASCII.
+    @Test("A table of contents jumps to a heading that is not ASCII")
+    func tableOfContentsResolvesAnEncodedFragment() {
+        let html = """
+        <ul>
+        <li><a href="#%EB%A7%8C%EB%93%A4%EA%B2%8C-%EB%90%9C-%EC%9D%B4%EC%9C%A0">만들게 된 이유</a></li>
+        <li><a href="#nook-plus">Nook Plus</a></li>
+        </ul>
+        <h2 id="만들게-된-이유">만들게 된 이유</h2>
+        <p>본문</p>
+        <h2 id="nook-plus">Nook Plus</h2>
+        <p>본문</p>
+        """
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        #expect(anchorIndex(for: "nook-plus", in: parsed.anchors) != nil)
+        #expect(
+            anchorIndex(
+                for: "%EB%A7%8C%EB%93%A4%EA%B2%8C-%EB%90%9C-%EC%9D%B4%EC%9C%A0",
+                in: parsed.anchors
+            ) != nil,
+            "an encoded fragment did not resolve; only ASCII headings would jump"
+        )
+    }
+
+    // A link written without encoding still has to work, and the raw form wins:
+    // an id may contain a percent sign of its own, and decoding one that was never
+    // encoded would send the reader somewhere else.
+    @Test("Anchor lookup prefers the literal id and tolerates a stray percent")
+    func anchorLookupPrefersTheLiteralIdentifier() {
+        let anchors = ["100%-done": 1, "100%-done".removingPercentEncoding ?? "x": 2, "한글": 3]
+        #expect(anchorIndex(for: "100%-done", in: anchors) == 1)
+        #expect(anchorIndex(for: "한글", in: anchors) == 3)
+        #expect(anchorIndex(for: "%ED%95%9C%EA%B8%80", in: anchors) == 3)
+        #expect(anchorIndex(for: "missing", in: anchors) == nil)
+    }
+
 }

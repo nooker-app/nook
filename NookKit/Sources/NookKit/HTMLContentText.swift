@@ -97,7 +97,7 @@ public struct HTMLContentView: View {
                 guard let fragment = HTMLContentAnchor.fragment(of: url) else {
                     return .systemAction
                 }
-                guard let index = anchors[fragment] else {
+                guard let index = anchorIndex(for: fragment, in: anchors) else {
                     // A link to an id this document does not contain. Doing nothing
                     // is better than opening a scheme no application handles.
                     return .handled
@@ -156,38 +156,54 @@ extension HTMLContentView {
 
         let flash = AnchorFlash.forReader(reduceMotion: reduceMotion)
 
-        // Stepped explicitly rather than with `repeatCount(_:autoreverses:)`.
-        // That drives one property through a repeating curve, and this value is read
-        // by a child view a level down: what arrived there was the start and the end,
-        // so the mark appeared once and then cut out. A scheduled step per half-cycle
-        // is a state change the child can see each time.
+        // Each half-cycle is awaited, not scheduled with `.delay`.
         //
-        // The last step is longer and eases out, so the mark leaves rather than
-        // vanishes — the cut at the end was the other half of what looked wrong.
-        if flash.animates {
-            for step in 0..<flash.halfCycles {
-                let target: Double = step.isMultiple(of: 2) ? 1 : 0
-                let isLast = step == flash.halfCycles - 1
-                let duration = isLast ? flash.cycle * 1.6 : flash.cycle
-                withAnimation(.easeInOut(duration: duration).delay(flash.cycle * Double(step))) {
-                    flashStrength = target
-                }
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.25)) { flashStrength = 1 }
-            withAnimation(.easeInOut(duration: 1.4).delay(0.7)) { flashStrength = 0 }
-        }
-
-        // Cleared after the animation so the highlight stops being applied at all,
-        // rather than lingering as a transparent layer over the block.
+        // `.delay` postpones an animation, not the assignment it wraps. Writing all
+        // six targets in one pass left the state at the last one — zero — before a
+        // frame was drawn, so the mark never appeared at all. Sleeping between the
+        // writes is what actually spaces them out.
+        //
+        // The closing half-cycle is stretched and eased so the mark leaves rather
+        // than being cut.
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(flash.duration + 0.1))
+            if flash.animates {
+                for step in 0..<flash.halfCycles {
+                    let isLast = step == flash.halfCycles - 1
+                    let duration = isLast ? flash.cycle * 1.6 : flash.cycle
+                    withAnimation(.easeInOut(duration: duration)) {
+                        flashStrength = step.isMultiple(of: 2) ? 1 : 0
+                    }
+                    try? await Task.sleep(for: .seconds(duration))
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.25)) { flashStrength = 1 }
+                try? await Task.sleep(for: .seconds(0.7))
+                withAnimation(.easeInOut(duration: 1.4)) { flashStrength = 0 }
+                try? await Task.sleep(for: .seconds(1.4))
+            }
+            // Dropped only once it has faded, so the block stops carrying a
+            // transparent layer it no longer needs.
             if flashingBlock == index {
                 flashingBlock = nil
                 flashStrength = 0
             }
         }
     }
+}
+
+/// The block an in-document link points at.
+///
+/// A fragment in an `href` is percent-encoded, and an `id` attribute is not:
+/// `href="#%ED%95%9C%EA%B8%80"` points at `id="한글"`. Comparing them literally
+/// matched only ids that survive encoding unchanged, which is to say ASCII ones —
+/// so a table of contents worked in English and did nothing in Korean.
+///
+/// The raw form is tried first because an id may legitimately contain a percent
+/// sign, and decoding is skipped when it would fail on a stray `%`.
+func anchorIndex(for fragment: String, in anchors: [String: Int]) -> Int? {
+    if let index = anchors[fragment] { return index }
+    guard let decoded = fragment.removingPercentEncoding, decoded != fragment else { return nil }
+    return anchors[decoded]
 }
 
 /// A block's scroll identity, namespaced so two articles on screen at once — a
@@ -238,7 +254,10 @@ struct HTMLBlockList: View {
     /// wrapped rather than underlaid.
     @ViewBuilder
     private func highlight(for index: Int) -> some View {
-        if highlighted == index, highlightStrength > 0 {
+        // Present for the whole landing rather than only while visible: keying the
+        // `if` on the strength inserts and removes the shape instead of fading it,
+        // which is a pop in and a cut out with nothing in between.
+        if highlighted == index {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.accentColor.opacity(0.16 * highlightStrength))
                 .padding(.horizontal, -8)
