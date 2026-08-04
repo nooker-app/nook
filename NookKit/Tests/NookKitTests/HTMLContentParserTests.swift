@@ -335,4 +335,58 @@ struct HTMLContentParserTests {
         #expect(anchorIndex(for: "missing", in: anchors) == nil)
     }
 
+
+    // Trimmed from the "Nook Plus?" section of https://nooker.app/@tim/hello-nook,
+    // where this was found: pressing footnote 6's back-link flashed the paragraph
+    // *below* the one holding the marker.
+    //
+    // A run between two structural blocks becomes one block per paragraph, and the
+    // whole run's ids were being attributed to the last of them.
+    @Test("A back-link lands on the paragraph holding its marker, not the run's last")
+    func footnoteMarkerResolvesToItsOwnParagraph() {
+        let html = """
+        <h2 id="nook-plus">Nook Plus?</h2>
+        <p>첫 문단입니다.</p>
+        <p>marker paragraph<sup id="fnref:6"><a href="#fn:6" class="footnote-ref"         role="doc-noteref">6</a></sup></p>
+        <p>뒤따르는 문단입니다.</p>
+        <h2 id="next">다음</h2>
+        """
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        guard let index = anchorIndex(for: "fnref:6", in: parsed.anchors) else {
+            Issue.record("fnref:6 was not recorded at all")
+            return
+        }
+        guard case .text(let landed) = parsed.blocks[index] else {
+            Issue.record("landed on \(parsed.blocks[index]), expected a paragraph")
+            return
+        }
+        #expect(
+            landed.contains("marker paragraph"),
+            "landed on the wrong paragraph: \(landed)"
+        )
+    }
+
+    // The heading above that run must keep pointing at itself, so fixing the
+    // paragraphs does not shift a structural block's own anchor.
+    @Test("A heading's id still resolves to the heading")
+    func headingAnchorSurvivesPerParagraphRecording() {
+        let html = """
+        <h2 id="nook-plus">Nook Plus?</h2>
+        <p>하나</p>
+        <p>둘</p>
+        """
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        guard let index = anchorIndex(for: "nook-plus", in: parsed.anchors) else {
+            Issue.record("the heading id was not recorded")
+            return
+        }
+        guard case .heading(_, let landed) = parsed.blocks[index] else {
+            Issue.record("landed on \(parsed.blocks[index]), expected the heading")
+            return
+        }
+        #expect(landed.contains("Nook Plus?"), "landed on \(landed)")
+    }
+
 }

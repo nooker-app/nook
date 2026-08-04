@@ -807,27 +807,27 @@ enum HTMLContentParser {
                let balancedEnd = balancedEnd(of: name, in: html, from: range.lowerBound) {
                 fragmentRange = range.lowerBound..<balancedEnd
             }
-            let between = String(html[cursor..<fragmentRange.lowerBound])
-            appendText(between, to: &blocks)
             // Paragraphs arrive here rather than through the block regex, and a
             // footnote marker's own id lives in one — it is what the note links back
-            // to. Recording only matched fragments left every back-link unresolved.
-            record(identifiers(in: between), to: &anchors, blockIndex: blocks.count - 1)
+            // to. `appendText` records them as it goes, because one run becomes one
+            // block per paragraph and each id belongs to its own.
+            let between = String(html[cursor..<fragmentRange.lowerBound])
+            appendText(between, to: &blocks, anchors: &anchors)
             let fragment = String(html[fragmentRange])
             if let block = classify(fragment, baseURL: baseURL) {
                 blocks.append(block)
+                // One block, so every id inside it lands on the same index. First
+                // writer wins: a duplicate id is invalid HTML, and the earlier one is
+                // what a browser resolves to.
+                record(identifiers(in: fragment), to: &anchors, blockIndex: blocks.count - 1)
             } else {
-                appendText(fragment, to: &blocks)
+                appendText(fragment, to: &blocks, anchors: &anchors)
             }
-            // Whatever this fragment became, its ids point at the last block it
-            // produced. First writer wins: a duplicate id is invalid HTML, and the
-            // earlier one is what a browser resolves to.
-            record(identifiers(in: fragment), to: &anchors, blockIndex: blocks.count - 1)
             cursor = fragmentRange.upperBound
         }
 
         let trailing = String(html[cursor...])
-        appendText(trailing, to: &blocks)
+        appendText(trailing, to: &blocks, anchors: &anchors)
         record(identifiers(in: trailing), to: &anchors, blockIndex: blocks.count - 1)
         if blocks.isEmpty { return HTMLParsedContent(blocks: [.text(html)], anchors: [:]) }
         return HTMLParsedContent(blocks: blocks, anchors: anchors)
@@ -1090,12 +1090,34 @@ enum HTMLContentParser {
     // MARK: Text collection
 
     private static func appendText(_ html: String, to blocks: inout [HTMLContentBlock]) {
+        var ignored: [String: Int] = [:]
+        appendText(html, to: &blocks, anchors: &ignored)
+    }
+
+    /// Appends a run of body HTML, recording each id against the block that holds it.
+    ///
+    /// The recording belongs here rather than at the call site because this splits
+    /// one run into one block per paragraph. Attributing the run's ids afterwards
+    /// gave them all to the last of those, so a footnote marker in the middle of a
+    /// section sent the reader to the paragraph below the one it was in.
+    private static func appendText(
+        _ html: String, to blocks: inout [HTMLContentBlock], anchors: inout [String: Int]
+    ) {
         guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !plainText(html).isEmpty else { return }
+        // Ids from a fragment that produced no block of its own. The nearest block
+        // after it is the closest thing to where that id sits on the page.
+        var carried: [String] = []
         for fragment in paragraphFragments(of: html) {
-            guard !plainText(fragment).isEmpty else { continue }
+            guard !plainText(fragment).isEmpty else {
+                carried.append(contentsOf: identifiers(in: fragment))
+                continue
+            }
             blocks.append(.text(fragment))
+            record(carried + identifiers(in: fragment), to: &anchors, blockIndex: blocks.count - 1)
+            carried.removeAll()
         }
+        record(carried, to: &anchors, blockIndex: blocks.count - 1)
     }
 
     /// Splits a run of body HTML into one fragment per top-level `<p>`, so every
