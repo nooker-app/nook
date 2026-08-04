@@ -2899,7 +2899,7 @@ public final class ReaderStore {
         await Task.detached(priority: .userInitiated) {
             if HTMLBlockCache.shared.blocks(html: html, baseURL: baseURL) == nil {
                 HTMLBlockCache.shared.store(
-                    HTMLContentParser.parse(html, baseURL: baseURL),
+                    HTMLContentParser.parseWithAnchors(html, baseURL: baseURL),
                     html: html, baseURL: baseURL
                 )
             }

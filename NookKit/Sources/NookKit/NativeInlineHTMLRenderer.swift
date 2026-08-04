@@ -107,6 +107,20 @@ enum NativeInlineHTMLRenderer {
             attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
             attrs[.underlineColor] = linkColor.withAlphaComponent(0.4)
         }
+        if let script = style.script {
+            // Smaller, and offset by a fraction of the *body* size so the shift is
+            // proportional to the text it sits beside rather than to itself.
+            let scaled = max(baseSize * 0.7, 9)
+            attrs[.font] = HTMLContentText.finalBodyFont(
+                baseSize: scaled, bold: isBold, italic: style.italic, design: design)
+            attrs[.baselineOffset] = script == .superscript ? baseSize * 0.34 : -baseSize * 0.16
+            // A marker is small; the underline crowds it and reads as a smudge at
+            // body sizes. Colour alone carries that it is tappable, which is what
+            // the web page does too.
+            if style.link != nil {
+                attrs[.underlineStyle] = 0
+            }
+        }
         return attrs
     }
 
@@ -117,6 +131,15 @@ enum NativeInlineHTMLRenderer {
         var italic = false
         var code = false
         var link: URL? = nil
+        /// Raised or lowered text. A footnote marker is a `<sup>`, and without
+        /// this the whole inline run fell back and the marker read as body text
+        /// sitting in the middle of a sentence.
+        var script: Script? = nil
+
+        enum Script: Equatable {
+            case superscript
+            case subscript_
+        }
     }
 
     private struct Run {
@@ -131,6 +154,10 @@ enum NativeInlineHTMLRenderer {
     /// other tag, or any other attribute — `style=` above all — bails.
     private static let ignorableAttributes: Set<String> = ["class", "id"]
     private static let ignorableAnchorAttributes: Set<String> = ["class", "id", "title", "rel", "target", "name"]
+    /// `role` joins the list for sup/sub: the footnote markup carries
+    /// `role="doc-noteref"`, which is meaning for a screen reader and nothing for
+    /// this renderer to act on.
+    private static let ignorableSupAttributes: Set<String> = ["class", "id", "role"]
 
     /// One pass: parses, validates against the whitelist, and produces
     /// whitespace-collapsed styled runs grouped into paragraphs. Any deviation
@@ -195,6 +222,15 @@ enum NativeInlineHTMLRenderer {
                 case "span":
                     guard attributesAreIgnorable(tag.attributes, allowed: ignorableAttributes) else { return nil }
                     stack.append((name, style))
+                case "sup", "sub":
+                    // `id` is allowed here and ignored: a footnote marker carries one
+                    // so the note can link back to it, and the anchor table built by
+                    // the parser is what resolves that — not this attribute.
+                    guard attributesAreIgnorable(tag.attributes, allowed: ignorableSupAttributes),
+                        style.script == nil
+                    else { return nil }
+                    stack.append((name, style))
+                    style.script = name == "sup" ? .superscript : .subscript_
                 case "a":
                     // Nested anchors are well-formed to the stack but WebKit
                     // auto-closes the outer one — semantics we don't replicate.
@@ -395,6 +431,21 @@ enum NativeInlineHTMLRenderer {
             guard let decoded = decodeEntitiesStrictly(href) else { return nil }
             href = decoded
         }
+        // A fragment is not a place to go; it is a place in this document. The
+        // scheme rule below exists to stop scheme-less *external* links being
+        // invented here, and an in-document jump is not that: the footnote markers
+        // and the table of contents both point this way, and dropping them left a
+        // number and a list of headings that looked live and did nothing.
+        //
+        // Carried as a URL with a scheme of our own so it flows through the same
+        // link attribute and the same tap handling as any other link, and so a
+        // reader that does not know the scheme simply does nothing with it.
+        if href.hasPrefix("#") {
+            let fragment = String(href.dropFirst())
+            guard !fragment.isEmpty else { return nil }
+            return HTMLContentAnchor.url(fragment: fragment)
+        }
+
         // Scheme required: the WebKit importer (run without a baseURL) imports
         // relative and scheme-less hrefs with NO link attribute at all — plain
         // text, no underline. Rendering them as tappable links here would be a
@@ -542,5 +593,34 @@ enum NativeInlineHTMLRenderer {
             || (0x2066...0x2069).contains(v)        // directional isolates
             || (0x10800...0x10FFF).contains(v)      // historic RTL (Phoenician, Aramaic, …)
             || (0x1E800...0x1EFFF).contains(v)      // Adlam, Rohingya, Arabic Math symbols
+    }
+}
+
+/// In-document links, carried as URLs so they travel with the ordinary link
+/// attribute instead of needing plumbing of their own.
+///
+/// The scheme is ours and is never opened: the reader recognises it and scrolls,
+/// and anything that does not recognise it declines to open an unknown scheme,
+/// which is the right failure.
+public enum HTMLContentAnchor {
+    public static let scheme = "nook-anchor"
+
+    /// A link to the element with this `id` in the same document.
+    public static func url(fragment: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = scheme
+        // The id goes in the path rather than the host: ids are case-sensitive and
+        // may contain characters a host may not, and `my-post-fn:1` is one of them.
+        components.path = "/" + fragment
+        return components.url
+    }
+
+    /// The id a link points at, or nil when it is an ordinary link.
+    public static func fragment(of url: URL) -> String? {
+        guard url.scheme == scheme else { return nil }
+        let path = url.path
+        guard path.hasPrefix("/") else { return nil }
+        let fragment = String(path.dropFirst())
+        return fragment.isEmpty ? nil : fragment
     }
 }

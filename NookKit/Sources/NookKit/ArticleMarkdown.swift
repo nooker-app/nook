@@ -24,8 +24,9 @@ public enum ArticleMarkdown {
         if let cached = HTMLBlockCache.shared.blocks(html: html, baseURL: baseURL) {
             blocks = cached
         } else {
-            blocks = HTMLContentParser.parse(html, baseURL: baseURL)
-            HTMLBlockCache.shared.store(blocks, html: html, baseURL: baseURL)
+            let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: baseURL)
+            HTMLBlockCache.shared.store(parsed, html: html, baseURL: baseURL)
+            blocks = parsed.blocks
         }
         return render(blocks, baseURL: baseURL)
     }

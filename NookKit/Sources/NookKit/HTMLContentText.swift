@@ -32,6 +32,10 @@ final class SendableNSCache<Value: AnyObject>: @unchecked Sendable {
 /// kept in document order and rendered as dedicated native views.
 public struct HTMLContentView: View {
     private let blocks: [HTMLContentBlock]
+    /// Element id to block index, for links that point inside this document.
+    private let anchors: [String: Int]
+    /// Keeps this document's block identities distinct from any other on screen.
+    private let anchorNamespace = UUID()
     private let selectable: Bool
     private var translator: NativeArticleTranslator?
     private let typography: ReaderTypography
@@ -47,12 +51,14 @@ public struct HTMLContentView: View {
         // synchronous parse entirely. On a miss we parse synchronously exactly as
         // before — so cold paths (feed-original body, failed fallback) are
         // unchanged — and populate the cache for next time.
-        if let cached = HTMLBlockCache.shared.blocks(html: html, baseURL: baseURL) {
-            blocks = cached
+        if let cached = HTMLBlockCache.shared.parsed(html: html, baseURL: baseURL) {
+            blocks = cached.blocks
+            anchors = cached.anchors
         } else {
-            let parsed = HTMLContentParser.parse(html, baseURL: baseURL)
+            let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: baseURL)
             HTMLBlockCache.shared.store(parsed, html: html, baseURL: baseURL)
-            blocks = parsed
+            blocks = parsed.blocks
+            anchors = parsed.anchors
         }
         self.selectable = selectable
         self.translator = translator
@@ -62,16 +68,45 @@ public struct HTMLContentView: View {
     public var body: some View {
         // Lazy at the top level so off-screen blocks defer their HTML import /
         // syntax highlight / image load instead of all firing at once on entry.
-        HTMLBlockList(
-            blocks: translator?.completedMarkdownBlocks() ?? blocks,
-            selectable: selectable,
-            lazy: true,
-            // A completed Markdown document already contains every replacement.
-            translator: translator?.completedMarkdownBlocks() == nil ? translator : nil,
-            typography: typography
-        )
+        //
+        // Wrapped in a reader so a link into this document has something to scroll.
+        // The anchors come from the parse, and a document with none — which is most
+        // of them — pays for an identity per block and nothing else.
+        ScrollViewReader { proxy in
+            HTMLBlockList(
+                blocks: translator?.completedMarkdownBlocks() ?? blocks,
+                selectable: selectable,
+                anchorNamespace: anchorNamespace,
+                lazy: true,
+                // A completed Markdown document already contains every replacement.
+                translator: translator?.completedMarkdownBlocks() == nil ? translator : nil,
+                typography: typography
+            )
             .frame(maxWidth: .infinity, alignment: .leading)
+            .environment(\.openURL, OpenURLAction { url in
+                // An in-document link is not a place to go. Anything else is left
+                // to whatever the reader already does with links.
+                guard let fragment = HTMLContentAnchor.fragment(of: url) else {
+                    return .systemAction
+                }
+                guard let index = anchors[fragment] else {
+                    // A link to an id this document does not contain. Doing nothing
+                    // is better than opening a scheme no application handles.
+                    return .handled
+                }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(anchorID(namespace: anchorNamespace, index: index), anchor: .top)
+                }
+                return .handled
+            })
+        }
     }
+}
+
+/// A block's scroll identity, namespaced so two articles on screen at once — a
+/// list and a reader, say — cannot answer for each other's anchors.
+func anchorID(namespace: UUID, index: Int) -> String {
+    "nook-anchor-\(namespace.uuidString)-\(index)"
 }
 
 /// Renders an ordered list of parsed blocks. Reused for nested content such as
@@ -79,6 +114,9 @@ public struct HTMLContentView: View {
 struct HTMLBlockList: View {
     let blocks: [HTMLContentBlock]
     let selectable: Bool
+    /// Set only for the top-level article list, whose blocks are what an anchor
+    /// resolves to. Nested lists (a blockquote's contents) carry no identity.
+    var anchorNamespace: UUID? = nil
     /// Lazy only for the top-level article list, so off-screen blocks defer their
     /// heavy per-block work. Nested lists/quotes stay eager (small, bounded, and
     /// nested-lazy layout is unreliable).
@@ -114,6 +152,11 @@ struct HTMLBlockList: View {
                     compact: compactSpacing,
                     typography: typography
                 ))
+                // Identity only where an anchor can point: the top-level article
+                // list. Applied unconditionally there rather than only to blocks
+                // that own an id, because a LazyVStack can only scroll to a view it
+                // has an identity for, and the ids are known to the parse, not here.
+                .id(anchorNamespace.map { anchorID(namespace: $0, index: index) })
         }
     }
 
@@ -373,20 +416,39 @@ private final class CacheBox<T: Sendable>: Sendable {
 /// full baseURL+html (never a hash — a collision would render the wrong article).
 final class HTMLBlockCache: @unchecked Sendable {
     static let shared = HTMLBlockCache()
-    private let cache = NSCache<NSString, CacheBox<[HTMLContentBlock]>>()
+    private let cache = NSCache<NSString, CacheBox<HTMLParsedContent>>()
     private init() { cache.countLimit = 64 }
 
     private static func key(html: String, baseURL: URL?) -> NSString {
         ((baseURL?.absoluteString ?? "") + "\n" + html) as NSString
     }
 
-    func blocks(html: String, baseURL: URL?) -> [HTMLContentBlock]? {
+    func parsed(html: String, baseURL: URL?) -> HTMLParsedContent? {
         cache.object(forKey: Self.key(html: html, baseURL: baseURL))?.value
     }
 
-    func store(_ blocks: [HTMLContentBlock], html: String, baseURL: URL?) {
-        cache.setObject(CacheBox(blocks), forKey: Self.key(html: html, baseURL: baseURL))
+    func blocks(html: String, baseURL: URL?) -> [HTMLContentBlock]? {
+        parsed(html: html, baseURL: baseURL)?.blocks
     }
+
+    func store(_ parsed: HTMLParsedContent, html: String, baseURL: URL?) {
+        cache.setObject(CacheBox(parsed), forKey: Self.key(html: html, baseURL: baseURL))
+    }
+}
+
+/// Blocks plus the ids found in them, so an in-document link has somewhere to go.
+///
+/// Anchors are recorded per top-level block rather than per element. A heading is
+/// its own block, so a table of contents lands exactly; a footnote lives inside the
+/// notes list, so its marker lands at the top of that list. Element-level precision
+/// would mean giving list items identity, which changes the block model and every
+/// place that matches on it — worth doing when the imprecision is felt, not before.
+struct HTMLParsedContent: Sendable {
+    let blocks: [HTMLContentBlock]
+    /// Element id to the index of the block containing it.
+    let anchors: [String: Int]
+
+    static let empty = HTMLParsedContent(blocks: [], anchors: [:])
 }
 
 /// Normalizes the platform HTML importer's document-oriented whitespace into a
@@ -565,11 +627,43 @@ enum HTMLContentParser {
     )
 
     static func parse(_ html: String, baseURL: URL?) -> [HTMLContentBlock] {
+        parseWithAnchors(html, baseURL: baseURL).blocks
+    }
+
+    /// Every `id` in a fragment, so the block it produced can be linked to.
+    private static let idRegex = try! NSRegularExpression(
+        pattern: #"\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#, options: [.caseInsensitive])
+
+    private static func identifiers(in fragment: String) -> [String] {
+        let range = NSRange(fragment.startIndex..<fragment.endIndex, in: fragment)
+        return idRegex.matches(in: fragment, range: range).compactMap { match in
+            for group in 1...3 {
+                if let r = Range(match.range(at: group), in: fragment), !r.isEmpty {
+                    return String(fragment[r])
+                }
+            }
+            return nil
+        }
+    }
+
+    /// First writer wins: a duplicate id is invalid HTML, and the earlier one is
+    /// what a browser resolves to.
+    private static func record(
+        _ identifiers: [String], to anchors: inout [String: Int], blockIndex: Int
+    ) {
+        guard blockIndex >= 0 else { return }
+        for identifier in identifiers where anchors[identifier] == nil {
+            anchors[identifier] = blockIndex
+        }
+    }
+
+    static func parseWithAnchors(_ html: String, baseURL: URL?) -> HTMLParsedContent {
         let regex = blockRegex
 
         let fullRange = NSRange(html.startIndex..<html.endIndex, in: html)
         let matches = regex.matches(in: html, range: fullRange)
         var blocks: [HTMLContentBlock] = []
+        var anchors: [String: Int] = [:]
         var cursor = html.startIndex
 
         for match in matches {
@@ -586,18 +680,30 @@ enum HTMLContentParser {
                let balancedEnd = balancedEnd(of: name, in: html, from: range.lowerBound) {
                 fragmentRange = range.lowerBound..<balancedEnd
             }
-            appendText(String(html[cursor..<fragmentRange.lowerBound]), to: &blocks)
+            let between = String(html[cursor..<fragmentRange.lowerBound])
+            appendText(between, to: &blocks)
+            // Paragraphs arrive here rather than through the block regex, and a
+            // footnote marker's own id lives in one — it is what the note links back
+            // to. Recording only matched fragments left every back-link unresolved.
+            record(identifiers(in: between), to: &anchors, blockIndex: blocks.count - 1)
             let fragment = String(html[fragmentRange])
             if let block = classify(fragment, baseURL: baseURL) {
                 blocks.append(block)
             } else {
                 appendText(fragment, to: &blocks)
             }
+            // Whatever this fragment became, its ids point at the last block it
+            // produced. First writer wins: a duplicate id is invalid HTML, and the
+            // earlier one is what a browser resolves to.
+            record(identifiers(in: fragment), to: &anchors, blockIndex: blocks.count - 1)
             cursor = fragmentRange.upperBound
         }
 
-        appendText(String(html[cursor...]), to: &blocks)
-        return blocks.isEmpty ? [.text(html)] : blocks
+        let trailing = String(html[cursor...])
+        appendText(trailing, to: &blocks)
+        record(identifiers(in: trailing), to: &anchors, blockIndex: blocks.count - 1)
+        if blocks.isEmpty { return HTMLParsedContent(blocks: [.text(html)], anchors: [:]) }
+        return HTMLParsedContent(blocks: blocks, anchors: anchors)
     }
 
     private static func classify(_ fragment: String, baseURL: URL?) -> HTMLContentBlock? {

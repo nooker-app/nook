@@ -190,8 +190,6 @@ struct NativeInlineHTMLRendererTests {
         "<div>block</div>",
         "<u>underline</u>",
         "<s>strike</s>",
-        "<sub>1</sub>",
-        "<sup>2</sup>",
         "<mark>hi</mark>",
         "<img src=\"x.png\">",
         "<table><tr><td>c</td></tr></table>",
@@ -220,9 +218,10 @@ struct NativeInlineHTMLRendererTests {
         "&#x5D0;&#x5D1;",
         // Nested anchor: WebKit auto-closes the outer one.
         #"<a href="https://a.com">x<a href="https://b.com">y</a>z</a>"#,
-        // Relative / scheme-less hrefs import with NO link under WebKit.
+        // Relative / scheme-less hrefs import with NO link under WebKit. A
+        // fragment is the one exception and is covered below: it points inside this
+        // document rather than at another one.
         #"<a href="/relative/path">rel</a>"#,
-        ##"<a href="#footnote">frag</a>"##,
     ])
     func unsupportedBails(_ html: String) {
         #expect(render(html) == nil)
@@ -341,4 +340,107 @@ struct NativeInlineHTMLRendererTests {
         }
     }
     #endif
+}
+
+
+// MARK: - Footnotes and contents
+
+/// Both features the publishing renderer emits and the reader used to flatten: a
+/// footnote marker rendered at body size in the middle of a sentence, and a table
+/// of contents whose rows looked like links and did nothing.
+@Suite("In-document navigation")
+struct NativeInlineHTMLAnchorTests {
+    private func render(_ html: String) -> AttributedString? {
+        NativeInlineHTMLRenderer.importPrepared(
+            HTMLTextFlow.preparedHTML(html), baseSize: 16, bold: false)
+    }
+
+    /// Platform attributes, read the way the rest of this file reads them.
+    private func baselineOffset(_ run: AttributedString.Runs.Element) -> CGFloat {
+        #if canImport(AppKit)
+        return run.appKit.baselineOffset ?? 0
+        #else
+        return run.uiKit.baselineOffset ?? 0
+        #endif
+    }
+
+    private func pointSize(_ run: AttributedString.Runs.Element) -> CGFloat {
+        #if canImport(AppKit)
+        return run.appKit.font?.pointSize ?? 0
+        #else
+        return run.uiKit.font?.pointSize ?? 0
+        #endif
+    }
+
+    /// The attributed run covering the first occurrence of `text`.
+    private func run(
+        _ text: String, in attributed: AttributedString
+    ) throws -> AttributedString.Runs.Element {
+        let range = try #require(attributed.range(of: text))
+        return try #require(attributed.runs.first { $0.range.overlaps(range) })
+    }
+
+    @Test("A footnote marker renders raised and smaller, not as body text")
+    func supIsRaised() throws {
+        let rendered = try #require(render("A claim.<sup>1</sup>"))
+        let marker = try run("1", in: rendered)
+        let body = try run("A claim.", in: rendered)
+
+        #expect(baselineOffset(marker) > 0, "a superscript must sit above the baseline")
+        #expect(pointSize(marker) < pointSize(body), "a marker must not be body size")
+    }
+
+    @Test("A subscript sits below the baseline")
+    func subIsLowered() throws {
+        let rendered = try #require(render("H<sub>2</sub>O"))
+        #expect(baselineOffset(try run("2", in: rendered)) < 0)
+    }
+
+    /// The link a footnote marker and every contents row carries. It is not a place
+    /// to go, so it travels under a scheme of ours that the reader resolves and
+    /// anything else declines to open.
+    @Test("A fragment href becomes an in-document link")
+    func fragmentBecomesAnchor() throws {
+        let rendered = try #require(render(##"<a href="#my-post-fn:1">1</a>"##))
+        let link = try #require(try run("1", in: rendered).link)
+        #expect(HTMLContentAnchor.fragment(of: link) == "my-post-fn:1")
+    }
+
+    @Test("An ordinary link is still an ordinary link")
+    func externalLinkUnchanged() throws {
+        let rendered = try #require(render(#"<a href="https://example.com/">x</a>"#))
+        let link = try #require(try run("x", in: rendered).link)
+        #expect(link.scheme == "https")
+        #expect(HTMLContentAnchor.fragment(of: link) == nil, "an external link is not an anchor")
+    }
+
+    /// The parse has to say which block an id belongs to, or a resolved link has
+    /// nowhere to scroll.
+    @Test("The parser records where each id lives")
+    func parserRecordsAnchors() {
+        let html = """
+            <ul class="toc"><li><a href="#p-first">First</a></li></ul>
+            <h2 id="p-first">First</h2>
+            <p>Body.<sup id="p-fnref:1"><a href="#p-fn:1">1</a></sup></p>
+            <ol><li id="p-fn:1"><p>The note.</p></li></ol>
+            """
+        let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: nil)
+
+        let heading = parsed.anchors["p-first"]
+        #expect(heading != nil, "a heading's id must be recorded")
+        if let heading {
+            #expect(parsed.blocks[heading].isHeading, "the id must point at the heading itself")
+        }
+        // The marker's own id, so the note can link back to the sentence.
+        #expect(parsed.anchors["p-fnref:1"] != nil)
+        // And the note, which lives inside the list block.
+        #expect(parsed.anchors["p-fn:1"] != nil)
+    }
+}
+
+extension HTMLContentBlock {
+    fileprivate var isHeading: Bool {
+        if case .heading = self { return true }
+        return false
+    }
 }
