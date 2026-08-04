@@ -592,11 +592,11 @@ public struct PlusOnboardingView: View {
             .foregroundStyle(.secondary)
 
             if purpose == .create {
-                // The system offers to save a password only for an app whose
-                // domain association it has verified, which a build signed by a
-                // personal team cannot have. Copying is then the only way to get
-                // the password into a password manager, and it is the one thing
-                // standing between the user and an unrecoverable account.
+                // Kept now that the system does offer to save. A generated password
+                // is the only key to somebody's repository, and "offer" is not
+                // "did": the sheet can be dismissed, and a password manager that
+                // is not the system one cannot be filled into at all. Copying is
+                // the escape hatch for both, and it costs one button.
                 Button {
                     copy(text.wrappedValue)
                 } label: {

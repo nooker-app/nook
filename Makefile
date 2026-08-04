@@ -14,7 +14,7 @@ BUILD_FLAGS := CODE_SIGNING_ALLOWED=NO
 # project in Xcode still shows the prompt once — click "Trust & Enable".
 PLUGIN_FLAGS := -skipPackagePluginValidation
 
-.PHONY: build clean open app-store-screenshots app-store-capture app-store-check-faces
+.PHONY: build clean open app-store-screenshots app-store-capture app-store-check-faces macos-signing-secrets
 
 build:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath $(DERIVED_DATA_PATH) $(PLUGIN_FLAGS) $(BUILD_FLAGS) build
@@ -34,3 +34,9 @@ app-store-capture:
 
 app-store-check-faces:
 	xcrun swift marketing/app-store/check-faces.swift $$(find marketing/app-store/captures marketing/app-store/output -name '*.png' | sort)
+
+# One-time setup for a signed, notarized Mac build in CI. Prompts for a
+# certificate and an App Store Connect key and stores five repository secrets;
+# until they exist the release workflow builds ad-hoc on purpose.
+macos-signing-secrets:
+	tools/macos-signing-secrets.sh

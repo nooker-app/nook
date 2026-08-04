@@ -2,34 +2,31 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Claims the domains Nook Plus issues handles under, which is what lets
-	     the system offer to save a newly created account password and fill it
-	     back in later. Without it the system refuses outright: there is no
-	     partial mode, and nothing is saved under any name.
+	<!-- Claims the domain Nook Plus issues handles under, which is what lets the
+	     system offer to save a newly created account password and fill it back in
+	     later. Without it the system refuses outright: there is no partial mode,
+	     and nothing is saved under any name.
 
-	     Applied to the Release configuration only. Associated Domains is not
-	     available to a personal (free) development team at all — Xcode refuses
-	     to create a profile with it — so carrying this in Debug would block
-	     everyday on-device development for no gain. Release is where the
-	     capability can exist, once the project is signed by a team enrolled in
-	     the Apple Developer Program.
-
-	     Consequences worth knowing while that is still true: a Debug build gets
-	     no save offer and no strong-password suggestion, so the password has to
-	     be kept by the user; the setup screen says so, and offers to copy it.
+	     Applied to Debug as well as Release. It was Release-only for as long as the
+	     project was signed by a personal team, because Associated Domains is not
+	     available to one at all — Xcode refuses to create the profile, so carrying
+	     it in Debug would have blocked everyday on-device development for no gain.
+	     The team is enrolled now, so a development build behaves like a shipped one
+	     and the save flow can be exercised without archiving.
 
 	     Production only. Staging was listed alongside it while this file was being
-	     worked out, with `?mode=developer` so the device would fetch the
-	     association file straight from the host instead of through Apple's CDN —
-	     a mode that needs Settings > Developer > Associated Domains Development
-	     switched on, and so means nothing in a shipped build. Both are gone: this
-	     file applies to Release alone and a release build has no developer section
-	     to point itself at staging with, so the entry was a claim on a domain no
-	     shipping build can reach — and a developer-mode association is not
-	     something to submit for review.
+	     worked out, with `?mode=developer` so the device would fetch the association
+	     file straight from the host instead of through Apple's CDN — a mode that
+	     needs Settings > Developer > Associated Domains Development switched on, and
+	     so means nothing in a shipped build. It is gone: a developer-mode
+	     association is not something to submit for review, and work that needs
+	     staging can add it back locally without committing it.
 
-	     Work that needs staging wants a Debug build, which carries no Associated
-	     Domains at all for the reason above. -->
+	     One thing this does not cover: `nooker.social`, which is the host somebody
+	     actually authenticates against. Credentials are scoped per domain, so a
+	     password saved for nooker.app will not be offered on the PDS's own sign-in
+	     page. That only matters if the app moves to the PDS's OAuth flow, and it is
+	     the change to make first if it does. -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:nooker.app</string>
