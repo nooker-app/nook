@@ -21,10 +21,18 @@ gh auth status >/dev/null 2>&1 || die "gh is not logged in: gh auth login"
 cat <<'PREREQ'
 Before running this, two things have to exist.
 
-1. A Developer ID Application certificate on this Mac.
-   Xcode > Settings > Accounts > (your team) > Manage Certificates > + >
-   Developer ID Application. This is the certificate that signs the app; the
-   Apple Development one already installed cannot.
+1. A Developer ID Application certificate on this Mac, exported to a .p12.
+
+   Create it in Xcode > Settings > Accounts > (your team) > Manage Certificates
+   > + > Developer ID Application. The Apple Development certificate already
+   installed cannot sign for distribution.
+
+   Then export just that one, in Keychain Access: find "Developer ID
+   Application", right-click > Export, save as .p12, and set a password.
+
+   Keychain Access rather than `security export`: that command exports every
+   identity in the keychain, which would put the development signing key into CI
+   as well. Only the one certificate belongs there.
 
 2. An App Store Connect API key with the Developer role, downloaded as a .p8.
    appstoreconnect.apple.com > Users and Access > Integrations > Keys.
@@ -43,26 +51,36 @@ read -r -p "Both ready? [y/N] " ready
 
 IDENTITY="$(security find-identity -v -p codesigning \
   | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)".*/\1/')"
-[ -n "$IDENTITY" ] || die "No Developer ID Application certificate found. See step 1 above."
-printf 'Found: %s\n\n' "$IDENTITY"
+if [ -n "$IDENTITY" ]; then
+  printf 'Installed on this Mac: %s\n' "$IDENTITY"
+else
+  printf 'No Developer ID Application certificate is installed here.\n'
+  printf 'That is fine if the .p12 came from another Mac.\n'
+fi
+echo
 
-P12="$(mktemp -t nook-signing).p12"
-# Deleted whatever happens next, including a failure or an interrupt: a .p12
-# holding a signing key must not be left behind in a temporary directory.
-trap 'rm -f "$P12"' EXIT INT TERM
-
-cat <<'EXPORT'
-`security export` will ask twice for a password to encrypt the .p12 with. Pick
-anything; you are about to store it as a secret and will not need to type it
-again. It is not your Apple ID password and not your login password.
-
-EXPORT
-
-security export -t identities -f pkcs12 -o "$P12" \
-  || die "Export failed. If it asked for keychain access, allow it and run again."
-
-read -r -s -p "The password you just chose: " P12_PASSWORD; echo
+read -r -p "Path to the .p12: " P12
+[ -f "$P12" ] || die "No file at that path."
+read -r -s -p "Its export password: " P12_PASSWORD; echo
 [ -n "$P12_PASSWORD" ] || die "Empty password; the workflow could not open the .p12."
+
+# Best effort: confirm the password opens it and that it holds the right
+# certificate, so a wrong file fails here rather than in CI. Apple's .p12 files
+# use ciphers OpenSSL 3 only reads with -legacy, and some builds lack it — a
+# check that cannot run is skipped rather than treated as a failure.
+if command -v openssl >/dev/null; then
+  CONTENTS="$(printf '%s' "$P12_PASSWORD" \
+    | openssl pkcs12 -in "$P12" -nokeys -passin stdin 2>/dev/null \
+    || printf '%s' "$P12_PASSWORD" \
+    | openssl pkcs12 -legacy -in "$P12" -nokeys -passin stdin 2>/dev/null || true)"
+  if [ -z "$CONTENTS" ]; then
+    printf 'Could not read the .p12 here; leaving it to CI to verify.\n'
+  elif printf '%s' "$CONTENTS" | grep -q "Developer ID Application"; then
+    printf 'Verified: the .p12 holds a Developer ID Application certificate.\n'
+  else
+    die "That .p12 has no Developer ID Application certificate in it. Exported the wrong one?"
+  fi
+fi
 
 base64 -i "$P12" | gh secret set MACOS_CERTIFICATE_P12
 printf '%s' "$P12_PASSWORD" | gh secret set MACOS_CERTIFICATE_PASSWORD
@@ -99,6 +117,6 @@ fails if it is not, so a broken build stops there instead of shipping.
 Then download the artifact and confirm an update still installs over the
 previous version. That is the path hardened runtime is most likely to break.
 
-Move the .p8 somewhere safe or delete it. Apple will not let you download it
-again, and it is now in the repository's secrets either way.
+Move the .p8 and the .p12 somewhere safe, or delete them. Apple will not let you
+download the .p8 again, and both are in the repository's secrets either way.
 NEXT
