@@ -46,9 +46,14 @@ In the Developer portal, Identifiers. Four App IDs, all under team `F7WUT95TT6`:
 ```text
 com.tim.nook.ios                     the app
 com.tim.nook.ios.share               Add Feed share extension
-com.tim.nook.ios.share.discover      discover extension
-com.tim.nook.ios.share.save          save extension
+com.tim.nook.ios.share-discover      discover extension
+com.tim.nook.ios.share-save          save extension
 ```
+
+The hyphens are not cosmetic. An extension's identifier may add exactly one period
+to the app's, so `com.tim.nook.ios.share.discover` is rejected at upload with
+ContentDelivery 90347 — after the build has been archived, signed, and sent. Nothing
+earlier in the toolchain objects to it.
 
 On `com.tim.nook.ios`, enable **Associated Domains**. The Release build claims
 `webcredentials:nooker.app` so the system can offer to save a newly created Plus
