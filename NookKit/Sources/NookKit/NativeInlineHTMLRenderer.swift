@@ -52,13 +52,14 @@ enum NativeInlineHTMLRenderer {
         guard let paragraphs = tokenize(prepared), !paragraphs.isEmpty else { return nil }
 
         let mutable = NSMutableAttributedString()
+
         for (index, paragraph) in paragraphs.enumerated() {
             if index > 0 {
                 mutable.append(NSAttributedString(string: "\n", attributes: attributes(for: Style(), baseSize: baseSize, boldParam: bold, design: typography.design)))
             }
             for run in paragraph {
                 mutable.append(NSAttributedString(
-                    string: run.text,
+                    string: paddedRunText(run),
                     attributes: attributes(for: run.style, baseSize: baseSize, boldParam: bold, design: typography.design)
                 ))
             }
@@ -110,18 +111,46 @@ enum NativeInlineHTMLRenderer {
         if let script = style.script {
             // Smaller, and offset by a fraction of the *body* size so the shift is
             // proportional to the text it sits beside rather than to itself.
-            let scaled = max(baseSize * 0.7, 9)
+            // A marker that is a link has to be hit, so it is drawn a size up from
+            // one that is only notation. The floor matters more than the ratio at
+            // small reader sizes, where 0.7 of the body is already under 10 points.
+            let ratio: CGFloat = style.link == nil ? 0.7 : 0.8
+            let floor: CGFloat = style.link == nil ? 9 : 11
+            let scaled = max(baseSize * ratio, floor)
             attrs[.font] = HTMLContentText.finalBodyFont(
                 baseSize: scaled, bold: isBold, italic: style.italic, design: design)
             attrs[.baselineOffset] = script == .superscript ? baseSize * 0.34 : -baseSize * 0.16
             // A marker is small; the underline crowds it and reads as a smudge at
-            // body sizes. Colour alone carries that it is tappable, which is what
-            // the web page does too.
+            // body sizes. A tinted field says the same thing with the space the
+            // padding already reserved, and it makes the target visible: the reader
+            // aims at something drawn rather than at a digit with blank margins.
             if style.link != nil {
                 attrs[.underlineStyle] = 0
+                attrs[.backgroundColor] = linkColor.withAlphaComponent(0.12)
             }
         }
         return attrs
+    }
+
+    /// A non-breaking space on each side of a tappable footnote marker.
+    ///
+    /// What responds to a tap is the area the run's glyphs cover, and a marker is
+    /// one small raised digit: 5.5×15 points, against the 44 a finger needs. Padding
+    /// inside the link widens the run, so the added width is tappable rather than
+    /// merely blank — measured, it takes the target from 83 to 218 square points.
+    ///
+    /// Non-breaking so a line never wraps between a word and its marker, and so the
+    /// pair is never split by justification.
+    ///
+    /// This is the honest ceiling for a marker drawn as text: still an eighth of a
+    /// finger. It is paired with a background for that reason — what can be hit is
+    /// at least visible, rather than a target the reader has to guess at.
+    static let markerPadding = "\u{00A0}"
+
+    /// A run's text, widened when it is a marker somebody has to hit.
+    private static func paddedRunText(_ run: Run) -> String {
+        guard run.style.script != nil, run.style.link != nil else { return run.text }
+        return markerPadding + run.text + markerPadding
     }
 
     // MARK: - Tokenizer

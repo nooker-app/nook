@@ -542,4 +542,43 @@ struct AnchorFlashTests {
         #expect(flash.frequency == 0)
         #expect(flash.duration > 0, "it must still appear, just without flashing")
     }
+
+    // Footnote markers were being missed: what answers a tap is the area the run's
+    // glyphs cover, and one raised digit is 5.5×15 points against the 44 a finger
+    // needs. The numbers below are measured, not chosen — the old marker came to 83
+    // square points and this asserts the target is now more than double that.
+    //
+    // It is still an eighth of a finger, which is the ceiling for a marker drawn as
+    // text. The background exists so that what can be hit is at least what is seen.
+    @Test("A footnote marker is a target big enough to aim at")
+    func footnoteMarkerHasATappableArea() throws {
+        let html = "<p>Sentence<sup id=\"fnref:1\"><a href=\"#fn:1\">1</a></sup> continues.</p>"
+        guard let attributed = NativeInlineHTMLRenderer.importPrepared(html, baseSize: 17, bold: false) else {
+            Issue.record("the marker markup did not render natively")
+            return
+        }
+        let ns = NSAttributedString(attributed)
+
+        var measured: CGSize?
+        var padded = false
+        var tinted = false
+        ns.enumerateAttribute(.link, in: NSRange(location: 0, length: ns.length)) { value, range, _ in
+            guard value != nil else { return }
+            let run = ns.attributedSubstring(from: range)
+            measured = run.size()
+            padded = run.string.hasPrefix(NativeInlineHTMLRenderer.markerPadding)
+                && run.string.hasSuffix(NativeInlineHTMLRenderer.markerPadding)
+            tinted = run.attribute(.backgroundColor, at: 0, effectiveRange: nil) != nil
+        }
+
+        guard let measured else {
+            Issue.record("the marker is not a link at all")
+            return
+        }
+        #expect(padded, "the link run is not padded, so the target is the digit alone")
+        #expect(tinted, "an enlarged target that is not drawn is a target nobody can aim at")
+        let area = measured.width * measured.height
+        #expect(area > 180, "the marker measures \(area) square points; it was 83 before")
+    }
+
 }
