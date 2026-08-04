@@ -107,6 +107,26 @@ its own.
 
 ## Content rights
 
-The app displays third-party content — the feeds the user subscribes to. Answer
-that it does contain, show, or access third-party content, and that the user
-supplies the sources. There is no bundled catalogue of publishers.
+**Yes**, the app shows third-party content. A reader does, by definition — open it
+and somebody else's article is on screen, and the screenshots show real feeds.
+Answering no is contradicted by the app itself.
+
+Saying yes then asks you to confirm the rights to that content. The basis:
+
+- Feeds exist to be fetched and rendered. That is what RSS and Atom are for, and
+  publishing one is an invitation to readers like this.
+- The user chooses every source. There is no bundled catalogue of publishers and no
+  editorial selection — somebody types an address, or pastes a site and the app
+  looks for its feed.
+- Nothing is redistributed. The fetch happens on the device and the article is
+  displayed on that device. No server of ours stores or forwards it, and there is no
+  surface where one user sees what another subscribed to.
+
+Two things a reviewer might ask about, both user-initiated and local:
+
+- **Reader view and full-text extraction** render the publisher's own page content.
+  The original page is always one tap away, and a feed can be set to open it
+  instead.
+- **Translation** sends article text to Apple Intelligence on the device, or to
+  Gemini under an API key the user supplies. That is the user's own account with
+  Google, requested by them, in the same category as a browser's translate.
