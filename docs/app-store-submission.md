@@ -16,9 +16,8 @@ Committed in the repository, so no step below has to produce it:
   without this draws an ITMS-91053 warning mail and, eventually, a rejection.
 - `ITSAppUsesNonExemptEncryption` in `NookiOS/Info.plist` — answers export
   compliance at build time so the upload stops asking on every build.
-- Screenshots for both required sizes in four languages, under
-  `marketing/app-store/output/`. iPhone 6.9" (1290×2796) and iPad 13"
-  (2048×2732), five each.
+- Screenshots in four languages under `marketing/app-store/output/`, five per
+  size: iPhone 6.9" (1290×2796), iPhone 6.5" (1284×2778), iPad 13" (2048×2732).
 - Every string to paste, counted against its field limit, in
   `marketing/app-store/metadata/`.
 - A support page at <https://www.nooker.app/support/>, which the Support URL field
@@ -103,9 +102,21 @@ App Store Connect adds the © itself. Typing one gives "©© 2026".
 The categories are a listing choice and are unrelated to the Mac app's
 `LSApplicationCategoryType`, which stays `productivity`.
 
-Screenshots: upload `marketing/app-store/output/<locale>/iphone-6.9/` and
-`.../ipad-13/`, five each, in filename order. The order in the list is the order
-people swipe.
+Screenshots: upload from `marketing/app-store/output/<locale>/`, five each, in
+filename order. The order in the list is the order people swipe.
+
+**Match the folder to the slot.** Each display class accepts only its own
+dimensions, and the error names the sizes it wants rather than the slot you are in:
+
+| Slot in App Store Connect | Folder | Accepts |
+| --- | --- | --- |
+| iPhone 6.9" Display | `iphone-6.9/` | 1290×2796 |
+| iPhone 6.5" Display | `iphone-6.5/` | 1284×2778 |
+| iPad 13" Display | `ipad-13/` | 2048×2732 |
+
+Both iPhone sets are rendered rather than one resampled to fit the other: scaling a
+finished screenshot would scale its text too. `config.json` carries the second size
+in `iphoneExtraSizes`, drawn from the same slide definitions.
 
 ## 4. Answer the questionnaires
 

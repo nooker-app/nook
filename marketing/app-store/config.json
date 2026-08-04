@@ -151,6 +151,13 @@
       }
     ]
   },
+  "iphoneExtraSizes": [
+    {
+      "name": "iphone-6.5",
+      "width": 1284,
+      "height": 2778
+    }
+  ],
   "ipad": {
     "width": 2048,
     "height": 2732,

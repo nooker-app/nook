@@ -7,8 +7,25 @@ import Foundation
 struct Configuration: Decodable {
     let locales: [String]
     let iphone: Platform
+    /// The same slides drawn again at another size.
+    ///
+    /// App Store Connect has a slot per display class and each accepts only its own
+    /// dimensions: the 6.9-inch slot takes 1290×2796, the 6.5-inch one refuses it and
+    /// asks for 1284×2778. One set cannot satisfy both, and resampling a finished
+    /// screenshot to fit would resize the text with it. Re-rendering lays the frame
+    /// and the copy out at the target size instead.
+    let iphoneExtraSizes: [ExtraSize]?
     let ipad: Platform
     let macos: Platform
+}
+
+/// An additional canvas for slides that are already defined, so the definitions are
+/// not duplicated per size — five slides in four languages is not something to keep
+/// in two places.
+struct ExtraSize: Decodable {
+    let name: String
+    let width: Int
+    let height: Int
 }
 
 struct Platform: Decodable {
@@ -109,6 +126,18 @@ final class Renderer {
                 locale: locale,
                 style: .iphone
             )
+            for extra in configuration.iphoneExtraSizes ?? [] {
+                try render(
+                    platform: Platform(
+                        width: extra.width,
+                        height: extra.height,
+                        slides: configuration.iphone.slides
+                    ),
+                    platformName: extra.name,
+                    locale: locale,
+                    style: .iphone
+                )
+            }
             try render(
                 platform: configuration.ipad,
                 platformName: "ipad-13",
