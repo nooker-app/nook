@@ -4138,6 +4138,34 @@
         }
       }
     },
+    "Hold ⌘Q to Quit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold ⌘Q to Quit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "終了するには ⌘Q を押し続けてください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종료하려면 ⌘Q를 계속 누르세요"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住 ⌘Q 退出"
+          }
+        }
+      }
+    },
     "How filters work": {
       "localizations": {
         "en": {

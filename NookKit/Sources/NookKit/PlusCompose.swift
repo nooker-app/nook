@@ -329,6 +329,10 @@ public struct PlusComposeView: View {
             .sheet(item: $footnoteSession) { footnoteEditor(session: $0) }
             .sheet(isPresented: $showingTableOfContents) { tableOfContents }
             .onAppear { if title.isEmpty { focus = .title } }
+            // ⌘Q asks the same question the Cancel button asks — by making the
+            // shortcut a press-and-hold. It is next to ⌘W, it cannot be undone, and
+            // the text on screen exists nowhere else until it is published or kept.
+            .requiresHoldToQuit(when: hasUnsavedChanges)
             .confirmationDialog(
                 Text("Keep this as a draft?", bundle: .module),
                 isPresented: $askAboutDraft,
