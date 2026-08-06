@@ -152,10 +152,24 @@ final class UnsavedWritingRegistry {
         private func handle(_ stroke: KeyStroke) -> Bool {
             switch stroke.type {
             case .keyDown:
+                #if DEBUG
+                    if stroke.modifiers.contains(.command) {
+                        QuitHoldLog.note(
+                            "keyDown",
+                            "keyCode=\(stroke.keyCode) char=\(stroke.character ?? "nil") "
+                                + "flags=\(stroke.modifiers.intersection(.deviceIndependentFlagsMask).rawValue) "
+                                + "isQuitShortcut=\(stroke.isQuitShortcut)")
+                    }
+                #endif
                 guard stroke.isQuitShortcut else { return false }
                 let decision = QuitShortcutDecision.forShortcut(
                     hasUnsavedWork: UnsavedWritingRegistry.shared.hasUnsavedWork
                 )
+                #if DEBUG
+                    QuitHoldLog.note(
+                        "decision", "\(decision) guarded="
+                            + "\(UnsavedWritingRegistry.shared.hasUnsavedWork)")
+                #endif
                 if decision.quitsImmediately {
                     // Quit from here rather than handing the shortcut back to the Quit menu
                     // item, which does not act while a sheet is presented. The composer is
@@ -164,13 +178,31 @@ final class UnsavedWritingRegistry {
                     // working, which is exactly how it was reported. `NSApp.terminate` is
                     // what the menu item would have called anyway, so nothing changes
                     // anywhere else.
-                    NSApp.terminate(nil)
+                    #if DEBUG
+                        QuitHoldLog.note("terminate.schedule")
+                        // If the process is still here a moment later, terminate did not
+                        // take — which is the thing to find out.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            QuitHoldLog.note("terminate.aftermath", "still running")
+                        }
+                    #endif
+                    // On the next turn of the run loop, not here. The hold below has always
+                    // quit correctly from the composer, and the one thing it does
+                    // differently is exactly this: its `terminate` happens from a task,
+                    // after the event that triggered it has finished being dispatched.
+                    // Called inline from inside a local event monitor, mid-`sendEvent`,
+                    // termination did not take at all — which is why ⌘Q in a fresh composer
+                    // still did nothing after being changed to quit directly.
+                    Task { @MainActor in NSApp.terminate(nil) }
                 } else {
                     // Repeats arrive while the key is down; the first press owns the timer.
                     beginHold()
                 }
                 return true
             case .keyUp:
+                #if DEBUG
+                    if stroke.keyCode == KeyStroke.qKeyCode { QuitHoldLog.note("keyUp.q") }
+                #endif
                 if stroke.keyCode == KeyStroke.qKeyCode { endHold() }
                 return false
             case .flagsChanged:
@@ -182,10 +214,16 @@ final class UnsavedWritingRegistry {
         }
 
         private func beginHold() {
+            #if DEBUG
+                QuitHoldLog.note("hold.begin", "alreadyHolding=\(holdTask != nil)")
+            #endif
             guard holdTask == nil else { return }
             let overlay = QuitHoldOverlayPanel(duration: Self.holdSeconds)
             overlay.show()
             hud = overlay
+            #if DEBUG
+                QuitHoldLog.note("hold.hud", overlay.state)
+            #endif
             holdTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(Self.holdSeconds))
                 guard let self, !Task.isCancelled else { return }
@@ -193,6 +231,9 @@ final class UnsavedWritingRegistry {
                 // while ⌘ is down and quitting on a key nobody is holding is the exact
                 // accident this exists to prevent.
                 let stillHeld = NSEvent.modifierFlags.contains(.command)
+                #if DEBUG
+                    QuitHoldLog.note("hold.elapsed", "stillHeld=\(stillHeld)")
+                #endif
                 endHold()
                 guard stillHeld else { return }
                 NSApp.terminate(nil)
@@ -200,6 +241,9 @@ final class UnsavedWritingRegistry {
         }
 
         private func endHold() {
+            #if DEBUG
+                if holdTask != nil { QuitHoldLog.note("hold.end") }
+            #endif
             holdTask?.cancel()
             holdTask = nil
             hud?.dismiss()
@@ -273,6 +317,13 @@ final class UnsavedWritingRegistry {
             panel.ignoresMouseEvents = true
             panel.animationBehavior = .none
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        }
+
+        /// What the panel is, for the log: an invisible or zero-sized HUD is
+        /// indistinguishable from nothing having happened.
+        var state: String {
+            "frame=\(NSStringFromRect(panel.frame)) visible=\(panel.isVisible) "
+                + "alpha=\(panel.alphaValue) screen=\(panel.screen != nil)"
         }
 
         func show() {
