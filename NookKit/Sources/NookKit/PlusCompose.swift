@@ -232,8 +232,18 @@ public struct PlusComposeView: View {
     /// not belong in their permanent URL, and a date is at least honest and readable.
     private func refreshFallback() {
         let taken = Set(store.articles.map(\.value.slug))
-        slugField.fallback = PlusSlug.dated(Date(), avoiding: taken)
-        // Apply it now if the title already needs it.
+        let fallback = PlusSlug.dated(Date(), avoiding: taken)
+        // This re-runs whenever the number of published posts changes, which during a
+        // sync is once per post that arrives. Nothing is written unless the answer
+        // actually moved — a date-based address only changes when the day does or when a
+        // collision appears — because a state write lands as a re-render on somebody who
+        // is in the middle of typing.
+        guard fallback != slugField.fallback else { return }
+        slugField.fallback = fallback
+        // Recomputed even when the writer has taken the address over: `titleChanged`
+        // leaves a pinned value alone and only refreshes what the suggestion would be,
+        // and a suggestion left stale is one that offers an address a sync has since
+        // taken.
         slugField.titleChanged(to: title)
     }
 
@@ -400,12 +410,6 @@ public struct PlusComposeView: View {
 
                 addressLine
 
-                if let note = statusNote {
-                    note
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                }
-
                 // Renders while it is being typed, and never rewrites what was typed.
                 // See PlusMarkdownEditor for why that distinction is the whole design.
                 PlusMarkdownEditor(
@@ -415,10 +419,17 @@ public struct PlusComposeView: View {
                     onOpenFootnote: openFootnote,
                     onOpenTableOfContents: { showingTableOfContents = true },
                     onRequestFootnote: beginFootnote,
-                    onRequestHelp: { showingMarkdownHelp = true }
+                    onRequestHelp: { showingMarkdownHelp = true },
+                    // What the note covers, so the text view keeps that much free and
+                    // the line being written is never behind it.
+                    bottomInset: editorBottomInset
                 )
                 .padding(.horizontal, 16)
                 .frame(maxHeight: .infinity)
+                // Over the writing rather than above it. In the layout, the note appearing
+                // or going away as the network answers changed the editor's height under
+                // whoever was typing, and the text view's scroll went with it.
+                .overlay(alignment: .bottom) { floatingStatusNote }
             }
         }
 
@@ -652,18 +663,92 @@ public struct PlusComposeView: View {
         #endif
     }
 
+    /// What the composer has to say about the network, if anything.
+    ///
+    /// A value rather than an optional view, because two things now depend on whether
+    /// there is a note: what it says, and how much room the editor reserves for it.
+    private enum ComposerStatus: Equatable {
+        /// Something went wrong and the writer needs to know.
+        case failure(String)
+        /// Publish stays disabled until the publication arrives, and a button that is
+        /// dim for no stated reason reads as broken. The fields are usable meanwhile;
+        /// only publishing waits.
+        case awaitingPublication
+    }
+
     /// What is stopping publishing, or what is being waited for. Nil when there is
     /// nothing to say.
+    private var status: ComposerStatus? {
+        if let failure = store.failure { return .failure(failure) }
+        if store.publications.isEmpty { return .awaitingPublication }
+        return nil
+    }
+
+    /// How much of the writing surface the note is taking, as drawn.
+    ///
+    /// Measured rather than a constant, because this number is also what the text view is
+    /// told to keep free and the two have to agree exactly. A constant chosen for one
+    /// line was wrong for two, and wrong again at an accessibility text size; the drawn
+    /// height is right at every size by construction. It changes only when the note
+    /// appears, goes away, or is re-laid out, so it is not a value being written while
+    /// somebody types.
+    @State private var statusNoteHeight: CGFloat = 0
+
+    /// What the editor should keep clear at the foot of the document.
+    private var editorBottomInset: CGFloat {
+        status == nil ? 0 : statusNoteHeight
+    }
+
+    /// The status note as a floating strip at the foot of the writing surface.
+    ///
+    /// It reports what the network is doing, and both of those change while somebody is
+    /// writing. In the layout it changed the editor's height when it appeared and again
+    /// when it went away, which moved the text under the caret. Floating, the writing
+    /// surface never resizes — but a text view reveals the caret inside its own bounds
+    /// and knows nothing about what is drawn on top of it, so the editor is *also* told
+    /// to keep this much space free at the bottom. That is the pair that makes this
+    /// work: a strip that changes no frame, over a text view that knows it is there.
     @ViewBuilder
-    private var statusNote: (some View)? {
-        if let failure = store.failure {
-            Label { Text(verbatim: failure) } icon: { Image(systemName: "exclamationmark.triangle") }
-                .foregroundStyle(.orange)
-                .font(.callout)
-        } else if store.publications.isEmpty {
-            // Publish stays disabled until the publication arrives, and a button that
-            // is dim for no stated reason reads as broken. The fields are usable
-            // meanwhile; only publishing waits.
+    private var floatingStatusNote: some View {
+        if let status {
+            statusLabel(status)
+                // Three lines is the ceiling. A message longer than that is a message the
+                // writer should read somewhere other than over their own paragraph, and an
+                // unbounded one would reserve half the editor.
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(PlusTheme.hairline, lineWidth: 0.5))
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity, alignment: .center)
+                // What is drawn is what the editor keeps free. Reported rather than
+                // assumed, so two lines and an accessibility text size are covered
+                // without a constant to keep in step.
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    statusNoteHeight = height
+                }
+                // Nothing here is interactive, and a tap meant for the last line of the
+                // post should reach it.
+                .allowsHitTesting(false)
+                .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder
+    private func statusLabel(_ status: ComposerStatus) -> some View {
+        switch status {
+        case .failure(let message):
+            Label { Text(verbatim: message) } icon: {
+                Image(systemName: "exclamationmark.triangle")
+            }
+            .foregroundStyle(.orange)
+            .font(.callout)
+        case .awaitingPublication:
             Label {
                 Text("Getting your publication ready. You can write in the meantime.", bundle: .module)
             } icon: {
@@ -766,12 +851,6 @@ public struct PlusComposeView: View {
 
                 macAddressLine
 
-                if let note = statusNote {
-                    note
-                        .padding(.horizontal, 28)
-                        .padding(.top, 12)
-                }
-
                 PlusMarkdownEditor(
                     text: $markdown,
                     placeholder: String(localized: "Write here. Markdown works.", bundle: .module),
@@ -779,11 +858,15 @@ public struct PlusComposeView: View {
                     onOpenFootnote: openFootnote,
                     onOpenTableOfContents: { showingTableOfContents = true },
                     onRequestFootnote: beginFootnote,
-                    onRequestHelp: { showingMarkdownHelp = true }
+                    onRequestHelp: { showingMarkdownHelp = true },
+                    bottomInset: editorBottomInset
                 )
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Over the writing rather than above it. See the iOS surface: a note
+                // that joins the layout moves the editor, and the scroll with it.
+                .overlay(alignment: .bottom) { floatingStatusNote }
             }
         }
 

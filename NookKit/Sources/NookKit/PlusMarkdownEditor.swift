@@ -44,6 +44,10 @@ struct PlusMarkdownEditor: View {
     var onOpenTableOfContents: () -> Void = {}
     var onRequestFootnote: () -> Void = {}
     var onRequestHelp: () -> Void = {}
+    /// Space at the foot of the document to keep clear, for whatever the composer draws
+    /// over the editor. The text view needs to be told: it decides the caret is visible
+    /// from its own bounds and cannot see what is on top of it.
+    var bottomInset: CGFloat = 0
 
     var body: some View {
         Representable(
@@ -53,7 +57,8 @@ struct PlusMarkdownEditor: View {
             onOpenFootnote: onOpenFootnote,
             onOpenTableOfContents: onOpenTableOfContents,
             onRequestFootnote: onRequestFootnote,
-            onRequestHelp: onRequestHelp)
+            onRequestHelp: onRequestHelp,
+            bottomInset: bottomInset)
             .overlay(alignment: .topLeading) {
                 if text.isEmpty, !placeholder.isEmpty {
                     Text(verbatim: placeholder)
@@ -391,6 +396,70 @@ extension PlatformColor {
     }
 }
 
+// MARK: - Text arriving from SwiftUI
+
+/// What to do with a text value SwiftUI hands down to the editor.
+///
+/// While the editor is on screen the text view *is* the writer's buffer and the
+/// binding is a mirror of it. Both platforms used to compare the two and replace the
+/// whole document whenever they differed, which is right for text that genuinely came
+/// from somewhere else and wrong for the case that happens constantly: SwiftUI
+/// re-running an update — a background sync changing something the composer reads —
+/// carrying the value the editor itself published a moment ago, while a keystroke has
+/// already moved the buffer past it. Replacing there resets the selection, the scroll
+/// offset and the undo stack, which is the caret landing somewhere unintended that
+/// gets reported as "focus jumps while syncing".
+///
+/// A value rather than a condition inside two `update…View` methods, because the rule
+/// depends on the order of two update paths and that is exactly what cannot be
+/// reproduced by hand. Both platforms decide through here so neither can drift.
+///
+/// One case is deliberately lossy. A genuinely new value that arrives while an input
+/// method is composing is dropped, not queued: the commit publishes the buffer, so the
+/// binding stops carrying it. Queueing it was tried and is what this comment is for —
+/// deciding when a queued value is still wanted takes state that cannot be derived
+/// (this editor's own intermediate publishes look exactly like the model changing its
+/// mind), and getting it wrong reverts the syllable somebody just typed. What is lost
+/// instead is narrow: the only writes from outside are the initial load, which happens
+/// before there is anything to compose, and the reset to empty as the composer closes.
+enum EditorTextArrival: Equatable {
+    /// The buffer already holds what SwiftUI is offering.
+    case upToDate
+    /// SwiftUI is repeating something this editor said; the buffer is ahead of it.
+    case echo
+    /// An input method owns the buffer until it commits its marked text.
+    case composing
+    /// Text from somewhere other than this editor. Apply it.
+    case external
+
+    var appliesText: Bool { self == .external }
+
+    /// - Parameters:
+    ///   - incoming: what SwiftUI is offering.
+    ///   - buffer: what the text view currently holds.
+    ///   - published: values this editor recently wrote into the binding.
+    ///   - isComposing: whether an input method has marked text in the buffer.
+    static func decide(
+        incoming: String,
+        buffer: String,
+        published: some Collection<String>,
+        isComposing: Bool
+    ) -> EditorTextArrival {
+        if incoming == buffer { return .upToDate }
+        // The echo check comes first, composition or not: a value this editor published
+        // is not news whether or not an input method is busy. Deciding `.composing` first
+        // instead meant a sync tick arriving during a Korean composition was treated as
+        // external.
+        //
+        // Against several recent values rather than only the newest, because SwiftUI can
+        // run an update from a body it evaluated more than one keystroke ago — which is
+        // the whole reason this type exists.
+        if published.contains(incoming) { return .echo }
+        if isComposing { return .composing }
+        return .external
+    }
+}
+
 // MARK: - iOS
 
 #if canImport(UIKit)
@@ -629,12 +698,16 @@ extension PlatformColor {
             let onOpenTableOfContents: () -> Void
             let onRequestFootnote: () -> Void
             let onRequestHelp: () -> Void
-            @Environment(\.self) private var environment
+            /// See PlusMarkdownEditor.bottomInset.
+            let bottomInset: CGFloat
+
+            /// The editor's own padding, before anything the composer reserves.
+            static let baseTextInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
 
             func makeUIView(context: Context) -> UITextView {
                 let view = TextView()
                 view.backgroundColor = .clear
-                view.textContainerInset = UIEdgeInsets(top: 8, left: 4, bottom: 8, right: 4)
+                view.textContainerInset = Self.baseTextInset
                 view.textContainer.lineFragmentPadding = 0
                 view.delegate = context.coordinator
                 view.alwaysBounceVertical = true
@@ -694,12 +767,33 @@ extension PlatformColor {
                 context.coordinator.accent = accentColor
                 context.coordinator.onOpenFootnote = onOpenFootnote
                 context.coordinator.onOpenTableOfContents = onOpenTableOfContents
-                // Only when the text differs from what the view holds. Restyling on
-                // every SwiftUI update would fight the keyboard.
-                if view.text != text {
+                // Only for text that genuinely came from elsewhere. A value equal to
+                // what the view holds needs nothing; an echo of what this editor
+                // published, or anything at all mid-composition, must not touch the
+                // buffer. See EditorTextArrival.
+                let arrival = EditorTextArrival.decide(
+                    incoming: text,
+                    buffer: view.text,
+                    published: context.coordinator.published,
+                    isComposing: view.markedTextRange != nil)
+                switch arrival {
+                case .external:
                     context.coordinator.replace(text, in: view)
+                case .upToDate, .echo, .composing:
+                    // Nothing. The buffer is either already right or is the input
+                    // method's until it commits — see EditorTextArrival for what that
+                    // deliberately gives up.
+                    break
                 }
                 view.tintColor = accentColor
+                // Set through the container rather than the frame: the text view keeps its
+                // size, so nothing above it moves, and its own caret-revealing knows to
+                // stay clear of the bottom.
+                let reserved = Self.baseTextInset.bottom + bottomInset
+                if view.textContainerInset.bottom != reserved {
+                    view.textContainerInset.bottom = reserved
+                    view.verticalScrollIndicatorInsets.bottom = bottomInset
+                }
             }
 
             func makeCoordinator() -> Coordinator {
@@ -724,6 +818,15 @@ extension PlatformColor {
             private var applyingProgrammaticEdit = false
             private var revision = 0
             private var titleTask: Task<Void, Never>?
+            /// Values the buffer and the binding have recently agreed on — what this
+            /// editor published, and what it accepted from outside. It is what lets the
+            /// next SwiftUI update tell its own echo from a value someone else set.
+            ///
+            /// A few of them, newest last, because an update can run from a body SwiftUI
+            /// evaluated several keystrokes ago. Bounded because it is a guard against
+            /// staleness, not a history.
+            private(set) var published: [String] = []
+            private static let publishedMemory = 8
 
             init(
                 text: Binding<String>,
@@ -738,8 +841,38 @@ extension PlatformColor {
             }
 
             /// Replaces the whole document, for text that came from outside the view.
+            ///
+            /// Assigning `attributedText` sends the selection to the end of the document
+            /// and the scroll to the top. That is harmless when the editor is being
+            /// created and disruptive on a live one, so where the writer was is put back
+            /// afterwards — clamped, because the new text may be shorter than the old.
             func replace(_ source: String, in view: UITextView) {
+                let selection = view.selectedRange
+                let offset = view.contentOffset
                 view.attributedText = MarkdownAttributes.attributed(source, accent: accent)
+                record(source)
+                // A different document. Anything still in flight belongs to the old one:
+                // the URL-title resolution checks this before editing, and a stale value
+                // here would let it write into text it never read.
+                revision += 1
+                titleTask?.cancel()
+                titleTask = nil
+                let limit = (view.text as NSString).length
+                let location = min(selection.location, limit)
+                view.selectedRange = NSRange(
+                    location: location, length: min(selection.length, limit - location))
+                // Laid out first so the content size the offset is clamped against is
+                // the new document's, not the previous one's.
+                view.layoutIfNeeded()
+                // Against the scroll view's real range, insets included: while the
+                // keyboard is up the valid bottom is past `contentSize`, and clamping to
+                // `contentSize` alone would pull the writer up from where the keyboard
+                // put them.
+                let inset = view.adjustedContentInset
+                let minY = -inset.top
+                let maxY = max(minY, view.contentSize.height - view.bounds.height + inset.bottom)
+                view.setContentOffset(
+                    CGPoint(x: offset.x, y: min(max(offset.y, minY), maxY)), animated: false)
                 restyle(view)
             }
 
@@ -781,8 +914,23 @@ extension PlatformColor {
             func textViewDidChange(_ view: UITextView) {
                 guard !applyingProgrammaticEdit else { return }
                 revision += 1
-                text.wrappedValue = view.text
+                publish(view.text)
                 restyle(view)
+            }
+
+            /// Mirrors the buffer into the binding, remembering what was sent.
+            ///
+            /// The record is what lets the next SwiftUI update tell this editor's own
+            /// value coming back from a value someone else set.
+            private func publish(_ value: String) {
+                record(value)
+                text.wrappedValue = value
+            }
+
+            /// Notes a value the buffer and the binding now agree on.
+            private func record(_ value: String) {
+                published.append(value)
+                if published.count > Self.publishedMemory { published.removeFirst() }
             }
 
             func textView(
@@ -852,7 +1000,7 @@ extension PlatformColor {
                 // `replace` reports the change, but only for a non-empty replacement on
                 // some paths; keeping the binding in step is cheap and unconditional.
                 revision += 1
-                text.wrappedValue = view.text
+                publish(view.text)
                 restyle(view)
             }
 
@@ -883,7 +1031,7 @@ extension PlatformColor {
                 view.selectedRange = transaction.selection
                 applyingProgrammaticEdit = false
                 revision += 1
-                text.wrappedValue = view.text
+                publish(view.text)
                 restyle(view)
                 view.setContentOffset(contentOffset, animated: false)
             }
@@ -950,11 +1098,16 @@ extension PlatformColor {
             let onOpenTableOfContents: () -> Void
             let onRequestFootnote: () -> Void
             let onRequestHelp: () -> Void
+            /// See PlusMarkdownEditor.bottomInset.
+            let bottomInset: CGFloat
 
             func makeNSView(context: Context) -> NSScrollView {
                 let scroll = NSTextView.scrollableTextView()
                 guard let view = scroll.documentView as? NSTextView else { return scroll }
                 scroll.drawsBackground = false
+                // The composer sets the bottom inset itself; AppKit's automatic
+                // adjustment would overwrite it.
+                scroll.automaticallyAdjustsContentInsets = false
                 view.drawsBackground = false
                 view.delegate = context.coordinator
                 view.isRichText = false
@@ -993,8 +1146,35 @@ extension PlatformColor {
                 context.coordinator.text = $text
                 context.coordinator.onOpenFootnote = onOpenFootnote
                 context.coordinator.onOpenTableOfContents = onOpenTableOfContents
-                if view.string != text {
+                // Only for text that genuinely came from elsewhere. A value equal to
+                // what the view holds needs nothing; an echo of what this editor
+                // published, or anything at all mid-composition, must not touch the
+                // buffer. See EditorTextArrival.
+                let arrival = EditorTextArrival.decide(
+                    incoming: text,
+                    buffer: view.string,
+                    published: context.coordinator.published,
+                    isComposing: view.hasMarkedText())
+                switch arrival {
+                case .external:
                     context.coordinator.replace(text, in: view)
+                case .upToDate, .echo, .composing:
+                    // Nothing. The buffer is either already right or is the input
+                    // method's until it commits — see EditorTextArrival for what that
+                    // deliberately gives up.
+                    break
+                }
+                // Through the scroll view's inset rather than the text view's frame: the
+                // editor keeps its size, so nothing above it moves, and scrolling —
+                // including the caret reveal AppKit does while typing — stays clear of
+                // whatever the composer draws over the bottom.
+                if scroll.contentInsets.bottom != bottomInset {
+                    scroll.contentInsets = NSEdgeInsets(
+                        top: 0, left: 0, bottom: bottomInset, right: 0)
+                    // `scrollerInsets` is left alone deliberately: it is relative to the
+                    // content inset, so the scroller stops where the reserved space
+                    // begins — which is where it should stop, rather than running on
+                    // behind whatever is drawn there.
                 }
             }
 
@@ -1016,7 +1196,18 @@ extension PlatformColor {
             private var applyingProgrammaticEdit = false
             private var revision = 0
             private var titleTask: Task<Void, Never>?
-            private var pendingWhitespaceViewportOrigin: NSPoint?
+            /// Values the buffer and the binding have recently agreed on — what this
+            /// editor published, and what it accepted from outside. It is what lets the
+            /// next SwiftUI update tell its own echo from a value someone else set.
+            ///
+            /// A few of them, newest last, because an update can run from a body SwiftUI
+            /// evaluated several keystrokes ago. Bounded because it is a guard against
+            /// staleness, not a history.
+            private(set) var published: [String] = []
+            private static let publishedMemory = 8
+            /// Set for an edit whose Markdown delta can change line geometry, so the
+            /// clip view gets clamped once the change has landed.
+            private var clampViewportAfterChange = false
 
             init(
                 text: Binding<String>,
@@ -1031,9 +1222,32 @@ extension PlatformColor {
             }
 
             /// Replaces the whole document, for text that came from outside the view.
+            ///
+            /// `setAttributedString` collapses the selection and leaves the clip view
+            /// scrolled against the old document's height. Harmless while the editor is
+            /// being created and disruptive on a live one, so where the writer was is put
+            /// back afterwards — clamped, because the new text may be shorter.
             func replace(_ source: String, in view: NSTextView) {
                 guard let storage = view.textStorage else { return }
+                let selection = view.selectedRange()
+                let origin = view.enclosingScrollView?.contentView.bounds.origin
                 storage.setAttributedString(MarkdownAttributes.attributed(source, accent: accent))
+                record(source)
+                // A different document. Anything still in flight belongs to the old one:
+                // the URL-title resolution checks this before editing, and a stale value
+                // here would let it write into text it never read.
+                revision += 1
+                titleTask?.cancel()
+                titleTask = nil
+                let limit = storage.length
+                let location = min(selection.location, limit)
+                view.setSelectedRange(
+                    NSRange(location: location, length: min(selection.length, limit - location)))
+                if let origin, let scroll = view.enclosingScrollView {
+                    scroll.layoutSubtreeIfNeeded()
+                    scroll.contentView.scroll(to: origin)
+                    constrainViewport(of: scroll)
+                }
                 restyle(view)
             }
 
@@ -1062,18 +1276,33 @@ extension PlatformColor {
             func textDidChange(_ notification: Notification) {
                 guard let view = notification.object as? NSTextView else { return }
                 guard !applyingProgrammaticEdit else { return }
-                let visibleOrigin = pendingWhitespaceViewportOrigin
-                pendingWhitespaceViewportOrigin = nil
+                let clamp = clampViewportAfterChange
+                clampViewportAfterChange = false
                 revision += 1
-                text.wrappedValue = view.string
+                publish(view.string)
                 restyle(view)
-                if let visibleOrigin {
-                    stabilizeViewport(
-                        in: view,
-                        preserving: visibleOrigin,
-                        revealing: view.selectedRange(),
-                        atRevision: revision)
+                // Nothing is scrolled for a keystroke. AppKit already keeps the caret
+                // visible while typing, and the viewport is only clamped — see
+                // settleViewport — when the change could have moved the document's
+                // height under the clip view.
+                if clamp {
+                    settleViewport(in: view, revealing: nil, atRevision: revision)
                 }
+            }
+
+            /// Mirrors the buffer into the binding, remembering what was sent.
+            ///
+            /// The record is what lets the next SwiftUI update tell this editor's own
+            /// value coming back from a value someone else set.
+            private func publish(_ value: String) {
+                record(value)
+                text.wrappedValue = value
+            }
+
+            /// Notes a value the buffer and the binding now agree on.
+            private func record(_ value: String) {
+                published.append(value)
+                if published.count > Self.publishedMemory { published.removeFirst() }
             }
 
             func textView(
@@ -1081,6 +1310,9 @@ extension PlatformColor {
                 shouldChangeTextIn affectedCharRange: NSRange,
                 replacementString: String?
             ) -> Bool {
+                // Cleared first so a request from an earlier keystroke cannot survive a
+                // change this method returns early for and land on an unrelated edit.
+                clampViewportAfterChange = false
                 guard !applyingProgrammaticEdit, textView.markedRange().length == 0,
                     let replacementString
                 else { return true }
@@ -1099,15 +1331,14 @@ extension PlatformColor {
                     paste(url, selection: affectedCharRange, into: textView)
                     return false
                 }
-                // A separating space is what turns `-`, `#`, and similar prefixes
-                // into Markdown. AppKit may scroll the caret while the resulting
-                // attribute delta is still changing line geometry, so remember the
-                // stable viewport before the native edit. Marked-text input is
-                // excluded by the guard above and remains owned by the IME.
-                pendingWhitespaceViewportOrigin =
+                // A separating space is what turns `-`, `#`, and similar prefixes into
+                // Markdown, and the paragraph-style delta that follows can leave the clip
+                // view scrolled against the previous document height. Only a clamp is
+                // asked for; the scroll itself stays AppKit's, which is what stopped one
+                // keypress from moving the viewport twice. Marked-text input is excluded
+                // by the guard above and remains owned by the IME.
+                clampViewportAfterChange =
                     !replacementString.isEmpty && replacementString.allSatisfy(\.isWhitespace)
-                    ? textView.enclosingScrollView?.contentView.bounds.origin
-                    : nil
                 return true
             }
 
@@ -1182,7 +1413,6 @@ extension PlatformColor {
                 // The documented order for a programmatic edit: ask, change the
                 // storage, then report. `shouldChangeText` is what opens the undo
                 // grouping, so one button press stays one undo step.
-                let visibleOrigin = view.enclosingScrollView?.contentView.bounds.origin
                 applyingProgrammaticEdit = true
                 guard view.shouldChangeText(in: edit.range, replacementString: edit.replacement) else {
                     applyingProgrammaticEdit = false
@@ -1193,13 +1423,11 @@ extension PlatformColor {
                 view.setSelectedRange(edit.selection)
                 applyingProgrammaticEdit = false
                 revision += 1
-                text.wrappedValue = view.string
+                publish(view.string)
                 restyle(view)
-                stabilizeViewport(
-                    in: view,
-                    preserving: visibleOrigin,
-                    revealing: edit.selection,
-                    atRevision: revision)
+                // The caret was moved by the edit rather than by the writer, so revealing
+                // it is this path's job; a keystroke's is AppKit's.
+                settleViewport(in: view, revealing: edit.selection, atRevision: revision)
             }
 
             func apply(
@@ -1213,7 +1441,6 @@ extension PlatformColor {
                     }
                     return $0.range.location > $1.range.location
                 }
-                let visibleOrigin = view.enclosingScrollView?.contentView.bounds.origin
                 applyingProgrammaticEdit = true
                 view.undoManager?.beginUndoGrouping()
                 for replacement in ordered {
@@ -1227,15 +1454,15 @@ extension PlatformColor {
                 view.setSelectedRange(transaction.selection)
                 applyingProgrammaticEdit = false
                 revision += 1
-                text.wrappedValue = view.string
+                publish(view.string)
                 restyle(view)
-                if let scroll = view.enclosingScrollView, let visibleOrigin {
-                    scroll.contentView.scroll(to: visibleOrigin)
-                    scroll.reflectScrolledClipView(scroll.contentView)
-                }
+                // Same as the single-edit path: the transaction chose where the caret
+                // ends up, so that is what gets revealed, and only if it is off screen.
+                settleViewport(in: view, revealing: transaction.selection, atRevision: revision)
             }
 
-            /// Keeps a programmatic edit inside the scroll view's valid document area.
+            /// Keeps the scroll view usable after an edit, without taking the scroll away
+            /// from the writer.
             ///
             /// AppKit updates an `NSTextView`'s document height lazily. Return is routed
             /// through ``apply(_:to:)`` so Markdown lists and hard breaks can choose
@@ -1244,25 +1471,29 @@ extension PlatformColor {
             /// for the previous height for one frame. That exposes a large blank area
             /// until the first manual scroll constrains the bounds again.
             ///
-            /// Preserve the writer's viewport, reveal the new caret only when needed,
-            /// and constrain the clip view both now and on the next run-loop turn after
-            /// TextKit has committed its lazy geometry. This stays local to explicit
-            /// edits and Markdown-triggering whitespace rather than forcing
-            /// full-document layout on every character.
-            private func stabilizeViewport(
+            /// Two things happen here and nothing else. The clip view is clamped, now and
+            /// again on the next run-loop turn once TextKit has committed its geometry —
+            /// a no-op whenever the bounds were already valid. And a selection the writer
+            /// did not move themselves is revealed, which `scrollRangeToVisible` does by
+            /// the minimum amount and not at all when it is already on screen.
+            ///
+            /// What used to also happen was restoring the pre-edit origin *and* then
+            /// revealing the caret, which moved the viewport twice for one keypress and
+            /// read as the scroll fighting the writer. Typing does not come through here
+            /// at all now: AppKit reveals the caret for a keystroke by itself, and better,
+            /// because it knows which event it is responding to.
+            private func settleViewport(
                 in view: NSTextView,
-                preserving visibleOrigin: NSPoint?,
-                revealing selection: NSRange,
+                revealing selection: NSRange?,
                 atRevision expectedRevision: Int
             ) {
                 guard let scroll = view.enclosingScrollView else { return }
                 scroll.layoutSubtreeIfNeeded()
-                if let visibleOrigin {
-                    scroll.contentView.scroll(to: visibleOrigin)
+                constrainViewport(of: scroll)
+                if let selection {
+                    view.scrollRangeToVisible(selection)
+                    constrainViewport(of: scroll)
                 }
-                constrainViewport(of: scroll)
-                view.scrollRangeToVisible(selection)
-                constrainViewport(of: scroll)
 
                 DispatchQueue.main.async { [weak self, weak view] in
                     guard let self, let view, self.revision == expectedRevision,
