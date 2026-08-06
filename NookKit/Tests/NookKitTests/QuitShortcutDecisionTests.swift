@@ -16,6 +16,12 @@ struct QuitShortcutDecisionTests {
 
     /// The other half, and the reason this is a rule rather than a flag left on: an app
     /// that always makes quitting a chore is worse than the accident it prevents.
+    ///
+    /// "Quits at once" is also carried out by the same monitor rather than handed back to
+    /// the Quit menu item. That item does not act while a sheet is presented, and the
+    /// composer is a sheet, so a fresh one with nothing typed in it swallowed ⌘Q and did
+    /// nothing at all — until a single character turned the guard on and the hold path,
+    /// which never involved the menu, started working.
     @Test("with nothing at stake ⌘Q still quits at once")
     func nothingAtStakeQuits() {
         let decision = QuitShortcutDecision.forShortcut(hasUnsavedWork: false)

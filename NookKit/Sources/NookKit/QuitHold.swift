@@ -108,6 +108,11 @@ final class UnsavedWritingRegistry {
     /// The shortcut is intercepted, not the quit. `applicationShouldTerminate` would also
     /// catch logging out and the Dock's Quit — neither of which is a slip — and blocking
     /// those risks an app that cannot be shut down.
+    ///
+    /// Both outcomes are carried out here, rather than the unguarded one being handed back
+    /// to the menu. The menu item does not act while a sheet is presented, and the composer
+    /// *is* a sheet, so delegating meant ⌘Q did nothing there until there was something to
+    /// protect.
     @MainActor
     public final class QuitHoldController {
         public static let shared = QuitHoldController()
@@ -151,9 +156,19 @@ final class UnsavedWritingRegistry {
                 let decision = QuitShortcutDecision.forShortcut(
                     hasUnsavedWork: UnsavedWritingRegistry.shared.hasUnsavedWork
                 )
-                guard !decision.quitsImmediately else { return false }
-                // Repeats arrive while the key is down; the first press owns the timer.
-                beginHold()
+                if decision.quitsImmediately {
+                    // Quit from here rather than handing the shortcut back to the Quit menu
+                    // item, which does not act while a sheet is presented. The composer is
+                    // a sheet, so ⌘Q did nothing at all in it until something had been
+                    // typed — at which point the hold below took over and it started
+                    // working, which is exactly how it was reported. `NSApp.terminate` is
+                    // what the menu item would have called anyway, so nothing changes
+                    // anywhere else.
+                    NSApp.terminate(nil)
+                } else {
+                    // Repeats arrive while the key is down; the first press owns the timer.
+                    beginHold()
+                }
                 return true
             case .keyUp:
                 if stroke.keyCode == KeyStroke.qKeyCode { endHold() }
