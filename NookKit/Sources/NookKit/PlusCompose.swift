@@ -342,8 +342,10 @@ public struct PlusComposeView: View {
             // ⌘Q asks the same question the Cancel button asks — by making the
             // shortcut a press-and-hold. It is next to ⌘W, it cannot be undone, and
             // the text on screen exists nowhere else until it is published or kept.
-            // For as long as this screen is open, not only once there is text in it.
-            .requiresHoldToQuit()
+            // For as long as this screen is open, not only once there is text in it. The
+            // dismissal is handed over because a completed hold has to close this sheet
+            // before the app can quit at all — see QuitHoldController.quit().
+            .requiresHoldToQuit(dismiss: onFinished)
             .confirmationDialog(
                 Text("Keep this as a draft?", bundle: .module),
                 isPresented: $askAboutDraft,

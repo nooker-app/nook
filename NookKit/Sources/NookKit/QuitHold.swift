@@ -35,13 +35,25 @@ enum QuitShortcutDecision: Equatable {
 final class WritingSurfaceRegistry {
     static let shared = WritingSurfaceRegistry()
 
-    private var claims: Set<UUID> = []
+    /// Each open surface, with the way to close it.
+    private var claims: [UUID: () -> Void] = [:]
 
     /// True while a writing surface is on screen.
     var isWriting: Bool { !claims.isEmpty }
 
-    func hold(_ id: UUID) { claims.insert(id) }
-    func release(_ id: UUID) { claims.remove(id) }
+    func hold(_ id: UUID, dismiss: @escaping () -> Void) { claims[id] = dismiss }
+    func release(_ id: UUID) { claims.removeValue(forKey: id) }
+
+    /// Asks every open surface to close itself.
+    ///
+    /// Needed because quitting has to get the composer off the screen first, and closing
+    /// its sheet directly is not enough: SwiftUI still holds the state that presented it
+    /// and puts it straight back. Only the thing that presented it can take it down.
+    ///
+    /// A snapshot, because each closure leads to the claim being released.
+    func dismissAll() {
+        for dismiss in Array(claims.values) { dismiss() }
+    }
 }
 
 #if os(macOS)
@@ -52,17 +64,24 @@ final class WritingSurfaceRegistry {
         ///
         /// For the whole time, not only while there is text: see ``QuitShortcutDecision``
         /// for why the condition is the screen rather than its contents.
-        public func requiresHoldToQuit() -> some View {
-            modifier(HoldToQuitClaimModifier())
+        ///
+        /// - Parameter dismiss: how to close this surface. A completed hold uses it, because
+        ///   an open sheet refuses termination and only whatever presented it can take it
+        ///   down for good. Captured when the surface appears, so it has to stay good for as
+        ///   long as the surface is up — a call straight back into whatever presented it,
+        ///   like the composer's `onFinished`, does.
+        public func requiresHoldToQuit(dismiss: @escaping () -> Void) -> some View {
+            modifier(HoldToQuitClaimModifier(dismiss: dismiss))
         }
     }
 
     private struct HoldToQuitClaimModifier: ViewModifier {
+        let dismiss: () -> Void
         @State private var claim = WritingSurfaceClaim()
 
         func body(content: Content) -> some View {
             content
-                .onAppear { claim.set(true) }
+                .onAppear { claim.set(true, dismiss: dismiss) }
                 .onDisappear { claim.set(false) }
         }
     }
@@ -76,13 +95,10 @@ final class WritingSurfaceRegistry {
     @MainActor
     private final class WritingSurfaceClaim {
         nonisolated let id = UUID()
-        private var held = false
 
-        func set(_ hold: Bool) {
-            guard hold != held else { return }
-            held = hold
+        func set(_ hold: Bool, dismiss: @escaping () -> Void = {}) {
             if hold {
-                WritingSurfaceRegistry.shared.hold(id)
+                WritingSurfaceRegistry.shared.hold(id, dismiss: dismiss)
             } else {
                 WritingSurfaceRegistry.shared.release(id)
             }
@@ -197,25 +213,44 @@ final class WritingSurfaceRegistry {
             }
         }
 
-        /// Quits, having first closed anything presented as a sheet.
+        /// Quits, having first got any open writing surface off the screen.
         ///
-        /// `NSApp.terminate` on its own does nothing at all while a sheet is attached: it
-        /// does not quit and it does not even reach `applicationShouldTerminate`. Measured
-        /// in a standalone app — no sheet, the delegate is asked; a sheet attached, it is
-        /// not asked at all; the sheet ended first, asked again, and ending it in the same
-        /// run-loop turn is enough. Nested sheets need all of them ended, which the
-        /// composer has: its own details and footnote editors present on top of it.
+        /// `NSApp.terminate` does nothing at all while a sheet is attached: it neither quits
+        /// nor reaches `applicationShouldTerminate`. Measured in a standalone app — no
+        /// sheet, the delegate is asked; a sheet attached, not asked at all. The composer is
+        /// a sheet, which is why ⌘Q in it did nothing whatsoever, in either direction.
         ///
-        /// The composer *is* a sheet, so this is why ⌘Q in it did nothing whatsoever —
-        /// neither the immediate quit when there was nothing to protect, nor, as it turns
-        /// out, the quit at the end of a completed hold. The overlay appeared and holding
-        /// it achieved nothing.
-        private func quit() {
-            for window in NSApp.windows {
-                if let sheet = window.attachedSheet { window.endSheet(sheet) }
+        /// Ending the sheet with `endSheet` is not the answer, and the measurement says why:
+        /// the state that presented it is still set, so SwiftUI puts the sheet straight back
+        /// — the sheet closed, reopened, and the app stayed. Dismissing through that state
+        /// instead detaches it in about 30ms, after which termination goes through.
+        ///
+        /// So: ask the surfaces to close, then wait for the sheet to actually be gone before
+        /// asking to quit. Waiting matters — a quit asked one turn too early is a quit
+        /// silently dropped, which is where this started.
+        private func quit(attempt: Int = 0) {
+            if attempt == 0 { WritingSurfaceRegistry.shared.dismissAll() }
+            guard NSApp.windows.contains(where: { $0.attachedSheet != nil }) else {
+                NSApp.terminate(nil)
+                return
             }
-            NSApp.terminate(nil)
+            guard attempt < Self.quitPolls else {
+                // A sheet nobody claimed — adding a feed, an import — cannot be closed from
+                // here. Take it down directly and go: it may come back the way the composer
+                // did, but the alternative is a ⌘Q that does nothing at all.
+                for window in NSApp.windows {
+                    if let sheet = window.attachedSheet { window.endSheet(sheet) }
+                }
+                NSApp.terminate(nil)
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
+                self?.quit(attempt: attempt + 1)
+            }
         }
+
+        /// About 600ms of waiting for a sheet to detach, which measured at one poll.
+        private static let quitPolls = 20
 
         private func endHold() {
             holdTask?.cancel()
