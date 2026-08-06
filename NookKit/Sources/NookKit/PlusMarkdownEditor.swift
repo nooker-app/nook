@@ -1118,8 +1118,45 @@ enum EditorTextArrival: Equatable {
                 view.isAutomaticQuoteSubstitutionEnabled = false
                 view.isAutomaticDashSubstitutionEnabled = false
                 view.isAutomaticTextReplacementEnabled = false
+                // The rest of the automatic rewriting, which these three lines had left
+                // following the system settings — and on a Mac with the defaults, that
+                // means on.
+                //
+                // Every one of them acts at a word boundary, which is to say on a space,
+                // and a backspace immediately after one is how macOS reverts it. That is
+                // exactly the pair of keys still reported as moving the scroll on the last
+                // line, and it is where the caret sits at the edge of the viewport with
+                // nothing below it to absorb a change.
+                //
+                // Link detection is the one that is provably wrong here rather than merely
+                // suspected: it adds `.link`, which is one of the attributes the Markdown
+                // pass manages, so the next restyle removes it as an attribute that should
+                // not be there and detection adds it again — two attribute writes and two
+                // layout invalidations per boundary, for a link the writer expressed in
+                // Markdown anyway.
+                //
+                // Correction and completion are refused on the editor's own terms: the
+                // buffer is never rewritten, the text is always exactly what was typed.
+                // Misspellings are still underlined; nothing is changed underneath.
+                view.isAutomaticSpellingCorrectionEnabled = false
+                view.isAutomaticTextCompletionEnabled = false
+                view.isAutomaticLinkDetectionEnabled = false
+                view.isAutomaticDataDetectionEnabled = false
                 view.isContinuousSpellCheckingEnabled = true
                 context.coordinator.replace(text, in: view)
+                #if DEBUG
+                    // Every move of the clip view, whoever made it — AppKit, a clamp,
+                    // SwiftUI's layout — against the phase it happened in.
+                    scroll.contentView.postsBoundsChangedNotifications = true
+                    NotificationCenter.default.addObserver(
+                        forName: NSView.boundsDidChangeNotification,
+                        object: scroll.contentView, queue: nil
+                    ) { [weak view] _ in
+                        MainActor.assumeIsolated {
+                            PlusEditorScrollLog.note("bounds", in: view)
+                        }
+                    }
+                #endif
                 handle?.attachment = { [weak view] makeEdit in
                     guard let view else { return }
                     context.coordinator.apply(makeEdit, to: view)
@@ -1155,6 +1192,11 @@ enum EditorTextArrival: Equatable {
                     buffer: view.string,
                     published: context.coordinator.published,
                     isComposing: view.hasMarkedText())
+                #if DEBUG
+                    PlusEditorScrollLog.note(
+                        "update", in: view,
+                        extra: "arrival=\(arrival) incoming=\((text as NSString).length)")
+                #endif
                 switch arrival {
                 case .external:
                     context.coordinator.replace(text, in: view)
@@ -1168,15 +1210,44 @@ enum EditorTextArrival: Equatable {
                 // editor keeps its size, so nothing above it moves, and scrolling —
                 // including the caret reveal AppKit does while typing — stays clear of
                 // whatever the composer draws over the bottom.
-                if scroll.contentInsets.bottom != bottomInset {
+                //
+                // The slack is added to it, and is the part that keeps the last line
+                // steady. What was reported after the clamp came out: on the last line
+                // with nothing below it, a backspace moves the view slightly up, and a
+                // space moves it up to that same place and then back to the caret. The
+                // same place for both is the giveaway — it is the document's maximum
+                // scroll offset. AppKit reaches for that maximum against a height TextKit
+                // has not finished recalculating, pulls the origin up to it, and then
+                // reveals the caret again. Nothing in this file asks for either move.
+                //
+                // A viewport that can scroll a few lines past the end is never pressed
+                // against that maximum while somebody is writing at it, so a height that
+                // is briefly a line short no longer invalidates where they are. It is also
+                // what a text editor should do at the end of a document: the last line
+                // does not have to be typed against the bottom of the window.
+                let reserved = bottomInset + Self.trailingSlack
+                if scroll.contentInsets.bottom != reserved {
                     scroll.contentInsets = NSEdgeInsets(
-                        top: 0, left: 0, bottom: bottomInset, right: 0)
+                        top: 0, left: 0, bottom: reserved, right: 0)
                     // `scrollerInsets` is left alone deliberately: it is relative to the
                     // content inset, so the scroller stops where the reserved space
                     // begins — which is where it should stop, rather than running on
                     // behind whatever is drawn there.
                 }
             }
+
+            /// How far past the end of the document the view may scroll.
+            ///
+            /// Three lines: enough that a height TextKit is still recalculating cannot make
+            /// the current offset invalid, which is what was moving the last line, and not
+            /// so much that the end of a post looks like it fell off the page.
+            private static var trailingSlack: CGFloat { MarkdownAttributes.bodySize * 3 }
+
+            #if DEBUG
+                static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+                    PlusEditorScrollLog.flush()
+                }
+            #endif
 
             func makeCoordinator() -> Coordinator {
                 Coordinator(
@@ -1274,8 +1345,20 @@ enum EditorTextArrival: Equatable {
                 guard let view = notification.object as? NSTextView else { return }
                 guard !applyingProgrammaticEdit else { return }
                 revision += 1
+                #if DEBUG
+                    PlusEditorScrollLog.note("change.enter", in: view)
+                #endif
                 publish(view.string)
+                #if DEBUG
+                    PlusEditorScrollLog.note("change.publish", in: view)
+                #endif
                 restyle(view)
+                #if DEBUG
+                    PlusEditorScrollLog.note("change.restyle", in: view)
+                    DispatchQueue.main.async { [weak view] in
+                        PlusEditorScrollLog.note("change.next", in: view)
+                    }
+                #endif
                 // Nothing is scrolled for a keystroke, and nothing is clamped either.
                 // AppKit reveals the caret for the event it is handling, which it knows
                 // and this does not.
@@ -1312,6 +1395,12 @@ enum EditorTextArrival: Equatable {
                 shouldChangeTextIn affectedCharRange: NSRange,
                 replacementString: String?
             ) -> Bool {
+                #if DEBUG
+                    PlusEditorScrollLog.note(
+                        "will-change", in: textView,
+                        extra: "kind=\(PlusEditorScrollLog.kind(of: replacementString)) "
+                            + "affected=\(affectedCharRange.location)+\(affectedCharRange.length)")
+                #endif
                 guard !applyingProgrammaticEdit, textView.markedRange().length == 0,
                     let replacementString
                 else { return true }
@@ -1381,6 +1470,9 @@ enum EditorTextArrival: Equatable {
                 guard let view = notification.object as? NSTextView,
                     view.markedRange().length == 0
                 else { return }
+                #if DEBUG
+                    PlusEditorScrollLog.note("selection", in: view)
+                #endif
                 updateTypingAttributes(in: view)
             }
 
