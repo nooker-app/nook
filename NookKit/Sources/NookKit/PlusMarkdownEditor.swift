@@ -1205,9 +1205,6 @@ enum EditorTextArrival: Equatable {
             /// staleness, not a history.
             private(set) var published: [String] = []
             private static let publishedMemory = 8
-            /// Set for an edit whose Markdown delta can change line geometry, so the
-            /// clip view gets clamped once the change has landed.
-            private var clampViewportAfterChange = false
 
             init(
                 text: Binding<String>,
@@ -1276,18 +1273,23 @@ enum EditorTextArrival: Equatable {
             func textDidChange(_ notification: Notification) {
                 guard let view = notification.object as? NSTextView else { return }
                 guard !applyingProgrammaticEdit else { return }
-                let clamp = clampViewportAfterChange
-                clampViewportAfterChange = false
                 revision += 1
                 publish(view.string)
                 restyle(view)
-                // Nothing is scrolled for a keystroke. AppKit already keeps the caret
-                // visible while typing, and the viewport is only clamped — see
-                // settleViewport — when the change could have moved the document's
-                // height under the clip view.
-                if clamp {
-                    settleViewport(in: view, revealing: nil, atRevision: revision)
-                }
+                // Nothing is scrolled for a keystroke, and nothing is clamped either.
+                // AppKit reveals the caret for the event it is handling, which it knows
+                // and this does not.
+                //
+                // A clamp used to run here after any whitespace, on the theory that the
+                // restyle's paragraph-style delta could leave the clip view scrolled
+                // against the previous document height. Measured on the last line of a
+                // document with nothing below it — the one place a clamp can do anything,
+                // because it is the only place the origin is at its limit — that clamp was
+                // the oscillation: the viewport cycled through three positions about 70pt
+                // apart, once per keystroke, while the same typing in the middle of a
+                // document never moved it at all. Removing it leaves the origin fixed, and
+                // the blank area the clamp was written for does not come back: the gap
+                // under the last line measures the same 14pt either way.
             }
 
             /// Mirrors the buffer into the binding, remembering what was sent.
@@ -1310,9 +1312,6 @@ enum EditorTextArrival: Equatable {
                 shouldChangeTextIn affectedCharRange: NSRange,
                 replacementString: String?
             ) -> Bool {
-                // Cleared first so a request from an earlier keystroke cannot survive a
-                // change this method returns early for and land on an unrelated edit.
-                clampViewportAfterChange = false
                 guard !applyingProgrammaticEdit, textView.markedRange().length == 0,
                     let replacementString
                 else { return true }
@@ -1331,14 +1330,6 @@ enum EditorTextArrival: Equatable {
                     paste(url, selection: affectedCharRange, into: textView)
                     return false
                 }
-                // A separating space is what turns `-`, `#`, and similar prefixes into
-                // Markdown, and the paragraph-style delta that follows can leave the clip
-                // view scrolled against the previous document height. Only a clamp is
-                // asked for; the scroll itself stays AppKit's, which is what stopped one
-                // keypress from moving the viewport twice. Marked-text input is excluded
-                // by the guard above and remains owned by the IME.
-                clampViewportAfterChange =
-                    !replacementString.isEmpty && replacementString.allSatisfy(\.isWhitespace)
                 return true
             }
 
@@ -1479,21 +1470,23 @@ enum EditorTextArrival: Equatable {
             ///
             /// What used to also happen was restoring the pre-edit origin *and* then
             /// revealing the caret, which moved the viewport twice for one keypress and
-            /// read as the scroll fighting the writer. Typing does not come through here
-            /// at all now: AppKit reveals the caret for a keystroke by itself, and better,
-            /// because it knows which event it is responding to.
+            /// read as the scroll fighting the writer.
+            ///
+            /// Only edits the writer made with a button or with Return come through here.
+            /// Typing does not, and must not: the clamp is measurably the wrong thing on
+            /// the last line of a document, where it is also the only thing that can act at
+            /// all. AppKit reveals the caret for a keystroke by itself, and better, because
+            /// it knows which event it is responding to.
             private func settleViewport(
                 in view: NSTextView,
-                revealing selection: NSRange?,
+                revealing selection: NSRange,
                 atRevision expectedRevision: Int
             ) {
                 guard let scroll = view.enclosingScrollView else { return }
                 scroll.layoutSubtreeIfNeeded()
                 constrainViewport(of: scroll)
-                if let selection {
-                    view.scrollRangeToVisible(selection)
-                    constrainViewport(of: scroll)
-                }
+                view.scrollRangeToVisible(selection)
+                constrainViewport(of: scroll)
 
                 DispatchQueue.main.async { [weak self, weak view] in
                     guard let self, let view, self.revision == expectedRevision,
