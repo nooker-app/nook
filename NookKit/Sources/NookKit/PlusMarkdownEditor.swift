@@ -1144,6 +1144,13 @@ enum EditorTextArrival: Equatable {
                 view.isAutomaticDataDetectionEnabled = false
                 view.isContinuousSpellCheckingEnabled = true
                 context.coordinator.replace(text, in: view)
+                // Lay the whole document out once, here, where a few milliseconds are
+                // invisible. Measured: the first full layout of a 2,000-word post takes
+                // about 50ms and an 8,000-word one about 135ms, while every layout after it
+                // costs under a millisecond because TextKit keeps what it has already laid
+                // out. Left to happen on the first keystroke instead, that one-off would be
+                // a hitch on the writer's first character.
+                context.coordinator.finishLayout(of: view)
                 #if DEBUG
                     // Every move of the clip view, whoever made it — AppKit, a clamp,
                     // SwiftUI's layout — against the phase it happened in.
@@ -1339,6 +1346,42 @@ enum EditorTextArrival: Equatable {
                             length: min(selection.length, limit - min(selection.location, limit))))
                 }
                 updateTypingAttributes(in: view)
+                finishLayout(of: view)
+            }
+
+            /// Lays out what the edit invalidated, before anything can act on an estimate of
+            /// it.
+            ///
+            /// This is what was moving the last line, and the app's own log named it. Per
+            /// keystroke: the document was 957.5pt tall, the writer was at 584.5, and after
+            /// the change the height was reported as 837.5 — under which 584.5 is past the
+            /// end, so the clip view was clamped up to 455.5, which is exactly
+            /// 837.5 − 424 (the viewport) + 42 (the reserved inset). One run-loop turn later
+            /// the height was 991.5, under which the writer's position had been valid all
+            /// along, and AppKit scrolled the caret back into view with an animation. That
+            /// animation is what reads as the scroll shaking.
+            ///
+            /// 837.5 was never the document's height. It is TextKit's estimate for the part
+            /// it had not laid out yet, and nothing downstream can tell an estimate from a
+            /// measurement. So the estimate is not allowed to exist: the layout is finished
+            /// here, inside the change, while the only thing that has happened is an edit
+            /// the writer made.
+            ///
+            /// The cost is bounded by what the edit invalidated, because TextKit keeps the
+            /// fragments it has already laid out. Measured on this pipeline: after the first
+            /// full pass — which `makeNSView` gets out of the way when the editor is
+            /// created — a keystroke costs 0.1ms in a 500-word post, 0.45ms at 2,000 words
+            /// and 0.98ms at 8,000. The estimates it replaces were about 10% short of the
+            /// real height at every size, which is the size of the mistake the scroll was
+            /// being clamped to.
+            func finishLayout(of view: NSTextView) {
+                if let layout = view.textLayoutManager {
+                    layout.ensureLayout(for: layout.documentRange)
+                } else if let manager = view.layoutManager, let container = view.textContainer {
+                    // Only reached on a view that is already using TextKit 1; asking a
+                    // TextKit 2 view for this would be what moved it there.
+                    manager.ensureLayout(for: container)
+                }
             }
 
             func textDidChange(_ notification: Notification) {

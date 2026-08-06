@@ -35,14 +35,18 @@
             guard let view else { return }
             let scroll = view.enclosingScrollView
             let selection = view.selectedRange()
+            // The width is here to tell a re-wrap from a re-estimate: a height that changed
+            // because the text view got narrower is a different bug from a height that
+            // changed because TextKit had not finished laying it out.
             lines.append(
                 String(
-                    format: "%.3f %-16@ origin %8.2f docH %9.2f visH %7.2f inset %5.1f "
+                    format: "%.3f %-16@ origin %8.2f docH %9.2f docW %7.2f visH %7.2f inset %5.1f "
                         + "sel %6d+%d marked %d len %6d %@",
                     ProcessInfo.processInfo.systemUptime,
                     phase as NSString,
                     scroll?.contentView.bounds.origin.y ?? -1,
                     view.frame.height,
+                    view.frame.width,
                     scroll?.documentVisibleRect.height ?? -1,
                     scroll?.contentInsets.bottom ?? -1,
                     selection.location,
