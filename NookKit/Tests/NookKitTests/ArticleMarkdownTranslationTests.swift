@@ -6,7 +6,10 @@ import Testing
 import AppKit
 #endif
 
+/// Uses `NSFontManager`, which is a main-thread AppKit class, and reads fonts out of an
+/// attributed string.
 @Suite("Gemini Markdown article translation")
+@MainActor
 struct ArticleMarkdownTranslationTests {
     private let baseURL = URL(string: "https://example.com/articles/story")!
 

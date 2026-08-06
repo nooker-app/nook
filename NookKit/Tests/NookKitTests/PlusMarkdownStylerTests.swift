@@ -10,7 +10,10 @@ import Testing
 /// time. These pin what it must recognise, and just as importantly what it must
 /// leave alone: a construct that flickers as it is being completed puts the writer's
 /// attention on their tools instead of their sentence.
+///
+/// Asks MarkdownAttributes for real fonts, which AppKit resolves on the main thread.
 @Suite("Nook Plus markdown styling")
+@MainActor
 struct PlusMarkdownStylerTests {
     /// Reads the styled text back out, so a test says what a range *is* rather than
     /// juggling string indices.

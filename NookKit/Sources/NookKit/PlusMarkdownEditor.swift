@@ -353,7 +353,11 @@ enum MarkdownAttributes {
             }
             return UIFont(descriptor: descriptor, size: size)
         #else
-            return NSFontManager.shared.convert(base, toHaveTrait: .italicFontMask)
+            // Through the descriptor rather than `NSFontManager`, which is a main-thread
+            // AppKit class this is in no position to promise it is on. Checked to give the
+            // same answer: both routes return .SFNS-RegularItalic at the requested size.
+            return NSFont(descriptor: base.fontDescriptor.withSymbolicTraits(.italic), size: size)
+                ?? base
         #endif
     }
 
@@ -365,7 +369,12 @@ enum MarkdownAttributes {
             else { return base }
             return UIFont(descriptor: descriptor, size: size)
         #else
-            return NSFontManager.shared.convert(base, toHaveTrait: .italicFontMask)
+            // Same as `italic`. Both traits are named rather than relying on the base
+            // carrying the bold, which is what `NSFontManager` did here — it kept it, and
+            // both routes end at .SFNS-BoldItalic, but only one of them says so.
+            return NSFont(
+                descriptor: base.fontDescriptor.withSymbolicTraits([.italic, .bold]), size: size)
+                ?? base
         #endif
     }
 }

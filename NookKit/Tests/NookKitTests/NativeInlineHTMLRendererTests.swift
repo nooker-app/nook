@@ -15,7 +15,10 @@ private typealias PlatformFont = UIFont
 /// gate (everything unsupported must return nil, never a wrong render), and —
 /// on macOS, where the WebKit importer is available in tests — differential
 /// string equality against the classic pipeline for the supported corpus.
+/// Imports HTML through WebKit and through the native renderer, and compares AppKit
+/// attributed strings; all of that belongs on the main actor. See ReaderTypographyTests.
 @Suite("Native inline HTML renderer")
+@MainActor
 struct NativeInlineHTMLRendererTests {
     private let bodySize: CGFloat = 16
 

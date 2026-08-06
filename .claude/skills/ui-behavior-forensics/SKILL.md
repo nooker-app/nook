@@ -195,6 +195,53 @@ number.
 - **Synthetic events are not evidence about the real input path.** Say which one
   you drove.
 
+## The same method finds a flaky test
+
+A test that fails once in ten runs is the same problem in a smaller box: rare,
+timing-dependent, and not reproducible on demand. What worked:
+
+**Loop until it fails, and capture everything.** Not `grep '✘'` — the whole output.
+A filtered loop earlier had thrown away the one line that mattered.
+
+```sh
+for i in $(seq 1 40); do
+  out=$(swift test 2>&1)
+  # A build error must count as a failure, or a broken tree reports 40 clean runs.
+  if echo "$out" | grep -qE "error:|✘"; then echo "run $i"; echo "$out" | grep -A 12 '✘ Test "'; break; fi
+done
+```
+
+Then **do not touch the tree while the loop runs.** Editing tests mid-loop
+invalidated two verification runs here.
+
+**Read the failure's values.** The flake was a font-size comparison, and the
+captured output said `NSFont = "Helvetica 12.00 pt."` — AppKit's fallback font,
+which named the cause outright: font resolution asked from a parallel test thread
+instead of the main one. A bare `#expect(a > b)` would never have said that, so
+the expectations now carry the font names.
+
+**Read the crash report for a signal 11.** `~/Library/Logs/DiagnosticReports/*.ips`
+is JSON after the first line, and the faulting thread's frames name both the API
+and the queue:
+
+```
+queue = com.apple.root.default-qos.cooperative     ← not the main thread
+AttributedString.init(_:including:) → enumerateAttributes → swift_dynamicCast → SIGSEGV
+```
+
+Two anomalies, one cause. Both were AppKit used off the main actor from suites the
+repo's own convention says should be `@MainActor`, and annotating them took 45
+consecutive clean runs where the pair had been showing up every 8 to 20.
+
+**Quote the odds.** At a rate of about one in fifteen, 45 clean runs is
+`(14/15)^45 ≈ 5%` — worth saying, because "it stopped happening" is not a result.
+
+**A test that finds a second bug should not be made to pass.** The italic coverage
+added while verifying this uncovered a real one: `***bold italic***` renders as
+italic alone. `withKnownIssue` records it, keeps the suite green, and fails loudly
+if it is ever fixed — better than deleting the assertion or fixing an unrelated
+engine in the same breath.
+
 ## Honesty
 
 Do not ship a fix for a mechanism you have not measured. This session shipped two

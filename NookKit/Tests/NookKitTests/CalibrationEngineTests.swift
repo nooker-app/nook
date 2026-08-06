@@ -11,7 +11,10 @@ import UIKit
 /// The calibration engine's contract: recommendations only when the math has
 /// earned them, "keep" for every kind of doubt, and counterbalancing/detrending
 /// that actually neutralizes practice and fatigue.
+///
+/// Reads fonts out of typography attributes, which AppKit resolves on the main thread.
 @Suite("Reading Fit engine")
+@MainActor
 struct CalibrationEngineTests {
     // MARK: - Fixtures
 

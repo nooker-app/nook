@@ -13,7 +13,13 @@ import Testing
 /// The styler being right about what a range *is* does not prove the right font
 /// reaches the screen, and the gap between the two is where an editor stops looking
 /// like an editor. These assert the attributed string the text view is handed.
+///
+/// These read fonts out of a styled string, and AppKit resolves fonts on the main
+/// thread. Asked from a parallel test thread, a lookup can come back as the default
+/// Helvetica 12 instead of the system font — which is what made the heading/body size
+/// comparison and the restyle-twice comparison fail about once in ten full runs.
 @Suite("Nook Plus markdown editor styling")
+@MainActor
 struct PlusMarkdownEditorTests {
     private let accent = PlatformColor.red
 
@@ -46,7 +52,12 @@ struct PlusMarkdownEditorTests {
         let source = "# Title\n\nBody."
         let heading = try #require(font(of: source, at: 2))
         let body = try #require(font(of: source, at: source.count - 3))
-        #expect(heading.pointSize > body.pointSize)
+        // Named, because a bare comparison failing told us nothing when it did: the fonts
+        // are what identified it — the heading had come back as Helvetica 12, which is
+        // AppKit's fallback when a lookup does not happen on the main thread.
+        #expect(
+            heading.pointSize > body.pointSize,
+            "heading \(heading.fontName)@\(heading.pointSize) vs body \(body.fontName)@\(body.pointSize)")
     }
 
     /// Levels have to be distinguishable from each other, or an outline reads flat.
@@ -55,8 +66,12 @@ struct PlusMarkdownEditorTests {
         let first = try #require(font(of: "# One", at: 2))
         let second = try #require(font(of: "## Two", at: 3))
         let third = try #require(font(of: "### Three", at: 4))
-        #expect(first.pointSize > second.pointSize)
-        #expect(second.pointSize > third.pointSize)
+        #expect(
+            first.pointSize > second.pointSize,
+            "\(first.fontName)@\(first.pointSize) vs \(second.fontName)@\(second.pointSize)")
+        #expect(
+            second.pointSize > third.pointSize,
+            "\(second.fontName)@\(second.pointSize) vs \(third.fontName)@\(third.pointSize)")
     }
 
     @Test("bold text is bold and body text is not")
@@ -66,6 +81,34 @@ struct PlusMarkdownEditorTests {
         let plain = try #require(font(of: source, at: 1))
         #expect(bold.isBold)
         #expect(!plain.isBold)
+    }
+
+    /// The styler classifying a range as italic does not prove an italic font reaches the
+    /// text view — which is this file's whole reason for existing, and was untested for the
+    /// one construct that does not come from a plain `systemFont` call. The italic faces are
+    /// built from a font descriptor; the route that used to build them went through
+    /// `NSFontManager`, a main-thread AppKit class.
+    @Test("italic text is italic")
+    func italicIsItalic() throws {
+        let italic = try #require(font(of: "say *this* now", at: 6))
+        #expect(italic.isItalic, "\(italic.fontName)")
+        #expect(!italic.isBold, "\(italic.fontName)")
+
+        let both = try #require(font(of: "say ***this*** now", at: 8))
+        #expect(both.isItalic, "\(both.fontName)")
+        // Bold italic renders as italic alone, and nested emphasis loses the outer trait
+        // the same way: the styler emits `boldItalic`, `bold` and `italic` over the same
+        // characters, and the restyle applies them in order with `addAttribute`, so the
+        // last one wins. Fixing it means composing fonts rather than replacing them —
+        // union the traits, keep the size — which is a decision about the styling engine
+        // and not something to slip into a test that found it. Known, and this fails
+        // loudly if it is ever fixed.
+        withKnownIssue("bold italic loses the bold: the italic span overwrites the font") {
+            #expect(both.isBold, "\(both.fontName)")
+        }
+
+        let plain = try #require(font(of: "say *this* now", at: 1))
+        #expect(!plain.isItalic, "\(plain.fontName)")
     }
 
     @Test("code is monospaced")
@@ -262,6 +305,14 @@ extension PlatformFont {
             fontDescriptor.symbolicTraits.contains(.traitBold)
         #else
             fontDescriptor.symbolicTraits.contains(.bold)
+        #endif
+    }
+
+    fileprivate var isItalic: Bool {
+        #if canImport(UIKit)
+            fontDescriptor.symbolicTraits.contains(.traitItalic)
+        #else
+            fontDescriptor.symbolicTraits.contains(.italic)
         #endif
     }
 

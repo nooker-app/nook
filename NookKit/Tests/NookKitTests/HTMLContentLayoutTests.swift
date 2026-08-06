@@ -2,7 +2,10 @@ import AppKit
 import Testing
 @testable import NookKit
 
+/// Reads fonts and paragraph styles out of AppKit attributed strings; see
+/// PlusMarkdownEditorTests for why that has to happen on the main actor.
 @Suite("Native article layout")
+@MainActor
 struct HTMLContentLayoutTests {
     private static let paragraph = HTMLContentBlock.text("Body")
     private static let heading = HTMLContentBlock.heading(level: 2, html: "Heading")

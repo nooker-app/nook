@@ -14,7 +14,14 @@ private typealias PlatformFont = UIFont
 /// The native reader's typography contract: settings resolve into one clamped,
 /// derived-value struct; both import paths bake the same fonts and kern from
 /// it; and the render cache can never serve a stale style.
+/// Reads fonts out of AppKit attributed strings and drives the native importer, both of
+/// which AppKit resolves on the main thread. Run from a cooperative pool thread this suite
+/// crashed the test process about once in twenty full runs, inside
+/// `AttributedString.init(_:including:)` — a dynamic cast on a null object while
+/// enumerating attributes. See PlusMarkdownEditorTests for the other half of the same
+/// problem, which was a font quietly coming back as Helvetica 12 instead.
 @Suite("Reader typography")
+@MainActor
 struct ReaderTypographyTests {
     private func typography(
         font: ReaderFont = .system,
