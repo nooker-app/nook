@@ -1151,19 +1151,6 @@ enum EditorTextArrival: Equatable {
                 // out. Left to happen on the first keystroke instead, that one-off would be
                 // a hitch on the writer's first character.
                 context.coordinator.finishLayout(of: view)
-                #if DEBUG
-                    // Every move of the clip view, whoever made it — AppKit, a clamp,
-                    // SwiftUI's layout — against the phase it happened in.
-                    scroll.contentView.postsBoundsChangedNotifications = true
-                    NotificationCenter.default.addObserver(
-                        forName: NSView.boundsDidChangeNotification,
-                        object: scroll.contentView, queue: nil
-                    ) { [weak view] _ in
-                        MainActor.assumeIsolated {
-                            PlusEditorScrollLog.note("bounds", in: view)
-                        }
-                    }
-                #endif
                 handle?.attachment = { [weak view] makeEdit in
                     guard let view else { return }
                     context.coordinator.apply(makeEdit, to: view)
@@ -1199,11 +1186,6 @@ enum EditorTextArrival: Equatable {
                     buffer: view.string,
                     published: context.coordinator.published,
                     isComposing: view.hasMarkedText())
-                #if DEBUG
-                    PlusEditorScrollLog.note(
-                        "update", in: view,
-                        extra: "arrival=\(arrival) incoming=\((text as NSString).length)")
-                #endif
                 switch arrival {
                 case .external:
                     context.coordinator.replace(text, in: view)
@@ -1249,12 +1231,6 @@ enum EditorTextArrival: Equatable {
             /// the current offset invalid, which is what was moving the last line, and not
             /// so much that the end of a post looks like it fell off the page.
             private static var trailingSlack: CGFloat { MarkdownAttributes.bodySize * 3 }
-
-            #if DEBUG
-                static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
-                    PlusEditorScrollLog.flush()
-                }
-            #endif
 
             func makeCoordinator() -> Coordinator {
                 Coordinator(
@@ -1388,20 +1364,8 @@ enum EditorTextArrival: Equatable {
                 guard let view = notification.object as? NSTextView else { return }
                 guard !applyingProgrammaticEdit else { return }
                 revision += 1
-                #if DEBUG
-                    PlusEditorScrollLog.note("change.enter", in: view)
-                #endif
                 publish(view.string)
-                #if DEBUG
-                    PlusEditorScrollLog.note("change.publish", in: view)
-                #endif
                 restyle(view)
-                #if DEBUG
-                    PlusEditorScrollLog.note("change.restyle", in: view)
-                    DispatchQueue.main.async { [weak view] in
-                        PlusEditorScrollLog.note("change.next", in: view)
-                    }
-                #endif
                 // Nothing is scrolled for a keystroke, and nothing is clamped either.
                 // AppKit reveals the caret for the event it is handling, which it knows
                 // and this does not.
@@ -1438,12 +1402,6 @@ enum EditorTextArrival: Equatable {
                 shouldChangeTextIn affectedCharRange: NSRange,
                 replacementString: String?
             ) -> Bool {
-                #if DEBUG
-                    PlusEditorScrollLog.note(
-                        "will-change", in: textView,
-                        extra: "kind=\(PlusEditorScrollLog.kind(of: replacementString)) "
-                            + "affected=\(affectedCharRange.location)+\(affectedCharRange.length)")
-                #endif
                 guard !applyingProgrammaticEdit, textView.markedRange().length == 0,
                     let replacementString
                 else { return true }
@@ -1513,9 +1471,6 @@ enum EditorTextArrival: Equatable {
                 guard let view = notification.object as? NSTextView,
                     view.markedRange().length == 0
                 else { return }
-                #if DEBUG
-                    PlusEditorScrollLog.note("selection", in: view)
-                #endif
                 updateTypingAttributes(in: view)
             }
 
