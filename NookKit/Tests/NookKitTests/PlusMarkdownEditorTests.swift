@@ -88,7 +88,7 @@ struct PlusMarkdownEditorTests {
     /// one construct that does not come from a plain `systemFont` call. The italic faces are
     /// built from a font descriptor; the route that used to build them went through
     /// `NSFontManager`, a main-thread AppKit class.
-    @Test("italic text is italic")
+    @Test("italic text is italic, and bold italic is both")
     func italicIsItalic() throws {
         let italic = try #require(font(of: "say *this* now", at: 6))
         #expect(italic.isItalic, "\(italic.fontName)")
@@ -96,19 +96,72 @@ struct PlusMarkdownEditorTests {
 
         let both = try #require(font(of: "say ***this*** now", at: 8))
         #expect(both.isItalic, "\(both.fontName)")
-        // Bold italic renders as italic alone, and nested emphasis loses the outer trait
-        // the same way: the styler emits `boldItalic`, `bold` and `italic` over the same
-        // characters, and the restyle applies them in order with `addAttribute`, so the
-        // last one wins. Fixing it means composing fonts rather than replacing them —
-        // union the traits, keep the size — which is a decision about the styling engine
-        // and not something to slip into a test that found it. Known, and this fails
-        // loudly if it is ever fixed.
-        withKnownIssue("bold italic loses the bold: the italic span overwrites the font") {
-            #expect(both.isBold, "\(both.fontName)")
-        }
+        #expect(both.isBold, "\(both.fontName)")
 
         let plain = try #require(font(of: "say *this* now", at: 1))
         #expect(!plain.isItalic, "\(plain.fontName)")
+    }
+
+    /// Emphasis nests, and a font that replaced rather than composed dropped whichever
+    /// trait was applied first: `**bold *and italic* inside**` rendered its middle as
+    /// italic with the bold gone. Spans do not arrive outer-first — the bold inside a link
+    /// is reported before the link — so composition cannot lean on their order.
+    @Test("nested emphasis keeps both traits")
+    func nestedEmphasisComposes() throws {
+        let source = "**bold *and italic* inside**"
+        let outer = try #require(font(of: source, at: 3))
+        #expect(outer.isBold, "\(outer.fontName)")
+        #expect(!outer.isItalic, "\(outer.fontName)")
+
+        let inner = try #require(font(of: source, at: 10))
+        #expect(inner.isBold, "the outer bold was lost: \(inner.fontName)")
+        #expect(inner.isItalic, "\(inner.fontName)")
+    }
+
+    /// The same fault in the other direction: emphasis inside a heading used to take the
+    /// heading's size down to body size, because the bold span carried an absolute size of
+    /// its own. Sizes compose now — a scale relative to body text — so the heading's size
+    /// survives whatever is nested in it.
+    @Test("emphasis inside a heading keeps the heading's size")
+    func headingSizeSurvivesNesting() throws {
+        let source = "# Heading with **bold** and `code`"
+        let plain = try #require(font(of: source, at: 3))
+        let bold = try #require(font(of: source, at: 17))
+        let code = try #require(font(of: source, at: 29))
+
+        #expect(bold.pointSize == plain.pointSize, "\(bold.pointSize) vs \(plain.pointSize)")
+        #expect(bold.isBold)
+        // Code is smaller than the text around it by design, and still far larger than body
+        // text: it is a proportion of the heading, not of the body.
+        #expect(code.isMonospaced, "\(code.fontName)")
+        #expect(code.pointSize < plain.pointSize)
+        #expect(code.pointSize > MarkdownAttributes.bodySize)
+    }
+
+    /// Stronger than "twice is the same as once" above, and load-bearing in a way that one
+    /// is not: restyling settled text must write nothing at all. Every range it writes invalidates
+    /// that much TextKit layout, and a keystroke that invalidates the document makes the
+    /// reported height wobble — which is what moved the scroll on the last line of a post.
+    /// Composing fonts from the intent rather than from whatever font is already there is
+    /// what keeps this true.
+    @Test("restyling settled text writes nothing")
+    func restyleWritesNothingWhenSettled() {
+        let source = """
+            # 섹션 하나
+
+            본문에 **굵게**, *기울임*, ***둘 다***, `코드`, ~~취소선~~, [링크](https://example.com)
+
+            - 항목 *하나*
+            - 항목 **둘**
+
+            > 인용 안의 **굵게**
+
+            | a | **b** |
+            |---|---|
+            """
+        let storage = MarkdownAttributes.attributed(source, accent: accent)
+        #expect(MarkdownAttributes.restyleChangedAttributes(storage, accent: accent).isEmpty)
+        #expect(MarkdownAttributes.restyleChangedAttributes(storage, accent: accent).isEmpty)
     }
 
     @Test("code is monospaced")

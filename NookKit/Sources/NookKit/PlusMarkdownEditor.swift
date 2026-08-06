@@ -181,18 +181,115 @@ enum MarkdownAttributes {
     /// in-progress input-method composition down with it. Both platforms go through
     /// here so neither can drift from the other, and so the behaviour can be tested
     /// without a text view.
+    /// Fonts are gathered as intents and written once, at the end, because nesting has to
+    /// compose rather than replace. Everything else is set as it arrives.
     static func restyle(_ storage: NSMutableAttributedString, accent: PlatformColor) {
         let text = storage.string
         let whole = NSRange(location: 0, length: storage.length)
         storage.setAttributes(baseAttributes(), range: whole)
 
         let full = text.startIndex..<text.endIndex
+        var intents = [FontIntent](repeating: .body, count: storage.length)
         for span in PlusMarkdownStyler.spans(in: text) {
             guard span.range.clamped(to: full) == span.range, !span.range.isEmpty else { continue }
             let range = NSRange(span.range, in: text)
             for (key, value) in attributes(for: span.kind, accent: accent) {
                 storage.addAttribute(key, value: value, range: range)
             }
+            guard let intent = fontIntent(for: span.kind) else { continue }
+            for offset in range.location..<NSMaxRange(range) {
+                intents[offset].merge(intent)
+            }
+        }
+
+        // One write per run of equal intent. Plain text is skipped: the base attributes
+        // above already gave it the body font, and every write here is a range of TextKit
+        // layout invalidated.
+        var start = 0
+        while start < intents.count {
+            var end = start + 1
+            while end < intents.count, intents[end] == intents[start] { end += 1 }
+            if intents[start] != .body {
+                storage.addAttribute(
+                    .font, value: font(for: intents[start]),
+                    range: NSRange(location: start, length: end - start))
+            }
+            start = end
+        }
+    }
+
+    /// What a span wants of the font, rather than which font that is.
+    ///
+    /// Spans overlap — `***this***` arrives as bold-italic *and* bold *and* italic over the
+    /// same characters, a heading contains its own emphasis, a table row contains
+    /// everything — and the previous pass set `.font` per span, so the last one to arrive
+    /// won. Bold italic came out as italic alone, a bold word inside a heading shrank to
+    /// body size, and code inside a heading lost the heading's size.
+    ///
+    /// Composition cannot depend on the order the spans arrive in, because that order is
+    /// not consistent: a heading is reported before the emphasis inside it, while the bold
+    /// inside a link is reported before the link. So both operations here are commutative —
+    /// the traits union, and the scale multiplies.
+    struct FontIntent: Equatable {
+        var bold = false
+        var italic = false
+        var monospace = false
+        /// Relative to body size, and multiplied rather than assigned, so that code inside
+        /// a heading is monospaced at the heading's size.
+        var scale: CGFloat = 1
+
+        static let body = FontIntent()
+
+        mutating func merge(_ other: FontIntent) {
+            bold = bold || other.bold
+            italic = italic || other.italic
+            monospace = monospace || other.monospace
+            scale *= other.scale
+        }
+    }
+
+    /// The font an intent resolves to.
+    ///
+    /// Always built from `bodySize` and the intent, never from whatever font is already in
+    /// the storage. That is what keeps restyling idempotent: a second pass over settled
+    /// text computes the same fonts and therefore writes nothing, which is what keeps
+    /// TextKit from re-laying out the document on every keystroke.
+    static func font(for intent: FontIntent) -> PlatformFont {
+        let size = bodySize * intent.scale
+        if intent.monospace {
+            // No italic: the monospaced system font has no italic face to ask for, and a
+            // synthesised slant on code is worse than none.
+            return PlatformFont.monospacedSystemFont(
+                ofSize: size, weight: intent.bold ? .bold : .regular)
+        }
+        switch (intent.bold, intent.italic) {
+        case (true, true): return boldItalic(ofSize: size)
+        case (true, false): return PlatformFont.boldSystemFont(ofSize: size)
+        case (false, true): return italic(ofSize: size)
+        case (false, false): return PlatformFont.systemFont(ofSize: size)
+        }
+    }
+
+    /// What each kind asks of the font. Nil for the kinds that have no opinion about it.
+    static func fontIntent(for kind: PlusMarkdownStyler.Kind) -> FontIntent? {
+        switch kind {
+        case .heading(let level):
+            // Level 1 is noticeably larger; by level 4 the weight carries it. A scale that
+            // kept growing would make an outline look like a poster.
+            let scale: CGFloat = [1.62, 1.38, 1.2, 1.08, 1.02, 1.0][min(level, 6) - 1]
+            return FontIntent(bold: true, scale: scale)
+        case .bold, .tableOfContents:
+            return FontIntent(bold: true)
+        case .italic, .quote:
+            return FontIntent(italic: true)
+        case .boldItalic:
+            return FontIntent(bold: true, italic: true)
+        case .inlineCode, .codeBlock, .tableRow, .url, .footnoteDefinition:
+            return FontIntent(monospace: true, scale: 0.94)
+        case .footnoteReference:
+            return FontIntent(bold: true, scale: 0.82)
+        case .body, .strikethrough, .linkText, .softBreak, .hardBreak, .marker:
+            return nil
         }
     }
 
@@ -282,42 +379,29 @@ enum MarkdownAttributes {
         return result
     }
 
+    /// Everything a kind draws *except* its font, which is composed rather than set — see
+    /// ``fontIntent(for:)``.
     static func attributes(
         for kind: PlusMarkdownStyler.Kind, accent: PlatformColor
     ) -> [NSAttributedString.Key: Any] {
-        let size = bodySize
-        let mono = PlatformFont.monospacedSystemFont(ofSize: size * 0.94, weight: .regular)
-
         switch kind {
-        case .body:
+        case .body, .heading, .bold, .italic, .boldItalic:
             return [:]
-        case .heading(let level):
-            // Level 1 is noticeably larger; by level 4 the weight carries it. A
-            // scale that kept growing would make an outline look like a poster.
-            let scale: CGFloat = [1.62, 1.38, 1.2, 1.08, 1.02, 1.0][min(level, 6) - 1]
-            return [.font: PlatformFont.boldSystemFont(ofSize: size * scale)]
-        case .bold:
-            return [.font: PlatformFont.boldSystemFont(ofSize: size)]
-        case .italic:
-            return [.font: italic(ofSize: size)]
-        case .boldItalic:
-            return [.font: boldItalic(ofSize: size)]
         case .strikethrough:
             return [
                 .strikethroughStyle: NSUnderlineStyle.single.rawValue,
                 .foregroundColor: PlatformColor.secondaryLabelCompat,
             ]
         case .inlineCode, .codeBlock, .tableRow:
-            return [.font: mono, .foregroundColor: accent]
+            return [.foregroundColor: accent]
         case .quote:
-            return [.font: italic(ofSize: size), .foregroundColor: PlatformColor.secondaryLabelCompat]
+            return [.foregroundColor: PlatformColor.secondaryLabelCompat]
         case .linkText:
             return [.foregroundColor: accent, .underlineStyle: NSUnderlineStyle.single.rawValue]
         case .url:
-            return [.font: mono, .foregroundColor: PlatformColor.secondaryLabelCompat]
+            return [.foregroundColor: PlatformColor.secondaryLabelCompat]
         case .tableOfContents:
             return [
-                .font: PlatformFont.boldSystemFont(ofSize: size),
                 .foregroundColor: accent,
                 .link: URL(string: "nook-toc://outline")!,
             ]
@@ -327,12 +411,11 @@ enum MarkdownAttributes {
             components.host = "reference"
             components.path = "/\(label)"
             return [
-                .font: PlatformFont.boldSystemFont(ofSize: size * 0.82),
                 .foregroundColor: accent,
                 .link: components.url!,
             ]
         case .footnoteDefinition:
-            return [.font: mono, .foregroundColor: accent]
+            return [.foregroundColor: accent]
         case .softBreak, .hardBreak:
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineSpacing = 3
