@@ -4,35 +4,41 @@ import SwiftUI
 ///
 /// A value rather than a branch inside the event monitor, because the monitor only
 /// compiles on macOS and cannot be reached from the package's tests. The rule is the
-/// part worth pinning: writing that would be lost turns the shortcut into a
-/// press-and-hold, and an app with nothing at stake still quits on the first press.
+/// part worth pinning: an open writing surface turns the shortcut into a press-and-hold,
+/// and everywhere else ⌘Q quits on the first press.
+///
+/// The trigger is the composer being open, not whether anything has been typed into it
+/// yet. Keying it to unsaved text was tried and reads as broken: whether ⌘Q asked or
+/// simply quit depended on invisible state, so the same keypress in what looks like the
+/// same screen did two different things. A writer cannot tell those screens apart, and a
+/// second and a half is not a cost worth that confusion.
 enum QuitShortcutDecision: Equatable {
     /// Quit now.
     case quit
     /// Swallow it and require the keys to be held.
     case hold
 
-    /// - Parameter hasUnsavedWork: whether quitting would throw something away.
-    static func forShortcut(hasUnsavedWork: Bool) -> QuitShortcutDecision {
-        hasUnsavedWork ? .hold : .quit
+    /// - Parameter whileWriting: whether a writing surface is open.
+    static func forShortcut(whileWriting: Bool) -> QuitShortcutDecision {
+        whileWriting ? .hold : .quit
     }
 
     var quitsImmediately: Bool { self == .quit }
 }
 
-/// Who currently has writing that quitting would take with it.
+/// Which writing surfaces are open.
 ///
 /// A registry of claims rather than one flag: two composers can be open at once —
 /// the reader window has one and Settings has another — and the first one to close
 /// must not clear a guard the other still needs.
 @MainActor
-final class UnsavedWritingRegistry {
-    static let shared = UnsavedWritingRegistry()
+final class WritingSurfaceRegistry {
+    static let shared = WritingSurfaceRegistry()
 
     private var claims: Set<UUID> = []
 
-    /// True while anything on screen holds unsaved writing.
-    var hasUnsavedWork: Bool { !claims.isEmpty }
+    /// True while a writing surface is on screen.
+    var isWriting: Bool { !claims.isEmpty }
 
     func hold(_ id: UUID) { claims.insert(id) }
     func release(_ id: UUID) { claims.remove(id) }
@@ -42,23 +48,21 @@ final class UnsavedWritingRegistry {
     import AppKit
 
     extension View {
-        /// Makes ⌘Q a press-and-hold for as long as this view holds unsaved writing.
+        /// Makes ⌘Q a press-and-hold for as long as this view is on screen.
         ///
-        /// The claim follows the flag, so a composer that is emptied again — or whose
-        /// draft has just been saved — stops guarding the shortcut without closing.
-        public func requiresHoldToQuit(when hasUnsavedWork: Bool) -> some View {
-            modifier(HoldToQuitClaimModifier(hasUnsavedWork: hasUnsavedWork))
+        /// For the whole time, not only while there is text: see ``QuitShortcutDecision``
+        /// for why the condition is the screen rather than its contents.
+        public func requiresHoldToQuit() -> some View {
+            modifier(HoldToQuitClaimModifier())
         }
     }
 
     private struct HoldToQuitClaimModifier: ViewModifier {
-        let hasUnsavedWork: Bool
-        @State private var claim = UnsavedWritingClaim()
+        @State private var claim = WritingSurfaceClaim()
 
         func body(content: Content) -> some View {
             content
-                .onAppear { claim.set(hasUnsavedWork) }
-                .onChange(of: hasUnsavedWork) { _, now in claim.set(now) }
+                .onAppear { claim.set(true) }
                 .onDisappear { claim.set(false) }
         }
     }
@@ -70,7 +74,7 @@ final class UnsavedWritingRegistry {
     /// would make ⌘Q need holding for the rest of the session — a guard nobody can see
     /// or clear.
     @MainActor
-    private final class UnsavedWritingClaim {
+    private final class WritingSurfaceClaim {
         nonisolated let id = UUID()
         private var held = false
 
@@ -78,9 +82,9 @@ final class UnsavedWritingRegistry {
             guard hold != held else { return }
             held = hold
             if hold {
-                UnsavedWritingRegistry.shared.hold(id)
+                WritingSurfaceRegistry.shared.hold(id)
             } else {
-                UnsavedWritingRegistry.shared.release(id)
+                WritingSurfaceRegistry.shared.release(id)
             }
         }
 
@@ -88,7 +92,7 @@ final class UnsavedWritingRegistry {
             // Isolated state is out of reach here; the id is immutable, which is all
             // the release needs.
             let id = id
-            Task { @MainActor in UnsavedWritingRegistry.shared.release(id) }
+            Task { @MainActor in WritingSurfaceRegistry.shared.release(id) }
         }
     }
 
@@ -98,7 +102,9 @@ final class UnsavedWritingRegistry {
     /// ⌘Q sits next to ⌘W and ⌘A on the keyboard, and in Nook it is the shortcut that
     /// cannot be undone: a composer's text lives on screen until it is published or kept
     /// as a draft, so a mis-hit ends the session and the writing with it. Every other way
-    /// out of the composer already asks — the Cancel button and, on iOS, the swipe.
+    /// out of the composer already asks — the Cancel button and, on iOS, the swipe. The
+    /// hold applies for as long as the composer is open, whether or not anything has been
+    /// typed yet; ``QuitShortcutDecision`` says why.
     ///
     /// An alert would be the usual macOS answer, and it is the wrong one here: it steals
     /// focus, has to be dismissed, and trains the reflex of confirming without reading.
@@ -153,7 +159,7 @@ final class UnsavedWritingRegistry {
             case .keyDown:
                 guard stroke.isQuitShortcut else { return false }
                 let decision = QuitShortcutDecision.forShortcut(
-                    hasUnsavedWork: UnsavedWritingRegistry.shared.hasUnsavedWork
+                    whileWriting: WritingSurfaceRegistry.shared.isWriting
                 )
                 if decision.quitsImmediately {
                     quit()
