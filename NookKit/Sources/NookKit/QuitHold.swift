@@ -7,7 +7,7 @@ import SwiftUI
 /// part worth pinning: writing that would be lost turns the shortcut into a
 /// press-and-hold, and an app with nothing at stake still quits on the first press.
 enum QuitShortcutDecision: Equatable {
-    /// Let the shortcut through to the Quit menu item.
+    /// Quit now.
     case quit
     /// Swallow it and require the keys to be held.
     case hold
@@ -109,10 +109,9 @@ final class UnsavedWritingRegistry {
     /// catch logging out and the Dock's Quit — neither of which is a slip — and blocking
     /// those risks an app that cannot be shut down.
     ///
-    /// Both outcomes are carried out here, rather than the unguarded one being handed back
-    /// to the menu. The menu item does not act while a sheet is presented, and the composer
-    /// *is* a sheet, so delegating meant ⌘Q did nothing there until there was something to
-    /// protect.
+    /// Both outcomes are carried out here rather than handed back to the Quit menu item,
+    /// and both go through ``quit()``, which closes any sheet first — see there for why ⌘Q
+    /// in the composer did nothing at all, in either direction, until it did.
     @MainActor
     public final class QuitHoldController {
         public static let shared = QuitHoldController()
@@ -152,57 +151,18 @@ final class UnsavedWritingRegistry {
         private func handle(_ stroke: KeyStroke) -> Bool {
             switch stroke.type {
             case .keyDown:
-                #if DEBUG
-                    if stroke.modifiers.contains(.command) {
-                        QuitHoldLog.note(
-                            "keyDown",
-                            "keyCode=\(stroke.keyCode) char=\(stroke.character ?? "nil") "
-                                + "flags=\(stroke.modifiers.intersection(.deviceIndependentFlagsMask).rawValue) "
-                                + "isQuitShortcut=\(stroke.isQuitShortcut)")
-                    }
-                #endif
                 guard stroke.isQuitShortcut else { return false }
                 let decision = QuitShortcutDecision.forShortcut(
                     hasUnsavedWork: UnsavedWritingRegistry.shared.hasUnsavedWork
                 )
-                #if DEBUG
-                    QuitHoldLog.note(
-                        "decision", "\(decision) guarded="
-                            + "\(UnsavedWritingRegistry.shared.hasUnsavedWork)")
-                #endif
                 if decision.quitsImmediately {
-                    // Quit from here rather than handing the shortcut back to the Quit menu
-                    // item, which does not act while a sheet is presented. The composer is
-                    // a sheet, so ⌘Q did nothing at all in it until something had been
-                    // typed — at which point the hold below took over and it started
-                    // working, which is exactly how it was reported. `NSApp.terminate` is
-                    // what the menu item would have called anyway, so nothing changes
-                    // anywhere else.
-                    #if DEBUG
-                        QuitHoldLog.note("terminate.schedule")
-                        // If the process is still here a moment later, terminate did not
-                        // take — which is the thing to find out.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                            QuitHoldLog.note("terminate.aftermath", "still running")
-                        }
-                    #endif
-                    // On the next turn of the run loop, not here. The hold below has always
-                    // quit correctly from the composer, and the one thing it does
-                    // differently is exactly this: its `terminate` happens from a task,
-                    // after the event that triggered it has finished being dispatched.
-                    // Called inline from inside a local event monitor, mid-`sendEvent`,
-                    // termination did not take at all — which is why ⌘Q in a fresh composer
-                    // still did nothing after being changed to quit directly.
-                    Task { @MainActor in NSApp.terminate(nil) }
+                    quit()
                 } else {
                     // Repeats arrive while the key is down; the first press owns the timer.
                     beginHold()
                 }
                 return true
             case .keyUp:
-                #if DEBUG
-                    if stroke.keyCode == KeyStroke.qKeyCode { QuitHoldLog.note("keyUp.q") }
-                #endif
                 if stroke.keyCode == KeyStroke.qKeyCode { endHold() }
                 return false
             case .flagsChanged:
@@ -214,16 +174,10 @@ final class UnsavedWritingRegistry {
         }
 
         private func beginHold() {
-            #if DEBUG
-                QuitHoldLog.note("hold.begin", "alreadyHolding=\(holdTask != nil)")
-            #endif
             guard holdTask == nil else { return }
             let overlay = QuitHoldOverlayPanel(duration: Self.holdSeconds)
             overlay.show()
             hud = overlay
-            #if DEBUG
-                QuitHoldLog.note("hold.hud", overlay.state)
-            #endif
             holdTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(Self.holdSeconds))
                 guard let self, !Task.isCancelled else { return }
@@ -231,19 +185,33 @@ final class UnsavedWritingRegistry {
                 // while ⌘ is down and quitting on a key nobody is holding is the exact
                 // accident this exists to prevent.
                 let stillHeld = NSEvent.modifierFlags.contains(.command)
-                #if DEBUG
-                    QuitHoldLog.note("hold.elapsed", "stillHeld=\(stillHeld)")
-                #endif
                 endHold()
                 guard stillHeld else { return }
-                NSApp.terminate(nil)
+                quit()
             }
         }
 
+        /// Quits, having first closed anything presented as a sheet.
+        ///
+        /// `NSApp.terminate` on its own does nothing at all while a sheet is attached: it
+        /// does not quit and it does not even reach `applicationShouldTerminate`. Measured
+        /// in a standalone app — no sheet, the delegate is asked; a sheet attached, it is
+        /// not asked at all; the sheet ended first, asked again, and ending it in the same
+        /// run-loop turn is enough. Nested sheets need all of them ended, which the
+        /// composer has: its own details and footnote editors present on top of it.
+        ///
+        /// The composer *is* a sheet, so this is why ⌘Q in it did nothing whatsoever —
+        /// neither the immediate quit when there was nothing to protect, nor, as it turns
+        /// out, the quit at the end of a completed hold. The overlay appeared and holding
+        /// it achieved nothing.
+        private func quit() {
+            for window in NSApp.windows {
+                if let sheet = window.attachedSheet { window.endSheet(sheet) }
+            }
+            NSApp.terminate(nil)
+        }
+
         private func endHold() {
-            #if DEBUG
-                if holdTask != nil { QuitHoldLog.note("hold.end") }
-            #endif
             holdTask?.cancel()
             holdTask = nil
             hud?.dismiss()
@@ -317,13 +285,6 @@ final class UnsavedWritingRegistry {
             panel.ignoresMouseEvents = true
             panel.animationBehavior = .none
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        }
-
-        /// What the panel is, for the log: an invisible or zero-sized HUD is
-        /// indistinguishable from nothing having happened.
-        var state: String {
-            "frame=\(NSStringFromRect(panel.frame)) visible=\(panel.isVisible) "
-                + "alpha=\(panel.alphaValue) screen=\(panel.screen != nil)"
         }
 
         func show() {

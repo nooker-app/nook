@@ -156,17 +156,6 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
         ReaderStore.shared.flushPendingShardSave()
     }
 
-    #if DEBUG
-        /// Temporary, and the same answer as the default: it is here so the quit log can say
-        /// whether termination reached the delegate at all.
-        func applicationShouldTerminate(
-            _ sender: NSApplication
-        ) -> NSApplication.TerminateReply {
-            QuitHoldLog.noteTerminationReachedDelegate()
-            return .terminateNow
-        }
-    #endif
-
     func prepareForLocalReset() async {
         let runningLoop = loopTask
         loopTask?.cancel()
