@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "ESNext",
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "node",
+    "noEmit": true,
+    "lib": ["ES2015", "DOM"]
+  },
+  "include": ["src", "remotion.config.ts", "render.mjs"]
+}

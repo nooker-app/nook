@@ -1,0 +1,24 @@
+{
+  "name": "nook-app-store-motion",
+  "private": true,
+  "version": "1.0.0",
+  "description": "App Store creative assets for Nook, rendered as video",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.400",
+    "@remotion/cli": "4.0.400",
+    "@remotion/renderer": "^4.0.400",
+    "@remotion/transitions": "^4.0.400",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.400"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.6.3"
+  }
+}

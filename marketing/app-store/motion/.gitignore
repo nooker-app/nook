@@ -1,0 +1,5 @@
+node_modules/
+# Captures are copied in from ../captures at render time; the originals are what is
+# committed, not a second copy of them.
+public/
+out/
