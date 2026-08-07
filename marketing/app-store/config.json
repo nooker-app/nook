@@ -363,5 +363,277 @@
         }
       }
     ]
+  },
+  "creative": {
+    "header": {
+      "width": 3840,
+      "height": 1646,
+      "safeArea": {
+        "x": 1098,
+        "y": 494,
+        "width": 1645,
+        "height": 659
+      }
+    },
+    "searchResult": {
+      "width": 3840,
+      "height": 2560,
+      "safeArea": {
+        "x": 836,
+        "y": 766,
+        "width": 2167,
+        "height": 1029
+      }
+    },
+    "assets": [
+      {
+        "id": "product-page-header",
+        "kind": "header",
+        "platform": "ios",
+        "source": "marketing/app-store/captures/ko/iphone-6.9/03-reader.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/03-reader.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/03-reader.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/03-reader.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/03-reader.png"
+        },
+        "crop": {
+          "x": 0.0,
+          "y": 0.095,
+          "width": 1.0,
+          "height": 0.368
+        },
+        "localized": {
+          "ko": {
+            "title": "고른 글만 남습니다",
+            "subtitle": "광고도 알고리즘도 없는 네이티브 리더."
+          },
+          "en": {
+            "title": "The reading you chose",
+            "subtitle": "A native reader with no ads and no algorithm."
+          },
+          "ja": {
+            "title": "選んだ記事だけが残る",
+            "subtitle": "広告もアルゴリズムもないネイティブリーダー。"
+          },
+          "zh-Hans": {
+            "title": "只留下你选择的阅读",
+            "subtitle": "没有广告与算法的原生阅读器。"
+          }
+        },
+        "localizedCrops": {
+          "ko": {
+            "x": 0.0,
+            "y": 0.095,
+            "width": 1.0,
+            "height": 0.368
+          },
+          "en": {
+            "x": 0.0,
+            "y": 0.395,
+            "width": 1.0,
+            "height": 0.368
+          },
+          "ja": {
+            "x": 0.0,
+            "y": 0.1,
+            "width": 1.0,
+            "height": 0.368
+          },
+          "zh-Hans": {
+            "x": 0.0,
+            "y": 0.255,
+            "width": 1.0,
+            "height": 0.368
+          }
+        }
+      },
+      {
+        "id": "product-page-header",
+        "kind": "header",
+        "platform": "ipados",
+        "source": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
+          "en": "marketing/app-store/captures/en/ipad-13/03-reader.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/03-reader.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/03-reader.png"
+        },
+        "crop": {
+          "x": 0.281,
+          "y": 0.055,
+          "width": 0.719,
+          "height": 0.431
+        },
+        "localized": {
+          "ko": {
+            "title": "고른 글만 남습니다",
+            "subtitle": "목록과 본문을 한 화면에서."
+          },
+          "en": {
+            "title": "The reading you chose",
+            "subtitle": "The list and the article, side by side."
+          },
+          "ja": {
+            "title": "選んだ記事だけが残る",
+            "subtitle": "一覧と本文をひとつの画面で。"
+          },
+          "zh-Hans": {
+            "title": "只留下你选择的阅读",
+            "subtitle": "列表与正文，同屏并览。"
+          }
+        }
+      },
+      {
+        "id": "search-result",
+        "kind": "searchResult",
+        "platform": "ios",
+        "source": "marketing/app-store/captures/ko/iphone-6.9/02-articles.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/02-articles.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/02-articles.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/02-articles.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/02-articles.png"
+        },
+        "crop": {
+          "x": 0.0,
+          "y": 0.13,
+          "width": 1.0,
+          "height": 0.23
+        },
+        "secondarySource": "marketing/app-store/captures/ko/iphone-6.9/03-reader.png",
+        "localizedSecondarySources": {
+          "ko": "marketing/app-store/captures/ko/iphone-6.9/03-reader.png",
+          "en": "marketing/app-store/captures/en/iphone-6.9/03-reader.png",
+          "ja": "marketing/app-store/captures/ja/iphone-6.9/03-reader.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/iphone-6.9/03-reader.png"
+        },
+        "secondaryCrop": {
+          "x": 0.0,
+          "y": 0.095,
+          "width": 1.0,
+          "height": 0.23
+        },
+        "localized": {
+          "ko": {
+            "title": "RSS 리더",
+            "subtitle": "구독한 글을 광고도 알고리즘도 없이 읽습니다."
+          },
+          "en": {
+            "title": "An RSS reader",
+            "subtitle": "Read the feeds you subscribe to. No ads, no algorithm."
+          },
+          "ja": {
+            "title": "RSSリーダー",
+            "subtitle": "購読した記事を、広告もアルゴリズムもなしで読む。"
+          },
+          "zh-Hans": {
+            "title": "RSS 阅读器",
+            "subtitle": "阅读你订阅的内容，没有广告与算法。"
+          }
+        },
+        "localizedSecondaryCrops": {
+          "ko": {
+            "x": 0.0,
+            "y": 0.095,
+            "width": 1.0,
+            "height": 0.23
+          },
+          "en": {
+            "x": 0.0,
+            "y": 0.395,
+            "width": 1.0,
+            "height": 0.23
+          },
+          "ja": {
+            "x": 0.0,
+            "y": 0.1,
+            "width": 1.0,
+            "height": 0.23
+          },
+          "zh-Hans": {
+            "x": 0.0,
+            "y": 0.255,
+            "width": 1.0,
+            "height": 0.23
+          }
+        },
+        "localizedCrops": {
+          "ko": {
+            "x": 0.0,
+            "y": 0.152,
+            "width": 1.0,
+            "height": 0.23
+          },
+          "en": {
+            "x": 0.0,
+            "y": 0.138,
+            "width": 1.0,
+            "height": 0.23
+          },
+          "ja": {
+            "x": 0.0,
+            "y": 0.175,
+            "width": 1.0,
+            "height": 0.23
+          },
+          "zh-Hans": {
+            "x": 0.0,
+            "y": 0.145,
+            "width": 1.0,
+            "height": 0.23
+          }
+        }
+      },
+      {
+        "id": "search-result",
+        "kind": "searchResult",
+        "platform": "ipados",
+        "source": "marketing/app-store/captures/ko/ipad-13/02-articles.png",
+        "localizedSources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/02-articles.png",
+          "en": "marketing/app-store/captures/en/ipad-13/02-articles.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/02-articles.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/02-articles.png"
+        },
+        "crop": {
+          "x": 0.281,
+          "y": 0.055,
+          "width": 0.719,
+          "height": 0.27
+        },
+        "secondarySource": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
+        "localizedSecondarySources": {
+          "ko": "marketing/app-store/captures/ko/ipad-13/03-reader.png",
+          "en": "marketing/app-store/captures/en/ipad-13/03-reader.png",
+          "ja": "marketing/app-store/captures/ja/ipad-13/03-reader.png",
+          "zh-Hans": "marketing/app-store/captures/zh-Hans/ipad-13/03-reader.png"
+        },
+        "secondaryCrop": {
+          "x": 0.546,
+          "y": 0.09,
+          "width": 0.454,
+          "height": 0.17
+        },
+        "localized": {
+          "ko": {
+            "title": "RSS 리더",
+            "subtitle": "구독한 글을 광고도 알고리즘도 없이 읽습니다."
+          },
+          "en": {
+            "title": "An RSS reader",
+            "subtitle": "Read the feeds you subscribe to. No ads, no algorithm."
+          },
+          "ja": {
+            "title": "RSSリーダー",
+            "subtitle": "購読した記事を、広告もアルゴリズムもなしで読む。"
+          },
+          "zh-Hans": {
+            "title": "RSS 阅读器",
+            "subtitle": "阅读你订阅的内容，没有广告与算法。"
+          }
+        }
+      }
+    ]
   }
 }

@@ -33,6 +33,98 @@ Every locale gets the same platforms and the same slides.
 
 PNG files are rendered without an alpha channel, as required by App Store Connect.
 
+## Product page header and search result
+
+Two newer App Store assets, rendered by the same command into
+`output/<locale>/<platform>/`:
+
+```text
+output/ko/ios/product-page-header.png      3840 x 1646
+output/ko/ios/search-result.png            3840 x 2560
+output/ko/ipados/product-page-header.png
+output/ko/ipados/search-result.png
+```
+
+One of each per platform, because App Store Connect treats iOS and iPadOS
+separately, and one of each per locale.
+
+### The safe area is the whole design constraint
+
+Both canvases are far larger than the part that is guaranteed to be shown. The
+numbers are measured from Apple's own templates rather than guessed —
+`creative_assets-product_page_header_template-static.psd` and its search
+counterpart, whose art safe areas are marked in green:
+
+| Asset | Canvas | Art safe area | Bleed |
+| --- | --- | --- | --- |
+| Product page header | 3840 x 1646 | 1645 x 659, centred | 1098 left/right, 494 top/bottom |
+| Search result | 3840 x 2560 | 2167 x 1029, centred | 836 left/right, 766 top/bottom |
+
+Everything that has to be read — the mark, the line, the screenshot panel — is
+laid out inside that box, in its own coordinate space, and the background bleeds
+to the full canvas. The store crops the rest freely for whichever placement it is
+drawing.
+
+### What the design is doing
+
+Apple's asset best practices ask for a single clear idea, an asset built for
+someone who has never seen the app, and short text that enhances the picture
+rather than describing it. So each asset is one line, one sub-line, and one
+magnified piece of the real app.
+
+Magnified deliberately: a header is drawn small at the top of a product page, and
+a whole device screen at that size is a grey rectangle with specks in it. The
+panel shows a slice of the app large enough to read — for iPhone the reading
+view, for iPad the list and the article side by side, which is what the iPad
+version is for.
+
+The search asset follows the other half of that guidance: state the obvious,
+because somebody searching is looking for a specific thing, and show the
+firsthand experience. It names the category outright and puts two real screens
+under it.
+
+Also observed: no prices, URLs, awards or other platforms; nothing that needs a
+rating above 4+; the copy is localized for every language the app ships in.
+
+### Crops are per locale on purpose
+
+The captures are of different articles scrolled to different places — Korean and
+Japanese open on an article's title, English sits mid-paragraph, Chinese near an
+illustration — so `localizedCrops` picks a starting point per language. A shared
+crop opens one language cleanly and cuts a sentence in half in the others. The
+iPad crops start just under the toolbar instead, which is the one boundary every
+locale's capture shares.
+
+### The translation asset, when there is a capture for it
+
+The strongest thing to show is arguably the one no current capture holds: a
+foreign-language article becoming readable — the list translating a title in
+place, or the reader streaming a translation in. Nothing here fabricates UI, so
+that asset is not rendered yet.
+
+What it needs is one capture per locale of a *foreign* feed being read: an English
+article in a Korean-language device with list-title translation on, and the reader
+part-way through a translation. The existing sets cannot show it because each
+locale was captured from feeds in its own language — the Korean set from Korean
+bundles, the Japanese set from `gihyo.jp`.
+
+```sh
+# Subscribe to a feed in another language first, turn on list-title translation,
+# then capture the list and the reader mid-translation.
+make app-store-capture LOCALE=ko NAME=06-translate-list
+make app-store-capture LOCALE=ko NAME=07-translate-reader
+```
+
+Then add an asset to `creative.assets` in `config.json` pointing at them. Suggested
+copy, in the same shape as the rest:
+
+| Locale | Title | Subtitle |
+| --- | --- | --- |
+| ko | 영어로 쓰인 글도, 한국어로 | 목록에서 제목부터, 본문은 읽는 동안 번역됩니다. |
+| en | Read it in your language | Titles in the list, the article as you read it. |
+| ja | 英語の記事も、日本語で | 一覧では見出しから、本文は読みながら翻訳。 |
+| zh-Hans | 英文文章，也能用中文读 | 列表先译标题，正文边读边译。 |
+
 ## Capture from Simulator
 
 Prepare the desired screen in a booted simulator, then capture its native pixels:
