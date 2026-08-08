@@ -30,17 +30,14 @@ const serveUrl = await bundle({
 });
 
 const compositions = [
-  ...['ios', 'ipados'].map((platform) => ({
-    id: `header-${platform}`,
-    out: join(marketing, 'output', 'creative', 'shared', platform, 'product-page-header.mp4'),
-  })),
-  ...['ios', 'ipados'].flatMap((platform) =>
-    locales.map((locale) => ({
-      id: `search-${platform}-${locale}`,
-      out: join(marketing, 'output', 'creative', locale, platform, 'search-result.mp4'),
-    }))
-  ),
-  // The illustrated search-results video, in every language the listing ships.
+  // The product page header. One file, not one per platform: iOS and iPadOS take the same 3840x1646
+  // asset, and the two used to differ only in a spread constant belonging to a header composition that
+  // no longer exists.
+  {
+    id: 'concept-bird',
+    out: join(marketing, 'output', 'creative', 'shared', 'product-page-header.mp4'),
+  },
+  // The search-results video, in every language the listing ships.
   ...['ko', 'en', 'ja', 'zh-Hans'].map((locale) => ({
     id: `search-illustration-${locale}`,
     out: join(marketing, 'output', 'creative', locale, 'search-result.mp4'),
