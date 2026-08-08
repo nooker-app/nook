@@ -2,6 +2,7 @@ import React from 'react';
 import {Composition} from 'remotion';
 import {ConceptBird} from './ConceptBird';
 import {SearchStory} from './SearchStory';
+import {SearchIllustration} from './SearchIllustration';
 import {CANVAS} from './theme';
 
 /// The two App Store creative assets, and nothing else.
@@ -14,6 +15,8 @@ import {CANVAS} from './theme';
 /// What ships:
 ///   concept-bird         the product page header, 3840x1646, a six-second loop
 ///   search-story-{ko,en} the search results video, 3840x2560, thirty seconds
+///   search-illustration-{ko,en}  a second draft of the same slot, drawn rather than photographed —
+///                                kept alongside so the two can be compared before one is chosen
 const FPS = 30;
 
 /// The header autoplays and repeats, so every motion in it is periodic over six seconds and frame 179
@@ -44,6 +47,18 @@ export const RemotionRoot: React.FC = () => {
           key={`search-story-${locale}`}
           id={`search-story-${locale}`}
           component={SearchStory}
+          durationInFrames={SEARCH_FRAMES}
+          fps={FPS}
+          width={CANVAS.search.width}
+          height={CANVAS.search.height}
+          defaultProps={{locale, guides: false}}
+        />
+      ))}
+      {(['ko', 'en'] as const).map((locale) => (
+        <Composition
+          key={`search-illustration-${locale}`}
+          id={`search-illustration-${locale}`}
+          component={SearchIllustration}
           durationInFrames={SEARCH_FRAMES}
           fps={FPS}
           width={CANVAS.search.width}

@@ -226,7 +226,12 @@ const BEATS: Beat[] = [
     render: (t) => (
       <>
         <Heading title="주소만 붙여넣으면 됩니다" sub="사이트 주소 하나로 피드를 찾아냅니다." t={t} />
-        <Panel src="shots/ko__iphone-6.9__06-add-feed.png" srcW={CAPW} x={PANEL_X} y={PANEL_TOP} w={PANEL_W} h={PANEL_H} from={120} t={t} />
+        {/* A simulator recording, not a still: the claim is a SEQUENCE — sheet, paste, discover — and
+            three stills implying it is weaker than eight seconds showing it. Recorded through idb at
+            1320x2868, which is the captures' own size, so the beat sits in the same world as the rest.
+            The address is PASTED rather than typed, because that is what the line says and because
+            `idb ui text` types Korean jamo when the simulator keyboard is in Hangul mode. */}
+        <Panel src="video/05-add-feed-sim.mp4" video srcW={CAPW} x={PANEL_X} y={PANEL_TOP} w={PANEL_W} h={PANEL_H} from={120} t={t} />
       </>
     ),
   },
