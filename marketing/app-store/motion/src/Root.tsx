@@ -54,7 +54,9 @@ export const RemotionRoot: React.FC = () => {
           defaultProps={{locale, guides: false}}
         />
       ))}
-      {(['ko', 'en'] as const).map((locale) => (
+      {/* The illustrated asset ships in every language the listing does; the screenshot cut still only
+          has Korean captures, which is why the two lists differ. */}
+      {(['ko', 'en', 'ja', 'zh-Hans'] as const).map((locale) => (
         <Composition
           key={`search-illustration-${locale}`}
           id={`search-illustration-${locale}`}

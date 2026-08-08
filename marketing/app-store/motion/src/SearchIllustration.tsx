@@ -63,13 +63,107 @@ const TAU = Math.PI * 2;
 /// `foreign` is what the card carries on its way in; `mine` is what it carries once it has crossed the
 /// middle. They are the same length on purpose, so the card does not resize as it turns — a card that
 /// grew would read as a different card rather than the same one, translated.
-const CARDS = [
-  {source: '慢水', foreign: ['流れの遅い川ほど', '深く削る'], mine: ['느린 강일수록', '깊게 깎는다'], tint: CREAM},
-  {source: 'NORDLYS', foreign: ['Light in the', 'long winter'], mine: ['긴 겨울의', '빛'], tint: GOLD},
-  {source: 'Papier', foreign: ['La marge', 'comme une pièce'], mine: ['여백이라는', '방 하나'], tint: CREAM},
-  {source: '边注', foreign: ['读得慢一点', '记得久一点'], mine: ['천천히 읽으면', '오래 남는다'], tint: SAGE},
-  {source: 'Field Notes', foreign: ['On keeping a', 'reading table'], mine: ['읽을 것을 두는', '탁자에 대하여'], tint: CREAM},
-] as const;
+/// SIX cards, of which any one build shows five.
+///
+/// Each card is written in its own language and carries the same headline in every language the
+/// listing ships. A build then drops the card whose SOURCE language is the reader's — a Japanese
+/// reader must not be shown a Japanese card as the thing being translated, which is the one way this
+/// scene can state its claim backwards. Six sources for four locales means every build still has five.
+///
+/// The mastheads are invented. A real one in a store asset is a trademark and an implied endorsement,
+/// and invented independent titles read as the kind of writing this app is for.
+type Lang = 'ko' | 'en' | 'ja' | 'zh-Hans';
+type PoolCard = {
+  source: string;
+  /// The language the piece was written in.
+  src: Lang | 'no' | 'fr';
+  /// Two lines per language. Two because the card is a fixed rectangle and a headline that reflows
+  /// would change the card's shape mid-translation, which is the one thing the streaming must not do.
+  lines: Record<string, [string, string]>;
+  tint: string;
+};
+
+const POOL: PoolCard[] = [
+  {
+    source: '慢水',
+    src: 'ja',
+    tint: CREAM,
+    lines: {
+      ja: ['流れの遅い川ほど', '深く削る'],
+      ko: ['느린 강일수록', '깊게 깎는다'],
+      en: ['Slow water', 'cuts deepest'],
+      'zh-Hans': ['水流越慢', '切得越深'],
+    },
+  },
+  {
+    source: 'NORDLYS',
+    src: 'no',
+    tint: GOLD,
+    lines: {
+      no: ['Lys i den', 'lange vinteren'],
+      ko: ['긴 겨울의', '빛'],
+      en: ['Light in the', 'long winter'],
+      ja: ['長い冬の', '光'],
+      'zh-Hans': ['漫长冬日', '的光'],
+    },
+  },
+  {
+    source: 'Papier & Encre',
+    src: 'fr',
+    tint: CREAM,
+    lines: {
+      fr: ['La marge', 'comme une pièce'],
+      ko: ['여백이라는', '방 하나'],
+      en: ['The margin', 'as a room'],
+      ja: ['余白という', '部屋'],
+      'zh-Hans': ['留白', '如一间房'],
+    },
+  },
+  {
+    source: '边注',
+    src: 'zh-Hans',
+    tint: SAGE,
+    lines: {
+      'zh-Hans': ['读得慢一点', '记得久一点'],
+      ko: ['천천히 읽으면', '오래 남는다'],
+      en: ['Read slower,', 'remember longer'],
+      ja: ['ゆっくり読めば', '長く残る'],
+    },
+  },
+  {
+    source: 'Field Notes',
+    src: 'en',
+    tint: CREAM,
+    lines: {
+      en: ['On keeping a', 'reading table'],
+      ko: ['읽을 것을 두는', '탁자에 대하여'],
+      ja: ['読む物を置く', '机について'],
+      'zh-Hans': ['关于一张', '读书桌'],
+    },
+  },
+  {
+    source: '우물',
+    src: 'ko',
+    tint: GOLD,
+    lines: {
+      ko: ['깊은 우물은', '대답이 늦다'],
+      en: ['A deep well', 'answers late'],
+      ja: ['深い井戸は', '答えが遅い'],
+      'zh-Hans': ['深井', '回答得慢'],
+    },
+  },
+];
+
+/// The five this build shows, and the two texts each one needs.
+const deckFor = (locale: Lang) =>
+  POOL.filter((c) => c.src !== locale)
+    .slice(0, 5)
+    .map((c) => ({
+      source: c.source,
+      tint: c.tint,
+      foreign: c.lines[c.src],
+      mine: c.lines[locale],
+    }));
 
 /// Cards SPIRAL IN. The first draft put each on a fixed circle, and five things going round a point
 /// read as drifting rather than as gathering — which is the opposite of what this app does. Now the
@@ -121,25 +215,73 @@ const smoothstep = (edge0: number, edge1: number, v: number) => {
   return t * t * (3 - 2 * t);
 };
 
-const Card: React.FC<{index: number; u: number}> = ({index, u}) => {
-  const card = CARDS[index];
+/// Where a card stops being in front of the nest and starts being inside it. 0.62 rather than the 0.66
+/// the landing used to start at, so the card is settled over the opening for a moment before it sinks.
+const SWAP = 0.62;
+
+/// The parent needs each card's phase to decide which layer to draw it in, and it has to be the SAME
+/// number the card computes for itself or the two would disagree by a frame.
+const DECK_N = 5;
+export const cardPhase = (index: number, u: number) => (u + index / DECK_N) % 1;
+
+type DeckCard = ReturnType<typeof deckFor>[number];
+
+const Card: React.FC<{index: number; u: number; card: DeckCard}> = ({index, u, card}) => {
   // Staggered so one is always arriving and one always leaving.
-  const phase = index / CARDS.length;
+  const phase = index / DECK_N;
   const a = (u + phase) % 1;
   const theta = (SPIRAL.start + a * SPIRAL.turns) * TAU;
   // Radius falls fast at first and slows into the nest, which is how a thing being drawn in moves —
   // a linear fall reads as a machine feeding parts.
   const r = SPIRAL.rFar + (SPIRAL.rNear - SPIRAL.rFar) * (1 - Math.pow(1 - a, 2));
-  const x = NEST.x + Math.cos(theta) * r + ((index * 137) % 180) - 90;
-  // THE LANDING. The spiral ends at r = 300, which is inside the opening, not behind anything — so
-  // without this a card spent the last fifth of its life sitting in plain view in the middle of the
-  // hollow going transparent, which reads as a rendering fault rather than as a card being gathered.
-  // `sink` drops it 300px over the last quarter turn, straight down past the near rim, so the near
-  // wall cuts it and the fade finishes on something that is already mostly behind wood.
-  const sink = smoothstep(0.72, 1, a) * 300;
-  const yRaw = NEST.y + Math.sin(theta) * r * SPIRAL.squash - 140 + sink;
-  // Smaller as it comes, and gone as it reaches the weave. Both ends are off-frame or behind wood.
-  const scale = 1.05 - a * 0.45 - smoothstep(0.7, 1, a) * 0.12;
+  const xSpiral = NEST.x + Math.cos(theta) * r + ((index * 137) % 180) - 90;
+  const ySpiral = NEST.y + Math.sin(theta) * r * SPIRAL.squash - 140;
+
+  // THE HOVER, and it exists to hide a layer change.
+  //
+  // Cards used to be drawn in ONE place — between NestBack and NestFront — for their whole path, so a
+  // card was behind the near wall from the moment it entered the nest's silhouette. Measured on the
+  // render: the green card held 7062, 6786, 6468, 6151, 5834 visible pixels on frames 300-320, losing
+  // about 5% a frame, and then 0 on frame 325. A hard cut, at an opacity of 0.65 — it was not fading
+  // out, it was being clipped by wood it was supposed to still be in front of.
+  //
+  // Splitting the cards into two layers fixes the clipping and introduces a worse problem: the swap
+  // itself pops, because a card that is behind the near wall one frame and in front of it the next
+  // changes shape instantly.
+  //
+  // So the trajectory does the work. Every card is steered to a HOVER POINT directly over the opening
+  // before it descends, and the swap happens there. Over the opening the near wall is not between the
+  // card and the viewer — the hollow is — so moving the card from the front layer to the middle one
+  // changes not one pixel. The measured opening is centred (1965, 1804) with ry 210, so its lower arc
+  // is at y 2014 on the centre column; the hover sits at 1660 with a half-height of 146, i.e. a bottom
+  // edge at 1806, clear of that arc by 208px. The swap is invisible by construction rather than by
+  // being fast.
+  const HOVER = {x: 1965 + (((index * 211) % 320) - 160), y: 1660};
+
+  // THE LANDING — a card LIES DOWN INTO the bowl instead of dropping behind it.
+  //
+  // The previous version pushed the card 300px straight down over the last quarter turn and faded it
+  // out. Two things were wrong with that and they compound: straight down from a spiral that ends at
+  // r=300 takes the card out through the NEAR WALL rather than into the opening, so it read as passing
+  // behind the nest; and it stayed a square upright rectangle the whole way, so nothing about it said
+  // "settling into something". Together they made the disappearance abrupt.
+  //
+  // Now the last third steers to a point inside the measured opening — world (1965, 1804), rx 870,
+  // ry 210, computed from HOLE through the fit transform rather than eyeballed — and 180px below its
+  // centre, which is where the near wall's top boundary starts covering things. On the way the card
+  // foreshortens to 0.3 of its height, which is what a flat card does as it goes from facing you to
+  // lying in a bowl, and it turns a few degrees so it does not land square to the frame.
+  const land = smoothstep(SWAP, 1, a);
+  const LAND = {x: HOVER.x, y: 1984};
+  // Two blends that meet exactly at the hover, so position is continuous across the layer change: the
+  // spiral is steered into HOVER over the approach, then HOVER is carried down into the bowl.
+  const gather = smoothstep(0.4, SWAP, a);
+  const x = a < SWAP ? xSpiral + (HOVER.x - xSpiral) * gather : HOVER.x + (LAND.x - HOVER.x) * land;
+  const yRaw =
+    a < SWAP ? ySpiral + (HOVER.y - ySpiral) * gather : HOVER.y + (LAND.y - HOVER.y) * land;
+  const scale = 1.05 - a * 0.45;
+  // Foreshortening, applied to Y only — the card keeps its width as it tips away from the viewer.
+  const lie = 1 - land * 0.7;
 
   // Clear the type. `hx` is 1 while the card shares columns with the type block and falls to 0 over
   // 420px either side, so the push arrives and leaves gradually.
@@ -150,21 +292,47 @@ const Card: React.FC<{index: number; u: number}> = ({index, u}) => {
     (1 - smoothstep(TYPE.x1 + halfW, TYPE.x1 + halfW + 420, x));
   const clearY = TYPE.y1 + 90 + halfH;
   const y = yRaw + hx * Math.max(0, clearY - yRaw);
-  const alpha = Math.min(clamp01(a / 0.06), clamp01((0.94 - a) / 0.08));
+  // The fade is a safety net, not the mechanism: by the time it starts the card is already three
+  // quarters behind the near wall. Fading earlier is what made the old landing look like a bug.
+  const alpha = Math.min(clamp01(a / 0.06), clamp01((1.0 - a) / 0.06));
 
   // The turn happens as the card crosses the middle third of its way round, over about a fifth of the
   // loop — long enough to be seen, short enough that most of the time a card is one language or the
   // other rather than mid-morph.
+  // THE TRANSLATION, STREAMED — the way the app actually does it, rather than a card flipping over.
+  //
+  // The flip was a graphic idea with nothing behind it. The screen recording of the real feature shows
+  // something better and more specific: the source paragraph DIMS, a block caret appears at its head,
+  // and the translation writes in over about a second, one paragraph at a time with the next starting
+  // before the last has settled. That is a thing only this app does, so drawing what it does is worth
+  // more than drawing a transition.
+  //
+  // `turn` runs over 0.16 of the loop — 144 frames, 4.8s — which is close to the 4s per paragraph
+  // measured off the recording. The two lines are staggered by 0.18 of that so the second is still
+  // going when the first finishes.
   const turn = clamp01((a - 0.42) / 0.16);
-  const lines = turn > 0.5 ? card.mine : card.foreign;
-  // A single flip of the plane, so the change reads as the card turning over rather than as a
-  // dissolve. scaleX passes through zero exactly at the swap.
-  const flip = Math.cos(turn * Math.PI);
-  const tilt = Math.sin(theta * 2 + index) * 7;
+  /// Per line: dim the source, then write the translation in. The windows are SEQUENTIAL — line 1 does
+  /// not start until line 0 is done — because overlapping them put two carets on one card at once,
+  /// which no editor and no translator has ever done.
+  const SPAN = 0.46;
+  const lineState = (i: number) => {
+    const p = clamp01((turn - i * 0.5) / SPAN);
+    return {
+      /// The source, fading out just before its replacement starts.
+      fade: 1 - smoothstep(0, 0.3, p),
+      /// How much of the translation has been written.
+      chars: Math.round(card.mine[i].length * smoothstep(0.3, 1, p)),
+      /// The caret rides the end of this line only while this line is the one being written.
+      writing: p > 0.26 && p < 0.995,
+      p,
+    };
+  };
+  // A few degrees of settle, so it lands askew among the others rather than square.
+  const tilt = Math.sin(theta * 2 + index) * 7 + land * (index % 2 === 0 ? 13 : -11);
 
   return (
     <g
-      transform={`translate(${x} ${y}) rotate(${tilt}) scale(${scale * (Math.abs(flip) * 0.35 + 0.65)} ${scale})`}
+      transform={`translate(${x} ${y}) rotate(${tilt}) scale(${scale} ${scale * lie})`}
       opacity={alpha}
     >
       <rect x={-300} y={-190} width={600} height={380} rx={34} fill={card.tint} />
@@ -172,13 +340,33 @@ const Card: React.FC<{index: number; u: number}> = ({index, u}) => {
       <text x={-244} y={-110} fontFamily={UI} fontSize={40} fontWeight={700} fill={CLAY} letterSpacing={2}>
         {card.source}
       </text>
-      {lines.map((line, i) => (
-        <text key={i} x={-244} y={-20 + i * 78} fontFamily={UI} fontSize={62} fontWeight={700} fill={INK}>
-          {line}
-        </text>
-      ))}
-      {/* The sparkle the app puts beside a translated title. It arrives with the language. */}
-      {turn > 0.5 ? (
+      {card.mine.map((_, i) => {
+        const st = lineState(i);
+        const y0 = -20 + i * 78;
+        const written = card.mine[i].slice(0, st.chars);
+        return (
+          <g key={i}>
+            {/* The source line, still there and dimming — it is not removed until the translation has
+                started over it, which is what stops the card looking momentarily empty. */}
+            {st.fade > 0.01 ? (
+              <text x={-244} y={y0} fontFamily={UI} fontSize={62} fontWeight={700} fill={INK} opacity={st.fade}>
+                {card.foreign[i]}
+              </text>
+            ) : null}
+            {/* The caret is a TSPAN inside the same text element, not a rect at a computed x.
+                Positioning it by `written.length * anAdvanceIGuessed` put it on top of the last glyph:
+                Hangul at 62px bold advances about 62px, not the 34 that was assumed, and the error
+                grew with every character. Letting the text engine place it is exact by construction and
+                stays exact if the copy or the face ever changes. */}
+            <text x={-244} y={y0} fontFamily={UI} fontSize={62} fontWeight={700} fill={INK}>
+              {written}
+              {st.writing ? <tspan fill={CLAY}>▌</tspan> : null}
+            </text>
+          </g>
+        );
+      })}
+      {/* The sparkle the app puts beside a translated title, once the whole card is through. */}
+      {lineState(card.mine.length - 1).p >= 0.995 ? (
         <g transform="translate(228 -128)" fill={CLAY}>
           <path d="M0 -30 L8 -8 L30 0 L8 8 L0 30 L-8 8 L-30 0 L-8 -8 Z" />
         </g>
@@ -666,6 +854,13 @@ const NestBack: React.FC = () => (
     <Marks set={farRim} />
     <path d={HOLE_PATH} fill={INK} />
     <Marks set={inner} />
+    {/* The three sticks that SPAN the opening live here, before the cards, and not with the near wall
+        where they started. They are the only marks that cross the hollow, so while they were drawn in
+        front every card went behind all three the instant it reached its hover — the last remaining
+        "cards suddenly hide" fault, and the one the near-wall geometry could not explain because these
+        sticks are nowhere near the near wall. Everything still in NestFront lives BELOW the hollow's
+        lower arc, so a card above that arc is now occluded by nothing at all. */}
+    <Marks set={bridges} />
   </g>
 );
 
@@ -679,24 +874,62 @@ const NestFront: React.FC = () => (
         is never nibbled by a mark that happens to land on it. */}
     <path d={BODY_PATH} fill="none" stroke={INK} strokeWidth={EDGE} />
     <Marks set={breakers} />
-    <Marks set={bridges} />
   </g>
 );
 
 /* ------------------------------------------------------------------ the piece */
 
+/// THE HEADLINE, in the four languages the listing ships.
+///
+/// The Korean was briefed as "어떤 언어로 쓰였든, 당신이 읽고 싶은 언어로" and two edits earn their keep.
+/// 당신 is dropped: this product's own voice never addresses the reader that way — the onboarding says
+/// "좋아하는 사이트를 구독하면 새 글이 자동으로 이곳에 모여요" and the config's headline is "피드는 내가
+/// 고릅니다" — and a compulsory subject is the clearest tell of copy translated out of English. The
+/// 쓰다/읽다 pair either side of the comma is kept, because it IS the line: written in one language,
+/// read in another, the feature stated without being named. Ending on the particle 로 is deliberate;
+/// in a headline that reads as confident, where the same thing at a mid-sentence line break would read
+/// as severed.
+///
+/// The English is left as it was. It was already doing the same work in its own idiom, and rewriting
+/// it to mirror the Korean's structure would have made it a translation of a translation.
+///
+/// The subtitle names the SCOPE, not the mechanism. It used to say "Apple Intelligence가 제목부터
+/// 본문까지 옮깁니다" and that was worse for five reasons, none of them about taste: it hands the credit
+/// for the product's own headline to somebody else's brand one line later; it puts a third-party
+/// trademark in our creative, which has usage rules worth not stepping on; Apple Intelligence is
+/// device- and region-limited, so it promises something a listing cannot guarantee to the person
+/// reading it; it breaks if the translation backend ever changes; and a run of Latin letters through
+/// the middle of a Korean, Japanese or Chinese line wrecks the texture of the setting.
+///
+/// What survives is the part a competitor cannot print: the title AND the body, whole. That is what
+/// separates this from a browser's page translation and from a summary.
 const COPY = {
-  ko: {title: ['어느 나라 말이든,', '내 말로 도착합니다'], sub: '읽고 싶은 사이트만 골라서, 광고 없이.'},
-  en: {title: ['Every language', 'arrives as yours'], sub: 'Only the sites you chose. No ads, no algorithm.'},
+  ko: {
+    title: ['어떤 언어로 쓰였든,', '읽고 싶은 언어로'],
+    sub: '제목부터 본문까지, 통째로 옮깁니다.',
+  },
+  en: {
+    title: ['Every language', 'arrives as yours'],
+    sub: 'Titles and bodies, translated in place.',
+  },
+  ja: {
+    title: ['どの言語で書かれていても、', '読みたい言語で'],
+    sub: 'タイトルから本文まで、まるごと訳します。',
+  },
+  'zh-Hans': {
+    title: ['无论用哪种语言写成，', '都以你想读的语言呈现'],
+    sub: '从标题到正文，整篇翻译。',
+  },
 } as const;
 
-export const SearchIllustration: React.FC<{locale: keyof typeof COPY; guides?: boolean}> = ({
+export const SearchIllustration: React.FC<{locale: Lang; guides?: boolean}> = ({
   locale,
   guides = false,
 }) => {
   const frame = useCurrentFrame();
   const u = frame / TOTAL;
   const copy = COPY[locale];
+  const deck = React.useMemo(() => deckFor(locale), [locale]);
 
   return (
     <AbsoluteFill style={{background: FIELD}}>
@@ -714,9 +947,19 @@ export const SearchIllustration: React.FC<{locale: keyof typeof COPY; guides?: b
             it stays in front. Past 0.42 the radius is under ~1150px and the card is inside the bowl's
             footprint, which is where being swallowed is the correct reading. */}
         <NestBack />
-        {CARDS.map((_, i) => ((u + i / CARDS.length) % 1 > 0.42 ? <Card key={i} index={i} u={u} /> : null))}
+        {/* Cards that have reached the hover and are sinking: behind the near wall, so the nest closes
+            over them. */}
+        {/* Sinking into the bowl: behind the near wall, so the nest closes over them.
+            The threshold is SWAP and not the 0.42 this used to be. At 0.42 a card is still out at
+            r=1040 on the spiral — world (1400, 2195), BELOW the nest and at full size — so it passed
+            behind the near wall while plainly in mid-air, which is the "cards hide under the bottom of
+            the nest" fault. At SWAP every card is parked on its hover point above the opening, where
+            the near wall is not between it and the viewer, so the change of layer moves no pixels. */}
+        {deck.map((c, i) => (cardPhase(i, u) >= SWAP ? <Card key={i} index={i} u={u} card={c} /> : null))}
         <NestFront />
-        {CARDS.map((_, i) => ((u + i / CARDS.length) % 1 > 0.42 ? null : <Card key={i} index={i} u={u} />))}
+        {/* Still in the air: in front of everything, because a card crossing the nest on its way in is
+            nearer the viewer than the nest is. */}
+        {deck.map((c, i) => (cardPhase(i, u) < SWAP ? <Card key={i} index={i} u={u} card={c} /> : null))}
       </svg>
 
       {/* Straight on top of the picture, as the reference does it — no plate, no band. The field is
