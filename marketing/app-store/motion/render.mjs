@@ -18,45 +18,10 @@ const only = process.argv[2];
 //
 // `public/` is gitignored: the committed originals live in ../captures/<locale>/<device>/<name>.png
 // and are copied in here at render time rather than duplicated into the repo twice. That means
-// EVERYTHING the compositions load from staticFile() has to be staged by this block, or a clean
-// checkout renders the video with missing images and nobody finds out until they look at it.
-//
-// That is exactly what used to happen. This script staged one file per locale — the iPhone reader,
-// as public/captures/<locale>.png for the product-page header — while the search video loads 46
-// screenshots from public/shots/, which had been put there by hand. Deleting public/ and rendering
-// produced six shots of empty paper. So the whole capture tree is now mirrored, flattened, with the
-// same `<locale>__<device>__<name>.png` naming the compositions already use.
-//
-// Missing directories are skipped rather than fatal: there are no ja/mac captures (the sidebar and
-// inspector toggles are titled in English only, so a non-English run captures the overview twice),
-// and no composition asks for one.
-const shots = join(here, 'public', 'shots');
-rmSync(join(here, 'public'), {recursive: true, force: true});
-mkdirSync(join(here, 'public', 'captures'), {recursive: true});
-mkdirSync(shots, {recursive: true});
-let staged = 0;
-for (const locale of locales) {
-  const localeDir = join(marketing, 'captures', locale);
-  if (!existsSync(localeDir)) throw new Error(`no captures for locale ${locale}: ${localeDir}`);
-  for (const device of readdirSync(localeDir, {withFileTypes: true})) {
-    if (!device.isDirectory()) continue;
-    for (const file of readdirSync(join(localeDir, device.name))) {
-      if (!file.endsWith('.png')) continue;
-      cpSync(
-        join(localeDir, device.name, file),
-        join(shots, `${locale}__${device.name}__${file}`)
-      );
-      staged += 1;
-    }
-  }
-  // The product-page header and the older search compositions load one capture per locale under a
-  // shorter name. Kept as a separate copy so renaming either scheme cannot silently break the other.
-  cpSync(
-    join(localeDir, 'iphone-6.9', '03-reader.png'),
-    join(here, 'public', 'captures', `${locale}.png`)
-  );
-}
-console.log(`staged ${staged} captures into public/shots`);
+// Nothing loads from staticFile() any more: the compositions that did — the screenshot cut of the
+// search slot — are gone, and with them the block that mirrored the whole capture tree into public/.
+// If an asset ever loads an image again, stage it HERE. A clean checkout renders public/ empty, and
+// the failure is a video with missing pictures that nobody notices until they watch it.
 
 console.log('bundling…');
 const serveUrl = await bundle({
@@ -75,12 +40,10 @@ const compositions = [
       out: join(marketing, 'output', 'creative', locale, platform, 'search-result.mp4'),
     }))
   ),
-  // The search-results video built from the real captures. Only the two locales whose copy is
-  // written exist as compositions; ja and zh-Hans have neither approved lines nor (for ja) any Mac
-  // capture at all, so they are not rendered rather than rendered wrong.
-  ...['en', 'ko'].map((locale) => ({
-    id: `search-story-${locale}`,
-    out: join(marketing, 'output', 'creative', locale, 'search-result-story.mp4'),
+  // The illustrated search-results video, in every language the listing ships.
+  ...['ko', 'en', 'ja', 'zh-Hans'].map((locale) => ({
+    id: `search-illustration-${locale}`,
+    out: join(marketing, 'output', 'creative', locale, 'search-result.mp4'),
   })),
 ];
 

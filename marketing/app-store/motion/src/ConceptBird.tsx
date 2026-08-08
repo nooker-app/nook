@@ -310,6 +310,113 @@ const BOUGH_GEOM = buildTwig({
 });
 const BOUGH_XF = `translate(${BOUGH.at.x} ${BOUGH.at.y}) rotate(${BOUGH.rot}) scale(${BOUGH.scale})`;
 
+/// ------------------------------------------------------------------ THE TRUNK
+///
+/// WHY THERE IS ONE, measured on the state this replaces rather than argued from taste.
+///
+///   1. The nest's own underside, rendered with the wood hidden and read off the PNG, is FLAT:
+///      world y 1082-1120 across x 2160..2700, turning up to 982 at its left tip. The wood's top
+///      edge under it ran 1007 at x 2150 down to 1163 at x 2700 on the main limb, and 1140 up to
+///      1071 on the far arm. So the two only touched over x 2300..2600 — 300px of a 703px nest,
+///      43% — and the rest of the nest hung over bare paper: a 110px void at x 2100 and a 78px
+///      void at x 2700. The nest was not sitting on the wood, it was bridging between two sticks.
+///   2. Where they did touch, the wood was 55-85px thick against a nest 327px tall — 1:5. Both
+///      members were at their thin ends there: the main limb at 87% of a needle taper.
+///   3. The two limbs' top edges PEAKED at the contact and fell 250px to the right and 160px to
+///      the left. That is a ridge, and a nest on a ridge is balanced, not seated.
+///   4. Every piece of wood in the frame travelled downwards away from the nest and left the
+///      bottom edge. There was no ink above the nest at all, so the wood had no origin, no implied
+///      mass and nowhere to have grown from.
+///
+/// (3) and (4) are the reason a shallow fork did not fix (1): both arms of a Λ are, by definition,
+/// running out of the picture, and no amount of burying the apex changes that they are falling.
+///
+/// The trunk is the answer to (4) and to half of (2): something visibly thicker and more vertical
+/// that the nest is set against, whose lower half leaves the BOTTOM of the frame (so it is going
+/// to the ground) and whose upper half leaves the TOP (so there is more tree). It stands behind
+/// the nest's right third — x 2613..2795 at the nest's floor, 2481..2603 at the safe box's ceiling
+/// — so the weave's near strands close over its near flank and the nest is wedged against it
+/// rather than perched on it.
+///
+/// SOLVED, not picked:
+///   the lean is 16.7 degrees off vertical with the crown to the LEFT, which is what walks it from
+///   x 2871 at the canvas floor to x 2378 at the ceiling: at 0 degrees it is a post, and past ~22
+///   it stops being able to clear the bird's exit ramp at waypoint 10 (2740, 630);
+///
+///   3592px long so the taper is real — `baseHalf` is `0.0255 * length` clamped at 9, so the ONLY
+///   way to a thick limb is a long one, and 3592px is what buys 187px at the canvas floor thinning
+///   to 123px at the safe ceiling. A trunk that does not visibly thin upward reads as a pipe;
+///
+///   seed 0x900b out of a swept set, chosen on a ROW scan of its own outline rather than on looks:
+///   the generator's kink can wander a 3600px limb 400px sideways (0x9004 did exactly that, and
+///   0x9003 missed the nest entirely), and 0x900b is the one whose flanks stay monotone and whose
+///   thickness falls cleanly from 187 to 91 top to bottom.
+///
+/// WHERE IT STANDS, and this was solved by rendering the alternative. Its left flank runs x 2498
+/// at the nest's crown to 2528 at the nest's floor, so it stands behind the nest's last 200px —
+/// a third of the nest's width, which sounds like a lot and is the whole point: the nest's near
+/// strands are drawn AFTER the trunk, so the weave visibly crosses it and the nest is WEDGED
+/// against the wood rather than ending beside it. Moved 70px right to give the nest its width
+/// back, the trunk lost the safe box: 191px of it survived the crop at the ceiling and none of it
+/// read as a trunk any more — just a bevel on the frame's right edge. The overlap is what buys
+/// the presence.
+/// Thicker: scale 24.75 -> 32, so the half-width goes 222.75 -> 288 and the column is 576px rather
+/// than 445. `at.x` moves right by 64.5 at the same time, which is exactly how far the LEFT flank would
+/// otherwise have crept: the flank sits against the nest's last 200px and that overlap is what wedges
+/// the nest instead of standing it beside a post. Thickening without the shift would have eaten the
+/// nest; the extra width all goes off the right edge, where it is bleed.
+const TRUNK = {at: {x: 3429.1, y: 5241.7}, rot: -98.64, scale: 32, len: 353};
+const TRUNK_GEOM = buildTwig({
+  seed: 0x9214,
+  length: TRUNK.len,
+  arch: 'bare',
+  sweep: 'stiff',
+  weight: 'stick',
+  tip: 'needle',
+  maxDepth: 0,
+  lightLocalDeg: LIGHT_WORLD_DEG - TRUNK.rot,
+  allowHighlight: false,
+});
+const TRUNK_XF = `translate(${TRUNK.at.x} ${TRUNK.at.y}) rotate(${TRUNK.rot}) scale(${TRUNK.scale})`;
+
+/// Grain on the trunk, in the trunk's own frame: `s` is the fraction of TRUNK.len from the butt,
+/// `off` the offset across its 9-unit half-thickness. The trunk's visible run is s 0.45 (the canvas
+/// floor) to 0.91 (the ceiling), so every rod lives inside that; a rod at s 0.2 would be 1500px
+/// below the frame. Two dark and four lit, none of them across the middle where the gradient
+/// already carries the round.
+/// Grain on the far limb, same argument as the trunk's. At 1:1 the re-cut limb was a smooth
+/// rubber tube — one cross-thickness ramp over a 3000px cylinder with no incident anywhere. `s`
+/// is the fraction of BOUGH2.len from its butt (which is inside the trunk), so s 0.12..0.75 is the
+/// run from just clear of the nest's fringe to the canvas's left edge.
+const LIMB_GRAIN = [
+  {seed: 0x8a1, s: 0.13, off: -4.6, len: 46, rot: 1.1, rung: 0, op: 0.3},
+  {seed: 0x8b2, s: 0.19, off: 5.4, len: 32, rot: -1.4, rung: 5, op: 0.22},
+  {seed: 0x8c3, s: 0.25, off: -1.4, len: 40, rot: 0.8, rung: 1, op: 0.2},
+  {seed: 0x8d4, s: 0.32, off: 3.0, len: 26, rot: -0.6, rung: 6, op: 0.2},
+  {seed: 0x8e5, s: 0.39, off: -6.2, len: 36, rot: 1.5, rung: 0, op: 0.28},
+  {seed: 0x8f6, s: 0.46, off: 1.0, len: 44, rot: -1.0, rung: 2, op: 0.16},
+  {seed: 0x901, s: 0.54, off: 5.8, len: 24, rot: 1.2, rung: 4, op: 0.2},
+  {seed: 0x912, s: 0.62, off: -3.2, len: 34, rot: -0.9, rung: 1, op: 0.22},
+  {seed: 0x923, s: 0.71, off: 2.2, len: 28, rot: 1.3, rung: 0, op: 0.18},
+] as const;
+
+const TRUNK_GRAIN = [
+  {seed: 0x7a1, s: 0.365, off: -5.4, len: 74, rot: 0.7, rung: 0, op: 0.3},
+  {seed: 0x7b2, s: 0.383, off: 6.1, len: 40, rot: -1.2, rung: 5, op: 0.22},
+  {seed: 0x7c3, s: 0.4, off: -1.8, len: 58, rot: 1.4, rung: 1, op: 0.2},
+  {seed: 0x7d4, s: 0.421, off: 3.4, len: 34, rot: -0.5, rung: 6, op: 0.18},
+  {seed: 0x7e5, s: 0.444, off: -6.6, len: 46, rot: 0.9, rung: 0, op: 0.26},
+  {seed: 0x7f6, s: 0.462, off: 1.2, len: 62, rot: -1.5, rung: 2, op: 0.16},
+  {seed: 0x801, s: 0.487, off: 5.2, len: 30, rot: 1.1, rung: 4, op: 0.22},
+  {seed: 0x812, s: 0.508, off: -3.6, len: 52, rot: -0.8, rung: 1, op: 0.22},
+  {seed: 0x823, s: 0.53, off: 6.8, len: 38, rot: 1.6, rung: 6, op: 0.18},
+  {seed: 0x834, s: 0.552, off: -0.9, len: 44, rot: -1.1, rung: 0, op: 0.17},
+  {seed: 0x845, s: 0.577, off: 2.6, len: 28, rot: 0.6, rung: 5, op: 0.2},
+  {seed: 0x856, s: 0.599, off: -5.8, len: 40, rot: -1.4, rung: 1, op: 0.24},
+  {seed: 0x867, s: 0.624, off: 4.4, len: 32, rot: 1.2, rung: 4, op: 0.18},
+  {seed: 0x878, s: 0.652, off: -2.8, len: 26, rot: -0.7, rung: 0, op: 0.2},
+] as const;
+
 /// THE SECOND LIMB — and it is a CROOK, which is the answer to two rejections at once.
 ///
 /// Rejection A, in the human's words: "둥지가 너무 가지 끝에 있어. 떨어질것같이 불안정해" — the nest is out
@@ -358,12 +465,52 @@ const BOUGH_XF = `translate(${BOUGH.at.x} ${BOUGH.at.y}) rotate(${BOUGH.rot}) sc
 /// to 0.92 degrees about a pivot 4000 local units away, which walks this tip 36px, and at the 1800px
 /// length tried first it cleared the edge by only 45px and would have flicked a taper on screen
 /// twice a loop.
-const BOUGH2 = {at: {x: 2100, y: 1196}, rot: 160, scale: 5.25, len: 675};
+///
+/// RE-CUT AGAINST THE TRUNK. Everything above stays true about what this arm is FOR; three things
+/// about it were wrong, and all three are measured off the render rather than argued.
+///
+///   IT WAS 52px THICK. Under a nest 327px tall that is 1:6, and it is why "a fork of two thin
+///   arms is a springy V" was the right diagnosis. `baseHalf` clamps at 9, so thickness is 0.051 x
+///   LENGTH and nothing else: 675 units at 5.25 was a deliberately thin choice. This one is 3100px
+///   long against the old 1950 and — the part that actually matters — is cut at len 353 rather than
+///   675, which is the exact point where `0.0255 * length` reaches the clamp. Below it the twig is
+///   proportionally thinner; above it the clamp holds and it gets thinner still. 353 is the fattest
+///   the generator will ever draw, and it measures 140-176px across the visible run.
+///
+///   ITS TOP EDGE MISSED THE NEST. At x 2100 the old arm's top edge was world y 1140 against a nest
+///   whose underside there is 1030 — 110px of daylight under the nest's left third, in the
+///   guaranteed view. This one runs 1050 at x 2100 and 1043 at 2160 against 1030 and 1082, so it
+///   makes contact from x ~2090 rightward instead of x ~2280. What is left is a ~60px void under
+///   the outermost 60px of fringe, where the nest's own silhouette turns up to 982 and there are
+///   19 pixels of ink in the column; wood there would be wood in front of nothing.
+///
+///   ITS BUTT WAS IN OPEN AIR UNDER THE NEST. The old butt sat inside the main limb, which made a
+///   joint but not a support — two sticks meeting is still two sticks. This butt is at world
+///   (2687, 1050), which is inside the TRUNK's silhouette (2600..2775 in that row) AND behind the
+///   nest's ink, so the arm can only be read as a limb leaving the trunk. The crotch is at x 2687,
+///   55px inside the safe box's right edge, and the safe box's floor is 1152.
+///
+/// seed 0xb108 out of a swept set, chosen on its own top-edge profile: it is the one that descends
+/// fast enough to the left to drop under the safe box's floor by x 1500 instead of running level
+/// along it, which is what turns "a plank across the landscape" back into a limb going somewhere.
+/// The butt is pushed 260 units DEEPER into the trunk than it was, and the limb carries the same
+/// half-plane clip as the near one.
+///
+/// At (2594.6, 1141.7) it sat only 226 units inside a left flank at local x 2369 — and 226 units is
+/// nothing against a limb 18 units thick with a rounded cap on it, so the end of the branch showed at
+/// the trunk's edge and the limb appeared to darken into existence as it came out. A branch does not
+/// begin; it comes from somewhere you cannot see. 500 units of cover is enough that no part of the
+/// cap can reach the flank at any point in the sway.
+///
+/// The clip is belt and braces: the limb runs left and has no business right of the trunk, but the
+/// near limb taught that a limb reappearing on the far side of a trunk is the one failure that reads
+/// as a spear rather than as wood.
+const BOUGH2 = {at: {x: 2852.4, y: 1109.0}, rot: 172.77, scale: 11.53, len: 503};
 const BOUGH2_GEOM = buildTwig({
-  seed: 0x2244,
+  seed: 0xb313,
   length: BOUGH2.len,
   arch: 'bare',
-  sweep: 'bowed',
+  sweep: 'stiff',
   weight: 'stick',
   // 'needle' for the same reason the main bough uses it: a wedge taper loses half its thickness in
   // the first third, and the part of this limb the viewer sees is all past that point.
@@ -372,6 +519,51 @@ const BOUGH2_GEOM = buildTwig({
   lightLocalDeg: LIGHT_WORLD_DEG - BOUGH2.rot,
   allowHighlight: false,
 });
+/// A FEW MORE LIMBS, so the trunk is a tree rather than a post with one arm.
+///
+/// Each butt is buried well inside the trunk — the column spans about 285 either side of its
+/// centreline, and the centreline at local y 600 / 1700 / 2200 is x 2574 / 2741 / 2817 — so no end cap
+/// can show at the flank, which is the fault the lashings had. They are drawn BEFORE the trunk and
+/// carry the same half-plane clip, so none of them can reappear on the far side.
+///
+/// They are thin: scale 5-7 against the main arm's 11.53, which is a half-width of 45-63 against 104.
+/// A secondary limb as thick as the primary is a fork, and this tree already has one.
+/// Two, not three, and both placed against the frame rather than against the trunk's own numbers.
+///
+/// The first attempt put them at local y 600 / 1700 / 2200. Rendered, only the top one existed: the
+/// middle one emerged at world (2558, 1208) and ran straight up under the nest, which covers world
+/// 2027..2730 x 787..1114, so it was behind the weave for its whole visible length; and the bottom
+/// one's butt was at world y 1627 on a 1646px canvas, so it left the frame in 19px. Placing wood by
+/// the trunk's local coordinates says nothing about whether anyone can see it.
+///
+/// These two are chosen the other way round — pick the point on screen where a limb should be, convert
+/// back, and bury the butt in the trunk at that height. High one emerges around world (2340, 560),
+/// well above the nest; low one around world (2500, 1500), below the near limb and clear of it.
+const BRANCHES = [
+  {seed: 0x3311, at: {x: 2721, y: 187}, rot: 197, scale: 6.4, len: 470, shade: 0.26, side: 'left'},
+  {seed: 0x5533, at: {x: 2992, y: 1969}, rot: 163, scale: 5.6, len: 300, shade: 0.32, side: 'left'},
+  /// One on the RIGHT, because a trunk with every limb on one side is a signpost. It leaves at -24
+  /// degrees from local (2900, 900) — buried in a column spanning 2481..3057 at that height — and runs
+  /// off the right edge, so the frame reads as a piece of a tree rather than as the whole of one.
+  {seed: 0x6644, at: {x: 2900, y: 900}, rot: -24, scale: 5.8, len: 430, shade: 0.24, side: 'right'},
+] as const;
+
+const branchGeoms = BRANCHES.map((b) => ({
+  ...b,
+  geom: buildTwig({
+    seed: b.seed,
+    length: b.len,
+    arch: 'bare',
+    sweep: 'stiff',
+    weight: 'stick',
+    tip: 'needle',
+    maxDepth: 0,
+    lightLocalDeg: LIGHT_WORLD_DEG - b.rot,
+    allowHighlight: false,
+  }),
+  xf: `translate(${b.at.x} ${b.at.y}) rotate(${b.rot}) scale(${b.scale})`,
+}));
+
 const BOUGH2_XF = `translate(${BOUGH2.at.x} ${BOUGH2.at.y}) rotate(${BOUGH2.rot}) scale(${BOUGH2.scale})`;
 
 /// The bough's REAL top edge, by column, read off its own outline.
@@ -431,6 +623,9 @@ const bough2TopAt = envelopeTop(BOUGH2_GEOM.body, BOUGH2.at, BOUGH2.rot, BOUGH2.
 /// has to SIT ON the wood — the lashings — because after the crook went in, the wood under the
 /// nest's left half is the far arm and not the main limb, and a lashing anchored to the main limb
 /// alone floated in the paper there.
+/// The TRUNK is deliberately NOT in here. It is a near-vertical column, so its "top edge by
+/// column" is its needle tip 4000 local units above the nest — anchoring a lashing to that would
+/// launch it into the sky. Nothing sits on the trunk; things sit on the two limbs.
 const woodTopAt = (x: number) => Math.min(boughTopAt(x), bough2TopAt(x));
 
 /// THE SEAT — an upper bound on where nest wood may be built. Two terms, and both are answering
@@ -891,10 +1086,17 @@ const GRAIN = [
 ///
 /// `y` is `boughTopAt(x) + 60` rather than a typed number, so the butts are inside the wood by
 /// construction and the bough can be re-placed without them coming loose.
-const SPRIGS = [
-  {seed: 0x711, x: 3300, rot: 202, len: 260, scale: 1.35},
-  {seed: 0xc19, x: 4100, rot: 176, len: 220, scale: 1.2},
-] as const;
+/// SPRIGS ARE GONE, and the reason is worth keeping so nobody adds them back.
+///
+/// They were two small forked twigs anchored with `y: boughTopAt(s.x) + 60`, from a composition that
+/// had a single diagonal limb and needed something on it. They have been wrong in every arrangement
+/// since. Last placed at local x 1180 and 640 — chosen off the nest's ink range without checking the
+/// limb's — and the near limb ENDS at local x 1718, so both sat past its tip where `boughTopAt` has no
+/// answer, and they floated in clear sky above the wordmark.
+///
+/// There is no correct place for them now: the near limb's whole exposed run is under the nest, and
+/// the long limb crossing to the left is the FAR one, which they were never anchored to. The tree has
+/// a trunk, two limbs and a nest in the crook; it does not need two loose twiglets to be a tree.
 
 /// Strands lashed ACROSS the bough, drawn in front of it. This is the mark that says "built
 /// around" rather than "resting on", and it is now INSIDE the guaranteed view: the first two land
@@ -921,9 +1123,21 @@ const LASHINGS = [
   {seed: 0xaa1, x: 2010, rot: -66, len: 300, dy: 95},
   {seed: 0xee5, x: 2090, rot: -74, len: 340, dy: 100},
   {seed: 0xbb2, x: 2180, rot: -60, len: 370, dy: 130},
-  {seed: 0xcc3, x: 2340, rot: -68, len: 330, dy: 130},
-  {seed: 0xdd4, x: 2520, rot: -57, len: 280, dy: 130},
 ] as const;
+/// The two right-hand lashings are gone. The trunk's left flank is at local x 2410 at their height,
+/// and reach = x + len * cos(rot): 2010 -> 2132, 2090 -> 2184, 2180 -> 2365, 2340 -> 2464. The last one
+/// crossed the flank, so its body was covered by the trunk and only its rounded end showed, and the
+/// one before it landed within 45 units of the flank, which the sway is enough to close.
+///
+/// The three that remain sit under the nest on limb that is actually exposed, which is the only place
+/// a lashing can say what it is for.
+///
+/// The fifth lashing was gone already. It sat at local x 2520 and ran to 2673 at -57 degrees, which is under the
+/// trunk now that the limb meets it there — so its body was covered and only its rounded upper END
+/// showed, at local (2631, 1414), reading as a blunt stub at the trunk's edge with the limb seeming to
+/// darken out of it. Two other explanations were tried and measured false before this one: the limb's
+/// own butt (pushing it 260 units deeper into the trunk changed nothing) and a gradient along the
+/// limb's length (the centreline measures luma 44-49 from t=600 to t=4600, flat).
 
 /* ------------------------------------------------------------------ shafts */
 
@@ -1202,20 +1416,24 @@ const window01 = (s: number, a: number, b: number, ease: number) => {
 /// with the whole bird inside the safe box DOWN from 54 to 34, which is the opposite of what the
 /// edit was for. Anchored to arclength instead, the windows mean what they say and stay meaning it.
 ///
-/// Three terms. The near leg — waypoints 2.6 to 9.6, which is the run in, the whole of the
-/// guaranteed view and the drop — is held at 0.44 of the base rate, because it is the only stretch
-/// a browsing user is certain to see and it should last. The flare itself takes another 0.25 off,
-/// which is the brake. The return leg through the bleed runs at 2.9x: it is transit, not an event,
-/// and it is not paced as one.
+/// Three terms, and all three were too strong. The near leg held 0.48 of the base rate, the flare took
+/// another 0.25 off on top of that, and the return ran at 2.45 — a range of 10.6x, which the audit saw
+/// as 8.7 to 92.6 px per frame. What that looks like is a bird that stops to think about the nest, and
+/// then is fired out of the frame; the brake read as the mechanism it is rather than as flight.
+///
+/// Now 0.66 on the near leg, 0.54 at the flare, 2.05 going home: a 3.8x range. A real bird does slow
+/// into a landing and does leave faster than it arrived, so the shape is kept — it is the depth of it
+/// that was wrong. The near leg is still the slowest part of the loop and still the part a browsing
+/// user is certain to see.
 const SLOW_FROM = wayFrac(2.6);
 const SLOW_TO = wayFrac(9.6);
 const FAST_FROM = wayFrac(9.95);
 const FAST_TO = wayFrac(16.35);
 const speedAtFrac = (s: number) =>
   1 -
-  0.52 * window01(s, SLOW_FROM, SLOW_TO, 0.045) -
-  0.25 * gaussCirc(s, FLARE_FRAC, 0.014) +
-  1.45 * window01(s, FAST_FROM, FAST_TO, 0.06);
+  0.34 * window01(s, SLOW_FROM, SLOW_TO, 0.045) -
+  0.12 * gaussCirc(s, FLARE_FRAC, 0.014) +
+  1.05 * window01(s, FAST_FROM, FAST_TO, 0.06);
 
 const WARP_N = 2880;
 
@@ -1255,6 +1473,27 @@ const timeAtFrac = (frac: number) => {
   return lerp(WARP.tOf[i], WARP.tOf[i + 1], g - i);
 };
 const U_FLARE = timeAtFrac(FLARE_FRAC);
+
+/// WHEN THE BIRD IS BEHIND THE TRUNK.
+///
+/// Leaving after the drop, the bird crosses the trunk's columns — waypoints 7 to 10 run x 2170..2740
+/// against a trunk spanning about 2295..2740 — and it was drawn in front of the whole tree for the
+/// entire loop, so it slid across the trunk's face on its way out and the depth of the picture
+/// collapsed. It is flying AWAY at that moment; away is behind.
+///
+/// WHICH crossing goes behind matters, and the first version had it exactly backwards. The bird
+/// crosses the trunk's columns twice: once on the way out after the drop (waypoints 9-10) and once on
+/// the high return leg (between 13 and 14). Carrying and delivering happens on the near side — that is
+/// the part of the loop the viewer is being asked to follow — and it is the RETURN, when the bird is
+/// small and going away to fetch the next one, that belongs behind the tree.
+///
+/// The window is 11 to 15, and both ends are chosen so the swap cannot be seen. Measured in WORLD
+/// coordinates, which is not where the trunk's own constants live: the trunk is drawn inside SCENE_XF,
+/// so its butt at local (3214.6, 5241.7) is world (2971, 3300) and its 222.75 half-thickness is 122.5
+/// on screen. At waypoint 11 the bird is at x 3080 against a right flank of 2663; at waypoint 15 it is
+/// at 830 against a left flank of 2394. Both clear by hundreds of pixels.
+const U_BEHIND_FROM = timeAtFrac(wayFrac(11));
+const U_BEHIND_TO = timeAtFrac(wayFrac(15));
 
 /* ------------------------------------------------------------------ the roll */
 
@@ -2068,22 +2307,39 @@ export const ConceptBird: React.FC<{guides?: boolean}> = ({guides = false}) => {
       })),
     []
   );
-  const sprigs = React.useMemo(
+  const limbGrain = React.useMemo(
     () =>
-      SPRIGS.map((s) => ({
-        ...s,
-        y: boughTopAt(s.x) + 60,
+      LIMB_GRAIN.map((g) => ({
+        ...g,
         geom: buildTwig({
-          seed: s.seed,
-          length: s.len,
-          arch: 'forked',
+          seed: g.seed,
+          length: g.len,
+          arch: 'bare',
           sweep: 'bowed',
-          weight: 'ordinary',
-          // 'needle' here was a thin dark blade in open paper; a wedge is a long even taper.
+          weight: 'wisp',
           tip: 'wedge',
-          maxDepth: 2,
-          stout: 1.15,
-          lightLocalDeg: LIGHT_WORLD_DEG - s.rot,
+          maxDepth: 0,
+          stout: 0.2,
+          lightLocalDeg: LIGHT_WORLD_DEG - BOUGH2.rot,
+          allowHighlight: false,
+        }),
+      })),
+    []
+  );
+  const trunkGrain = React.useMemo(
+    () =>
+      TRUNK_GRAIN.map((g) => ({
+        ...g,
+        geom: buildTwig({
+          seed: g.seed,
+          length: g.len,
+          arch: 'bare',
+          sweep: 'bowed',
+          weight: 'wisp',
+          tip: 'wedge',
+          maxDepth: 0,
+          stout: 0.2,
+          lightLocalDeg: LIGHT_WORLD_DEG - TRUNK.rot,
           allowHighlight: false,
         }),
       })),
@@ -2185,6 +2441,7 @@ export const ConceptBird: React.FC<{guides?: boolean}> = ({guides = false}) => {
 
   /* ---- the drop ---- */
   const pose = poseAt(u);
+  const birdBehindTrunk = u >= U_BEHIND_FROM && u <= U_BEHIND_TO;
   const carrying = frame < REL_FRAME;
   const release = RELEASE;
   /// Where the landing site IS this frame, IN WORLD COORDINATES. The nest sways and the landing
@@ -2377,6 +2634,27 @@ export const ConceptBird: React.FC<{guides?: boolean}> = ({guides = false}) => {
             <stop offset="76%" stopColor="#452912" />
             <stop offset="100%" stopColor="#33200F" />
           </linearGradient>
+          {/* The same ramp, reflected. `cbBark` runs light-to-dark down the twig's OWN +y, and for
+              a limb lying at rot 173-206 that puts the lit flank UNDERNEATH — which is what the two
+              limbs already ship with and reads as bounce off the ground. A near-vertical trunk at
+              rot -99 turns the same ramp into a lit LEFT flank with the sun on the right, which is
+              a lighting error big enough to see at browsing size. Reversed for the trunk only. */}
+          <linearGradient
+            id="cbBarkUp"
+            x1="0"
+            y1={-9.4}
+            x2="0"
+            y2={9.4}
+            gradientUnits="userSpaceOnUse"
+            spreadMethod="reflect"
+          >
+            <stop offset="0%" stopColor="#2B1B0C" />
+            <stop offset="30%" stopColor="#3B240F" />
+            <stop offset="58%" stopColor="#4E3116" />
+            <stop offset="78%" stopColor="#65431F" />
+            <stop offset="91%" stopColor="#82602F" />
+            <stop offset="100%" stopColor="#A67A3B" />
+          </linearGradient>
           <linearGradient
             id="cbCup"
             x1="0"
@@ -2443,8 +2721,51 @@ export const ConceptBird: React.FC<{guides?: boolean}> = ({guides = false}) => {
               reads as a stain on the backdrop rather than as shadow on a surface, and a grain rod
               becomes a stick lying next to the branch. SVG runs the filter first and the clip
               second, so a blur stays soft inside the wood and stops dead at its edge. */}
-          <clipPath id="cbWood">
+          <clipPath id="cbLeftOfTrunk">
+            <polygon points="3894,6385 2587,-2217 -4000,-2217 -4000,6385" />
+          </clipPath>
+          {/* The limb's silhouette AND the half-plane it is cut by. Everything that reads as being on
+              the limb — the bark grain, the load shadows — is clipped to this, and while it was the
+              raw silhouette those marks kept being painted onto the length of limb that the trunk cut
+              away. At 1:1 that showed as a translucent quadrilateral with two dead-straight edges
+              lying across the trunk and fading off to its right: a pane of glass over the tree. A clip
+              path may hold several shapes but they UNION rather than intersect, so the intersection is
+              expressed by nesting one clip inside the other. */}
+          <clipPath id="cbWoodRaw">
             <path d={BOUGH_GEOM.body} transform={BOUGH_XF} />
+          </clipPath>
+          {/* The LEFT flank, for anything drawn after the trunk. `cbLeftOfTrunk` cuts at the RIGHT
+              flank, which is correct for the limb itself — it is drawn first and the trunk covers what
+              is between the flanks. But the limb's bark and its load shadows are drawn AFTER the trunk
+              and were clipped to the same line, so they were painted across the trunk's whole width and
+              stopped dead at its right edge: a dark sliver at local (3027, 1469), just past the clip at
+              2997. Cut at the near flank instead and nothing drawn after the trunk can touch it. */}
+          {/* The mirror of the near half-plane, for the limb on the RIGHT. Without it a right-hand
+              branch drawn before the trunk would reappear past the far flank on the left, which is the
+              spear-through-a-body fault the near limb had. */}
+          <clipPath id="cbRightOfTrunk">
+            <polygon points="3325,6471 2018,-2130 9000,-2130 9000,6471" />
+          </clipPath>
+          {/* A third line, 120 units INSIDE the near flank, for the limb itself. Cutting the limb
+              exactly at the near flank left a hairline of sky between wood and wood: the flank is
+              computed from the trunk's nominal 288 half-width, but the trunk TAPERS — at the limb's
+              height its real half-width is about 283, so the drawn column starts a few units right of
+              the line and the limb stopped short of it. Cut 120 units in and the limb runs under the
+              trunk with room to spare, which is invisible because the trunk is drawn next. */}
+          <clipPath id="cbUnderTrunk">
+            <polygon points="3443,6453 2137,-2148 -4000,-2148 -4000,6453" />
+          </clipPath>
+          <clipPath id="cbLeftOfTrunkNear">
+            <polygon points="3325,6471 2018,-2130 -4000,-2130 -4000,6471" />
+          </clipPath>
+          <clipPath id="cbWood" clipPath="url(#cbLeftOfTrunkNear)">
+            <path d={BOUGH_GEOM.body} transform={BOUGH_XF} />
+          </clipPath>
+          <clipPath id="cbTrunkClip">
+            <path d={TRUNK_GEOM.body} transform={TRUNK_XF} />
+          </clipPath>
+          <clipPath id="cbLimbClip">
+            <path d={BOUGH2_GEOM.body} transform={BOUGH2_XF} />
           </clipPath>
           {/* Dither, tiled. `stitchTiles` makes feTurbulence seamless across the tile and
               baseFrequency * 512 = 448 keeps it on an integer period, so the noise is generated
@@ -2545,22 +2866,14 @@ export const ConceptBird: React.FC<{guides?: boolean}> = ({guides = false}) => {
             ))}
           </g>
 
-          {/* 12 sprigs BEFORE the wood, with their butts on the bough's own centreline. Drawn
-              after it they showed a flat butt cut sitting on the bark in a different tone — a
-              twig glued to a pipe. */}
-          {sprigs.map((s) => (
-            <g key={s.seed} transform={`translate(${s.x} ${s.y}) rotate(${s.rot}) scale(${s.scale})`}>
-              <path
-                d={s.geom.body}
-                fill={`url(#${gradId(1, litUpAt(s.rot), bucketOfHalf(s.geom.baseHalf))})`}
-                fillRule="nonzero"
-              />
-            </g>
-          ))}
 
-          {/* 13 THE CROOK: the far arm first, then the main limb over the top of its butt. The order
-              is the whole trick — the arm's flat end cap is drawn, then covered by the limb it forks
-              from, so a joint nobody has to draw is a joint nobody can see.
+          {/* 13 THE WOOD, and the draw order is the whole trick: far limb, near limb, TRUNK over
+              both. Behind them the trunk left a shallow X under the nest — the main limb crossed
+              the far limb and the trunk at 26 degrees and read as a dark strap laid over the
+              picture, and four members radiating from one hidden point read as a turbine. In
+              front, the trunk covers the crossing and each limb simply passes behind it and comes
+              out the other side, which is what a limb attached to a trunk does. It also means no
+              butt cap on either limb is ever drawn in the open.
 
               It carries the SAME bark gradient as the main limb, which is a correction: the old flat
               #41301A was chosen because "the bark gradient is fixed in world space" and would light a
@@ -2570,12 +2883,134 @@ export const ConceptBird: React.FC<{guides?: boolean}> = ({guides = false}) => {
               rather than as wood. The overlay below is what keeps it from reading as the SAME wood:
               a far arm of a fork is in its own shade, and 0.22 of #2A1A0A over the ramp is a stop and
               a half down the same material instead of a different one. */}
-          <g transform={BOUGH2_XF}>
-            <path d={BOUGH2_GEOM.body} fill="url(#cbBark)" fillRule="nonzero" />
-            <path d={BOUGH2_GEOM.body} fill="#2A1A0A" fillRule="nonzero" opacity={0.3} />
+          {/* The clip is on an OUTER group and the transform on an inner one. Put both on the same
+              element and the clip's userSpaceOnUse polygon is resolved in THAT element's space — the
+              limb's own rotated, 11.5x-scaled frame — so a half-plane typed in canvas coordinates cuts
+              somewhere else entirely. It did: a dark wedge appeared at the trunk's shoulder. */}
+          <g clipPath="url(#cbLeftOfTrunk)">
+            <g transform={BOUGH2_XF}>
+              <path d={BOUGH2_GEOM.body} fill="url(#cbBarkUp)" fillRule="nonzero" />
+            {/* 0.3 down to 0.14. That number was set when this arm was a FAR arm falling away from
+                a crook and had to sit a stop and a half back. It is now the limb that leaves the
+                trunk in the nest's own plane, and at 0.3 it read as a dark ramp. */}
+              <path d={BOUGH2_GEOM.body} fill="#2A1A0A" fillRule="nonzero" opacity={0.2} />
+            </g>
           </g>
-          <g transform={BOUGH_XF}>
-            <path d={BOUGH_GEOM.body} fill="url(#cbBark)" fillRule="nonzero" />
+          <g clipPath="url(#cbLimbClip)">
+            <g transform={BOUGH2_XF}>
+              {limbGrain.map((g) => (
+                <g
+                  key={g.seed}
+                  transform={`translate(${(g.s * BOUGH2.len).toFixed(1)} ${g.off}) rotate(${g.rot})`}
+                >
+                  <path d={g.geom.body} fill={NEST_RAMP[g.rung].hex} fillRule="nonzero" opacity={g.op} />
+                </g>
+              ))}
+            </g>
+          </g>
+          {/* The near limb is CUT at the trunk's right flank. The trunk is already drawn over it, so
+              everything between the flanks was covered — but the limb kept going and reappeared on the
+              far side, and wood emerging on the opposite side of a trunk reads as a spear through a
+              body rather than as a branch. Measured: at y 2000 the limb is at x 3813 and the trunk ends
+              at 3030, so 780px of it stood clear on the wrong side.
+
+              The cut is the flank LINE, not a vertical: the trunk leans 8.6 degrees, so a vertical
+              clip would leave a wedge at the bottom of the frame and bite into the limb at the top.
+              The line runs through (3434.8, 5208.2) — the butt centre offset by the trunk's own
+              222.75px half-thickness along its perpendicular — in the trunk's direction. */}
+          {/* Cut at the NEAR flank, not the far one. Cutting at the far flank is what the geometry
+              says is enough — the trunk is drawn next and covers everything between the two — and it
+              left a 25px flap of limb standing past the trunk's right edge anyway, at world x 2940-2970
+              against a flank at 2945. Whether that is the trunk's taper, the sway rotating the clip
+              with the wood, or an antialiasing seam did not matter enough to keep chasing: the limb is
+              drawn BEFORE the trunk, so everything between the flanks is covered regardless, and
+              cutting at the near flank costs nothing visible while making the failure impossible. */}
+          <g clipPath="url(#cbUnderTrunk)">
+            <g transform={BOUGH_XF}>
+              <path d={BOUGH_GEOM.body} fill="url(#cbBarkUp)" fillRule="nonzero" />
+            </g>
+          </g>
+
+          {/* THE BIRD, when it is behind the tree. Drawn here — after the limbs, before the trunk —
+              for the leg where it is leaving, so the trunk passes over it. Everywhere else it is drawn
+              last, in front. Two draws rather than one, because depth in a flat scene is draw order
+              and a bird that flies away has to change its mind about which side of the trunk it is on. */}
+          {birdBehindTrunk ? (
+            /* THE BIRD, when it is behind the tree — and wrapped in the INVERSE of everything it is
+               nested inside, which is the difference between this working and teleporting.
+               This point in the tree sits inside `SCENE_XF` and inside the nest's rigid sway, so a
+               <Bird> dropped here is drawn in the nest's local space at scale 0.55 and rotated with the
+               weave, while the same component 160 lines below is drawn in world space. Swapping between
+               the two moved the bird several hundred pixels in one frame, exactly at the release.
+               Cancelling both transforms puts it back in world coordinates while keeping it under the
+               trunk in draw order, which is the only thing being asked for here. */
+            <g
+              transform={
+                `rotate(${f4(-rigid)} ${RIGID_PIVOT.x} ${RIGID_PIVOT.y}) ` +
+                `translate(${CX} ${CY}) scale(${(1 / SCENE.k).toFixed(6)}) ` +
+                `translate(${-SCENE.cx} ${-SCENE.cy})`
+              }
+            >
+              <Bird pose={pose} />
+            </g>
+          ) : null}
+
+          {/* The secondary limbs, behind the trunk and clipped to the same half-plane. A shade over
+              each puts it a stop or so back, which is what stops four members at one hidden point
+              reading as a turbine. */}
+          {(['left', 'right'] as const).map((side) => (
+            <g key={side} clipPath={`url(#${side === 'left' ? 'cbLeftOfTrunk' : 'cbRightOfTrunk'})`}>
+              {branchGeoms
+                .filter((b) => b.side === side)
+                .map((b) => (
+                  <g key={b.seed} transform={b.xf}>
+                    <path d={b.geom.body} fill="url(#cbBarkUp)" fillRule="nonzero" />
+                    <path d={b.geom.body} fill="#2A1A0A" fillRule="nonzero" opacity={b.shade} />
+                  </g>
+                ))}
+            </g>
+          ))}
+
+          {/* 13b THE TRUNK, drawn IN FRONT of both limbs and that order is the whole point. Behind
+              them it made a shallow X under the nest: the main limb crossed the far limb and the
+              trunk at 26 degrees and read as a dark strap laid over the picture, and the four
+              members radiating from one hidden point read as a turbine. In front, the trunk simply
+              covers the crossing, and each limb is a limb that goes behind the trunk and comes out
+              the other side — which is what a limb does. */}
+          <g transform={TRUNK_XF}>
+            <path d={TRUNK_GEOM.body} fill="url(#cbBarkUp)" fillRule="nonzero" />
+            {/* A whisper of the sky's own haze. Not aerial perspective — the trunk is a metre
+                behind the nest, not a kilometre — but a 240px vertical must not turn into a black
+                bar, and there is a harder constraint underneath: the bird's exit leg crosses this
+                column at world (2440, 640) around frame 120, and at 0.06 the trunk's shaded flank
+                measured luma 40 against a bird whose ink is 45 — the bird dissolved into it for
+                about eight frames. 0.13 lifts the shaded flank to ~63 and buys ~18 luma of
+                separation while leaving the lit flank 70 below the sky. */}
+            <path d={TRUNK_GEOM.body} fill="#F6E3BC" fillRule="nonzero" opacity={0.13} />
+          </g>
+
+          {/* Trunk bark. A 240px column with one smooth cross-thickness ramp and two dead-straight
+              flanks over 1600px is a ceramic pillar, and that is exactly what it rendered as. Long
+              rods laid ALONG the wood and clipped to its own silhouette, so they can only ever be
+              marks on the surface. Stated as a fraction along and an offset across in the trunk's
+              OWN frame; the visible run is s 0.35..0.70, which is where all six sit. */}
+          <g clipPath="url(#cbTrunkClip)">
+            <g transform={TRUNK_XF}>
+              {trunkGrain.map((g) => (
+                <g
+                  key={g.seed}
+                  transform={`translate(${(g.s * TRUNK.len).toFixed(1)} ${g.off}) rotate(${g.rot})`}
+                >
+                  <path d={g.geom.body} fill={NEST_RAMP[g.rung].hex} fillRule="nonzero" opacity={g.op} />
+                </g>
+              ))}
+            </g>
+            {/* The nest's own shade ON the trunk. This is the mark that says the two objects are
+                touching rather than overlapping: without it the nest's right end simply stopped
+                against a lit column. Clipped to the trunk, so it can never darken bare sky. */}
+            <g filter="url(#cbContact)">
+              <ellipse cx={2360} cy={1180} rx={300} ry={190} fill="#2A1A0A" opacity={0.4} />
+            </g>
           </g>
 
           {/* 14 BARK, clipped to the limb. This is what the diagonal was missing: it was one smooth
@@ -2699,7 +3134,7 @@ export const ConceptBird: React.FC<{guides?: boolean}> = ({guides = false}) => {
         ) : null}
 
         {/* 22 the bird, over its own twig */}
-        <Bird pose={pose} />
+        {birdBehindTrunk ? null : <Bird pose={pose} />}
 
         {/* 23 the near plane, in FRONT of everything: two branches close to the lens, blurred, that
             fill the safe box's empty bottom-left corner and put a third plane in the frame. */}

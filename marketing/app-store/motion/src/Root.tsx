@@ -1,22 +1,27 @@
 import React from 'react';
 import {Composition} from 'remotion';
 import {ConceptBird} from './ConceptBird';
-import {SearchStory} from './SearchStory';
 import {SearchIllustration} from './SearchIllustration';
 import {CANVAS} from './theme';
 
 /// The two App Store creative assets, and nothing else.
 ///
-/// This file used to register twenty-three compositions — concept variants, per-lane probes, per-lane
-/// story cuts, a twig contact sheet — because several passes each needed a surface to iterate on
-/// without overwriting one another. That scaffolding did its job and then made the deliverables
-/// impossible to find. The design history is in the git log, which is where history belongs.
+/// This file once registered twenty-three compositions — concept variants, per-lane probes, per-lane
+/// story cuts, a twig contact sheet, two rival cuts of the search slot. All of it was scaffolding for
+/// passes that needed a surface to iterate on without overwriting one another, and all of it made the
+/// deliverables impossible to find. The design history is in the git log, which is where history
+/// belongs.
 ///
 /// What ships:
-///   concept-bird         the product page header, 3840x1646, a six-second loop
-///   search-story-{ko,en} the search results video, 3840x2560, thirty seconds
-///   search-illustration-{ko,en}  a second draft of the same slot, drawn rather than photographed —
-///                                kept alongside so the two can be compared before one is chosen
+///   concept-bird                            the product page header, 3840x1646, a six-second loop
+///   search-illustration-{ko,en,ja,zh-Hans}  the search results video, 3840x2560, thirty seconds
+///
+/// A screenshot-based cut of the search slot was built alongside this one, out of real captures and a
+/// simulator recording driven through idb. It was the more honest asset — those were real screens and
+/// a viewer could check them — and the illustrated cut won on what this slot is actually judged on: it
+/// states the product's one differentiating claim in a single image, and it has nothing in it small
+/// enough to lose at browsing size, which is the failure the screenshot cut spent six revisions
+/// fighting. Its captures and its reasoning are in the log.
 const FPS = 30;
 
 /// The header autoplays and repeats, so every motion in it is periodic over six seconds and frame 179
@@ -42,20 +47,6 @@ export const RemotionRoot: React.FC = () => {
         height={CANVAS.header.height}
         defaultProps={{guides: false}}
       />
-      {(['ko', 'en'] as const).map((locale) => (
-        <Composition
-          key={`search-story-${locale}`}
-          id={`search-story-${locale}`}
-          component={SearchStory}
-          durationInFrames={SEARCH_FRAMES}
-          fps={FPS}
-          width={CANVAS.search.width}
-          height={CANVAS.search.height}
-          defaultProps={{locale, guides: false}}
-        />
-      ))}
-      {/* The illustrated asset ships in every language the listing does; the screenshot cut still only
-          has Korean captures, which is why the two lists differ. */}
       {(['ko', 'en', 'ja', 'zh-Hans'] as const).map((locale) => (
         <Composition
           key={`search-illustration-${locale}`}

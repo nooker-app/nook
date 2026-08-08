@@ -829,6 +829,30 @@ const bridges: Mark[] = [
 
 /// The one construction in the drawing: a wood fill inside an ink line, exactly as the cards are built,
 /// emitted as a pair so z-order is per stick rather than per layer.
+/// The highest point of a mark, read off its own `d` rather than recomputed from the angles that made
+/// it. The path is "M x y Q x y x y" with no curves that leave their control hull, so the minimum of
+/// the numbers is the top to within a couple of units — enough to sort marks into layers by it.
+const topOfMark = (d: string) => {
+  const n = d.match(/-?\d+(?:\.\d+)?/g);
+  if (!n) return Infinity;
+  let top = Infinity;
+  for (let i = 1; i < n.length; i += 2) top = Math.min(top, Number(n[i]));
+  return top;
+};
+
+/// Marks that reach high enough to touch a card at its hover, and the rest.
+///
+/// Moving ALL of `ring` and `cross` behind the near wall fixed the sudden covering and broke the nest:
+/// the near wall is drawn over them there, so the front rim lost its sticks. Only some of them are the
+/// problem. A hovering card spans canvas y 1514..1806, which through the nest's fit transform
+/// (canvas = 1.45 * local - 262.4) is local 1225..1426 — so a mark whose top is above local 1426 can
+/// reach it, and one whose top is below cannot. Split on that and each mark sits where it belongs.
+const HOVER_REACH = 1426;
+const splitByReach = (set: Mark[]) => ({
+  high: set.filter((m) => topOfMark(m.d) < HOVER_REACH),
+  low: set.filter((m) => topOfMark(m.d) >= HOVER_REACH),
+});
+
 const Stick: React.FC<{m: Mark}> = ({m}) => (
   <>
     <path d={m.d} stroke={INK} strokeWidth={m.w + EDGE * 2} strokeLinecap="round" fill="none" />
@@ -861,14 +885,24 @@ const NestBack: React.FC = () => (
         sticks are nowhere near the near wall. Everything still in NestFront lives BELOW the hollow's
         lower arc, so a card above that arc is now occluded by nothing at all. */}
     <Marks set={bridges} />
+    {/* `ring` and `cross` moved here from the front. They are near-wall marks, so drawing them in
+        front of an arriving card is defensible in principle and wrong in practice: measured on a
+        render, ring's ink reaches y 1469 and cross's y 1502 in the columns cards hover over, while a
+        card at its hover spans 1514..1806 — so the moment a card began its descent it went behind both,
+        all at once. Raising the hover cannot fix it: the type block ends at 1285 and ring starts at
+        1469, and 184px will not hold a 292px card. What still covers a landing card is the near wall
+        itself and `breakers`, both of which live below y 2000, which is where being covered means the
+        card is genuinely down in the bowl. */}
+    <Marks set={splitByReach(ring).high} />
+    <Marks set={splitByReach(cross).high} />
   </g>
 );
 
 const NestFront: React.FC = () => (
   <g transform={NEST_FIT}>
     <path d={FRONT_PATH} fill={BARK} />
-    <Marks set={ring} />
-    <Marks set={cross} />
+    <Marks set={splitByReach(ring).low} />
+    <Marks set={splitByReach(cross).low} />
     <Marks set={lit} />
     {/* The silhouette redrawn last at the cards' own weight, so the one edge that has to survive 600px
         is never nibbled by a mark that happens to land on it. */}
@@ -955,7 +989,19 @@ export const SearchIllustration: React.FC<{locale: Lang; guides?: boolean}> = ({
             behind the near wall while plainly in mid-air, which is the "cards hide under the bottom of
             the nest" fault. At SWAP every card is parked on its hover point above the opening, where
             the near wall is not between it and the viewer, so the change of layer moves no pixels. */}
-        {deck.map((c, i) => (cardPhase(i, u) >= SWAP ? <Card key={i} index={i} u={u} card={c} /> : null))}
+        {/* Landing cards are stacked BY HOW FAR ALONG THEY ARE, not by their index in the deck. They
+            were drawn in deck order, so whether an arriving card landed on top of the ones already in
+            the nest or slid underneath them was decided by an array position — and a card that starts
+            its descent after another and ends up beneath it is the one thing a pile of falling objects
+            cannot do. Sorting by `a` descending puts the most advanced card first, which is furthest
+            back, so each new arrival lands on top of everything already there. */}
+        {deck
+          .map((c, i) => ({c, i, a: cardPhase(i, u)}))
+          .filter((e) => e.a >= SWAP)
+          .sort((x, y) => y.a - x.a)
+          .map((e) => (
+            <Card key={e.i} index={e.i} u={u} card={e.c} />
+          ))}
         <NestFront />
         {/* Still in the air: in front of everything, because a card crossing the nest on its way in is
             nearer the viewer than the nest is. */}
