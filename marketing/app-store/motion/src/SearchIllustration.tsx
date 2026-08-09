@@ -41,14 +41,14 @@ const TOTAL = 900;
 /// let the art carry the depth; a gradient here would be the illustration apologising for being flat.
 /// This is Nook's darkest wood tone pushed to a printable flat, so the two assets are recognisably the
 /// same brand without being the same treatment.
-const FIELD = '#8A4B2A';
-const CREAM = '#FFF3DC';
-const INK = '#2B1A0E';
-const GOLD = '#F0B865';
-const SAGE = '#9DAE86';
-const CLAY = '#D9714B';
+export const FIELD = '#8A4B2A';
+export const CREAM = '#FFF3DC';
+export const INK = '#2B1A0E';
+export const GOLD = '#F0B865';
+export const SAGE = '#9DAE86';
+export const CLAY = '#D9714B';
 
-const UI =
+export const UI =
   "-apple-system, 'SF Pro Display', 'Apple SD Gothic Neo', 'Helvetica Neue', Helvetica, sans-serif";
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -381,7 +381,7 @@ const Card: React.FC<{index: number; u: number; card: DeckCard}> = ({index, u, c
 /// they are drawn loose — open squiggles, a star, a few dots — never centred, never aligned to each
 /// other. Positions are fixed; only their breathing moves, on a period that divides 900 so the loop
 /// closes.
-const ACCENTS: {x: number; y: number; kind: 'squiggle' | 'star' | 'dot' | 'arc'; s: number; c: string}[] = [
+export const ACCENTS: {x: number; y: number; kind: 'squiggle' | 'star' | 'dot' | 'arc'; s: number; c: string}[] = [
   {x: 520, y: 420, kind: 'squiggle', s: 1.2, c: GOLD},
   {x: 3320, y: 560, kind: 'star', s: 1.5, c: CREAM},
   {x: 900, y: 2050, kind: 'dot', s: 1.8, c: SAGE},
@@ -393,7 +393,7 @@ const ACCENTS: {x: number; y: number; kind: 'squiggle' | 'star' | 'dot' | 'arc';
   {x: 1420, y: 2380, kind: 'star', s: 0.9, c: GOLD},
 ];
 
-const Accent: React.FC<{a: (typeof ACCENTS)[number]; u: number; i: number}> = ({a, u, i}) => {
+export const Accent: React.FC<{a: (typeof ACCENTS)[number]; u: number; i: number}> = ({a, u, i}) => {
   const b = 1 + Math.sin(u * TAU * 2 + i) * 0.08;
   const common = {stroke: a.c, strokeWidth: 9, fill: 'none', strokeLinecap: 'round' as const};
   return (
@@ -871,7 +871,7 @@ const Marks: React.FC<{set: Mark[]}> = ({set}) => (
 /// Split in two so a card can be dropped BETWEEN them. The illustration draws NestBack, then the cards,
 /// then NestFront, so a card arriving at the end of its spiral is cut off at the near rim and the last
 /// thing that happens to it is that the nest closes over it.
-const NestBack: React.FC = () => (
+export const NestBack: React.FC = () => (
   <g transform={NEST_FIT}>
     <Marks set={behind} />
     <path d={BODY_PATH} fill={BARK} />
@@ -898,7 +898,7 @@ const NestBack: React.FC = () => (
   </g>
 );
 
-const NestFront: React.FC = () => (
+export const NestFront: React.FC = () => (
   <g transform={NEST_FIT}>
     <path d={FRONT_PATH} fill={BARK} />
     <Marks set={splitByReach(ring).low} />

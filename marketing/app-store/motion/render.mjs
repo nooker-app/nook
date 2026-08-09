@@ -5,7 +5,7 @@
 // into this folder by hand.
 import {bundle} from '@remotion/bundler';
 import {renderMedia, selectComposition} from '@remotion/renderer';
-import {cpSync, existsSync, mkdirSync, readdirSync, rmSync} from 'node:fs';
+import {cpSync, existsSync, mkdirSync, rmSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -16,12 +16,28 @@ const only = process.argv[2];
 
 // ------------------------------------------------------------------ staging the captures
 //
-// `public/` is gitignored: the committed originals live in ../captures/<locale>/<device>/<name>.png
-// and are copied in here at render time rather than duplicated into the repo twice. That means
-// Nothing loads from staticFile() any more: the compositions that did — the screenshot cut of the
-// search slot — are gone, and with them the block that mirrored the whole capture tree into public/.
-// If an asset ever loads an image again, stage it HERE. A clean checkout renders public/ empty, and
-// the failure is a video with missing pictures that nobody notices until they watch it.
+// `public/` is gitignored: the committed originals live in ../captures/ and are copied in here at
+// render time rather than duplicated into the repo twice. A clean checkout renders public/ empty,
+// and the failure is a video with missing pictures and NO ERROR — nobody notices until they watch
+// it. So the staging list is exhaustive and it throws on a missing source.
+//
+// Only `search-hybrid-ko` loads from staticFile(); the header and the illustrated search cut draw
+// everything themselves. Every path below is one of the three staticFile() calls in
+// SearchHybrid.tsx — if you add a fourth, add it here in the same commit.
+const staged = [
+  ['ko/iphone-6.9/08-articles.png', 'shots/ko__iphone-6.9__08-articles.png'],
+  ['video/06-add-feed.mp4', 'video/06-add-feed.mp4'],
+  ['video/04-translate-list.mov', 'video/04-translate-list.mov'],
+];
+
+rmSync(join(here, 'public'), {recursive: true, force: true});
+for (const [from, to] of staged) {
+  const src = join(marketing, 'captures', from);
+  if (!existsSync(src)) throw new Error(`missing capture: ${src}`);
+  mkdirSync(dirname(join(here, 'public', to)), {recursive: true});
+  cpSync(src, join(here, 'public', to));
+}
+console.log(`staged ${staged.length} captures`);
 
 console.log('bundling…');
 const serveUrl = await bundle({
@@ -42,6 +58,17 @@ const compositions = [
     id: `search-illustration-${locale}`,
     out: join(marketing, 'output', 'creative', locale, 'search-result.mp4'),
   })),
+  // The hybrid cut of the same slot, Korean only. It was missing from this array, renderable only by a
+  // one-off `npx remotion render` — which is exactly why two defects survived in it for as long as they
+  // did: nothing that runs on its own ever drew a frame of it.
+  //
+  // NOTE it is the one composition that loads from `public/`: `shots/ko__iphone-6.9__08-articles.png`,
+  // `video/06-add-feed.mp4` and `video/04-translate-list.mov`. `public/` is gitignored, so a clean
+  // checkout renders this with missing pictures and no error. Stage those three before rendering it.
+  {
+    id: 'search-hybrid-ko',
+    out: join(marketing, 'output', 'creative', 'ko', 'search-result-hybrid.mp4'),
+  },
 ];
 
 for (const {id, out} of compositions) {

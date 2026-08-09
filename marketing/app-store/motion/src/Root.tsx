@@ -2,6 +2,7 @@ import React from 'react';
 import {Composition} from 'remotion';
 import {ConceptBird} from './ConceptBird';
 import {SearchIllustration} from './SearchIllustration';
+import {SearchHybrid} from './SearchHybrid';
 import {CANVAS} from './theme';
 
 /// The two App Store creative assets, and nothing else.
@@ -59,6 +60,22 @@ export const RemotionRoot: React.FC = () => {
           defaultProps={{locale, guides: false}}
         />
       ))}
+      {/* A hybrid cut, Korean only: the illustration's field, type and nest carrying real screens. It
+          exists because Apple's guidance for this slot asks for two things the illustrated cut does
+          not do — state the app's purpose at a glance, and show the interface.
+
+          900, the same as SEARCH_FRAMES, down from a 1800 that was never justified. The ceiling above
+          is UNVERIFIED, the sibling ships at 900, and once the unusable footage was cut there was not
+          sixty seconds of material — there was thirty. */}
+      <Composition
+        id="search-hybrid-ko"
+        component={SearchHybrid}
+        durationInFrames={SEARCH_FRAMES}
+        fps={FPS}
+        width={CANVAS.search.width}
+        height={CANVAS.search.height}
+        defaultProps={{guides: false}}
+      />
     </>
   );
 };
