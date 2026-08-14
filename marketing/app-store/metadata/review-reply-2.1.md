@@ -46,7 +46,57 @@ having the feature.
 - Nothing in item 1 — account deletion has shipped, and the text below already
   describes what is there.
 
+## Where this goes, and the 4000-character wall
+
+App Store Connect › the app › the unresolved-issues link at the top › **Resolve**
+next to the submission › **Reply to App Review**. That dialog is the only place a
+reply can be sent, and the only place the recording can be delivered: there is no
+upload slot for a video anywhere else in App Store Connect. Attach it there with
+**Attach File**, beside the text. Replies stay possible until the build is
+resubmitted, and the reply needs Account Holder, Admin or App Manager.
+
+**The Reply field takes 4000 characters.** The seven answers below the fold run to
+about 12,000, so they cannot be sent as they are. Two ways to handle that, and the
+first is the recommended one:
+
+1. **Send the condensed reply immediately below**, which is 3,934 characters with
+   every one of the seven items answered, and attach the recording to it.
+2. Send the long answers as several consecutive replies. Nothing is lost, but a
+   reviewer reading a four-part letter is a reviewer being asked to do work.
+
+Either way, the long version stays here as the source, and the durable parts of it
+— items 3, 5, 6, and 7 — belong in App Review Information › Notes for every future
+submission, where they are read before anyone has to ask.
+
+## The reply to send (3,934 characters)
+
+Paste verbatim, replacing `[DEVICES]`. Attach the recording in the same dialog.
+
+```text
+Thank you. The recording is attached; the seven answers follow.
+
+1. SCREEN RECORDING. Attached. Made on a physical iPhone on the current released iOS, from the Home Screen and a cold launch: the tutorial, the screen offering notifications and background refresh, adding a feed by pasting a website address, reading, translating, organising, and the settings behind it. None of that needed an account.
+
+Nook Plus, the optional publishing feature, does have one, and the recording covers registration (invitation-only, so a code is used rather than a public form), sign-in, publishing, and account deletion in full. Deletion is at Settings > Nook Plus > Delete Account: the reader confirms with their password, the server holding their writing verifies it, and the account, its handle, and every publication, article and image go. "Leave Nook Plus" above it is a milder, different act: it ends the membership and takes our pages down, keeping the account and all its contents.
+
+Absent because they do not exist: in-app purchases (the app links no purchase API), user-to-user content, and any request for location, contacts, camera, photos or tracking. The only permission requested is notifications, shown being asked only after a setting that needs it is switched on. All such settings ship off.
+
+2. TESTED ON. [DEVICES]
+
+3. WHAT IT IS. An RSS and Atom reader, for people who would rather choose what they read than be given it. Readers subscribe by address; Nook fetches on their schedule and renders natively, with per-feed choice of the reader, a web view, or the original site. Articles can be starred, categorised, filtered and saved offline, and subscriptions import and export as OPML. Two things distinguish it: any article can be translated in place, and read state syncs between the reader's own devices through a folder they pick — no account, nothing of ours in the path.
+
+4. GETTING IN. Reading needs no setup and no account: launch, finish the tutorial, then Feeds > + > Subscribe to Site and paste a site address — a feed URL or an ordinary one. Try https://news.hada.io/rss/news or https://tech.kakao.com. Translate is in the reader's title bar; providers are in Settings > Translation. For Nook Plus: Settings > Nook Plus > Sign In with the demo credentials in App Review Information; that account already has published articles.
+
+5. EXTERNAL SERVICES. Feeds are fetched straight from the sites the reader subscribed to — no catalogue, no proxy, nothing of ours in between. Translation and summaries run on-device via Apple Intelligence, or via Google Gemini only if the reader supplies their own API key, held in the Keychain. Publishing talks to our api.nooker.app and the writer's repository. No analytics, advertising, attribution or payment SDK.
+
+6. REGIONS. Features and content are the same everywhere; nothing is region-gated. One thing varies by device rather than storefront: Apple Intelligence is not available in every region, device or system language. Where it is not, Nook falls back to the system translation overlay and hides the on-device summary features — so if translation looks absent on the review device, that is why. Choosing Gemini with an API key exercises the same feature.
+
+7. REGULATION AND THIRD-PARTY MATERIAL. Nook is not in a regulated industry and makes no claim requiring a licence. It does display third-party material, as any feed reader does. Feeds exist to be fetched and rendered — that is what the formats are for. The reader chooses every source; we ship no catalogue and make no editorial selection. Nothing is redistributed: fetch and display happen on the device, nothing of ours stores or forwards publisher content, and the original page is one tap away. On the publishing side the material is the writer's own: single-author, members cannot reach each other, and authors can delete any article or their publication at any time. Support: https://www.nooker.app/support/
+```
+
 ---
+
+# The long version, and the source for the notes field
 
 # 1. Screen recording
 
