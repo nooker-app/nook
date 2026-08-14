@@ -145,6 +145,20 @@ Not a personal account. Not the account password. Rotate or delete it when the
 review completes. App Store Connect is the only place those credentials go — never
 a commit, an issue, or a chat log.
 
+## 5b. Fill in App Review Information, and record the demo video
+
+The step this document was missing, and the reason 0.1.0 came back under guideline
+2.1 without the review having started.
+
+Paste the notes from `marketing/app-store/metadata/review.md` into the **Notes**
+field. Then record a screen capture on a physical device and be ready to attach it:
+App Review asks every new app for one, there is no field to upload it to, and the
+only way to deliver it is a reply. `marketing/app-store/metadata/review-reply-2.1.md`
+has the shot list and the seven answers Apple asks for alongside it.
+
+Sending those seven answers with the first submission rather than after the first
+rejection saves a round trip of one to three days.
+
 ## 6. Archive and upload
 
 From Xcode, with the team selected and automatic signing on:

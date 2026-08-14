@@ -31,7 +31,11 @@ Rules for that account, so submitting does not become a security event:
 
 ## Notes
 
-Paste into the Notes field:
+Paste into the Notes field. **This is not enough on its own for a first
+submission** — the 0.1.0 submission came back under guideline 2.1 asking seven
+questions, six of which have no field in App Store Connect and none of which these
+notes answer. `review-reply-2.1.md` holds the answers; for a new app, send them
+with the submission rather than waiting to be asked.
 
 ```text
 Nook is an offline-first RSS reader. Everything in the screenshots except the last
