@@ -569,6 +569,85 @@ public final class PlusStore {
         if disconnected { disconnected = false }
     }
 
+    // MARK: - Deleting the account
+
+    /// Whether the host has been asked to email a deletion code, so the screen can
+    /// ask for the code rather than for a decision it has already taken.
+    public private(set) var accountDeletionRequested = false
+
+    /// Set once the account is gone, so the screen can say so. The session is
+    /// cleared at the same moment, so nothing else can report it.
+    public private(set) var accountDeleted = false
+
+    /// Asks the repository host to email a code authorising deletion.
+    ///
+    /// The last of the three things called "delete my account", and the only one
+    /// that is one. Signing out ends this device's session; leaving ends the Nook
+    /// Plus membership and takes down the pages it generated; this ends the account
+    /// itself — the DID, the handle, every publication, every article, every blob.
+    /// Nothing survives it and nothing brings it back.
+    ///
+    /// Two steps, and the code is why. Deletion is authorised by something only the
+    /// account's own mailbox receives, so a signed-in device that has been left
+    /// unlocked cannot end an account on its own.
+    public func requestAccountDeletion() async {
+        guard let session else {
+            failure = String(localized: "Sign in first.", bundle: .module)
+            return
+        }
+        await perform {
+            // Read after `perform` has renewed it: the token this sends must be the
+            // fresh one, not the one captured before the renewal.
+            let bearer = self.session?.accessJWT ?? session.accessJWT
+            try await self.pds.requestAccountDeletion(bearer: bearer)
+            self.accountDeletionRequested = true
+        }
+    }
+
+    /// Deletes the account, and then everything on this device that pointed at it.
+    ///
+    /// `discardingDrafts` is asked rather than assumed. Drafts are unpublished
+    /// writing held only here — deleting the account does not reach them, and for
+    /// text that was never published this device may hold the only copy. Discarding
+    /// them quietly would be the one thing this must not do; keeping them without
+    /// saying so would be the other.
+    public func deleteAccount(password: String, token: String, discardingDrafts: Bool) async {
+        guard let did = session?.did else {
+            failure = String(localized: "Sign in first.", bundle: .module)
+            return
+        }
+        var deleted = false
+        await perform {
+            try await self.pds.deleteAccount(did: did, password: password, token: token)
+            deleted = true
+        }
+        guard deleted, failure == nil else { return }
+        if discardingDrafts { discardAllDrafts() }
+        signOut()
+        accountDeletionRequested = false
+        accountDeleted = true
+    }
+
+    /// Abandons a deletion that was started but not carried out.
+    public func cancelAccountDeletion() {
+        if accountDeletionRequested { accountDeletionRequested = false }
+    }
+
+    /// Clears the confirmation, for a screen that has shown it.
+    public func acknowledgeAccountDeletion() {
+        if accountDeleted { accountDeleted = false }
+    }
+
+    /// Throws away every draft on this device.
+    ///
+    /// Only from account deletion, and only when it was asked for. There is no undo
+    /// and no copy elsewhere, which is why nothing else calls it.
+    private func discardAllDrafts() {
+        guard let draftStore else { return }
+        for draft in draftStore.all() { draftStore.delete(draft.id) }
+        drafts = []
+    }
+
     /// The largest image the contract accepts for an icon.
     public static let maxIconBytes = 512_000
 

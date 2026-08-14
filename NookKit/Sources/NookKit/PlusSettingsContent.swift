@@ -22,6 +22,9 @@ public struct PlusSettingsContent: View {
     /// Asks the host to confirm leaving the service. Same reason it is not a dialog
     /// attached here.
     let onLeave: () -> Void
+    /// Asks the host to open the account-deletion sheet. A presentation, so it belongs
+    /// to the host for the same reason as the rest.
+    let onDeleteAccount: () -> Void
     /// Asks the host to confirm throwing away a change made in the sync folder. Also a
     /// dialog, so also not attached here — and worth confirming, because the file is
     /// the only copy of that writing.
@@ -40,6 +43,7 @@ public struct PlusSettingsContent: View {
         onCompose: @escaping (PlusComposeTarget) -> Void,
         onTakeDown: @escaping (ATRecord<ArticleRecord>) -> Void,
         onLeave: @escaping () -> Void,
+        onDeleteAccount: @escaping () -> Void,
         onDiscardFolderEdit: @escaping (PlusPostMirror.Edit) -> Void,
         onChooseIcon: @escaping () -> Void,
         removing: String?
@@ -50,6 +54,7 @@ public struct PlusSettingsContent: View {
         self.onCompose = onCompose
         self.onTakeDown = onTakeDown
         self.onLeave = onLeave
+        self.onDeleteAccount = onDeleteAccount
         self.onDiscardFolderEdit = onDiscardFolderEdit
         self.onChooseIcon = onChooseIcon
         self.removing = removing
@@ -323,12 +328,19 @@ public struct PlusSettingsContent: View {
     /// by doing it again.
     ///
     /// Three different things get called "delete my account", and the difference is
-    /// the whole point of this section's wording: what leaves is Nook's hold on the
-    /// writer, not anything they wrote. The publications and articles are records in
-    /// their own repository and stay there; the handle and the account stay; what
-    /// goes is the membership and the public pages Nook generated. Deleting the
-    /// account itself belongs to the repository host, is irreversible, and is
-    /// deliberately not offered here.
+    /// the whole point of this section's wording. **Leaving** removes Nook's hold on
+    /// the writer and nothing they wrote: the publications and articles are records in
+    /// their own repository and stay there, the handle and the account stay, and what
+    /// goes is the membership and the public pages Nook generated. **Deleting the
+    /// account** ends the account itself, at the host that stores it, and takes
+    /// everything with it.
+    ///
+    /// Both are offered, in that order, because they are genuinely different acts and
+    /// the milder one is what most people leaving actually want. Deletion was once
+    /// left to the host on the grounds that the account is theirs, not ours — which is
+    /// true of where it lives and false of whose job it is to offer: guideline
+    /// 5.1.1(v) requires an app that creates accounts to delete them too, and Nook
+    /// creates them (`PlusOnboarding.createAccount`).
     private var leavingSection: some View {
         Section {
             // Before leaving, and in the same section as it, because the contract's
@@ -365,13 +377,26 @@ public struct PlusSettingsContent: View {
                 }
             }
             .disabled(store.isWorking)
+
+            // Below leaving, not beside it. They read as neighbours and are not: one
+            // of them is the only act in the app that destroys writing.
+            Button(role: .destructive) {
+                onDeleteAccount()
+            } label: {
+                Label {
+                    Text("Delete Account", bundle: .module)
+                } icon: {
+                    Image(systemName: "trash")
+                }
+            }
+            .disabled(store.isWorking)
         } header: {
             Text("Leaving", bundle: .module)
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 Text("The copy is a file of your own records — every publication and article, exactly as your repository holds them.", bundle: .module)
-                Text("Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you.", bundle: .module)
-                Text("This is not the same as signing out, and not the same as deleting your account. Coming back needs a new invitation.", bundle: .module)
+                Text("Leaving keeps everything you wrote. Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you, and coming back needs a new invitation.", bundle: .module)
+                Text("Deleting your account is the other one. It ends the account on the server that stores your writing and takes your name, your publications, and every article with it. It cannot be undone.", bundle: .module)
             }
         }
     }

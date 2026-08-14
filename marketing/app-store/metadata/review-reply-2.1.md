@@ -20,28 +20,22 @@ started yet. Answer all seven in one reply and it starts.
 Item 1 is a video, it is the reason the other six were asked, and a reply without it
 will come back. Record it first — the script is at the end of this file.
 
-**2. Account deletion — read this before recording.** `PlusOnboarding.swift:752`
-creates an account inside the app, from an invitation code, an email address, and a
-password. Guideline 5.1.1(v) says an app that offers account creation must also
-offer account deletion in the app, and App Review asked for that flow by name in
-item 1. What the app offers today is **Leave Nook Plus**
-(`PlusStore.swift:543-556`), which ends the membership and removes every public page
-the service generated but deliberately keeps the repository — the account, its DID,
-its handle, and every article — and `PlusSettingsContent.swift:325-331` records that
-deleting the account itself is delegated to the repository host on purpose.
+**2. Account deletion — it now exists, and the recording must show it.**
+`PlusOnboarding.swift` creates an account inside the app, from an invitation code, an
+email address, and a password, and guideline 5.1.1(v) requires an app that creates
+accounts to delete them too. App Review asked for that flow by name in item 1.
 
-That is a defensible product decision and it is not what 5.1.1(v) asks for. Two ways
-forward:
+It was not there when 0.1.0 was submitted. Settings › Nook Plus › **Delete Account**
+now runs the real thing: the host emails a code, the code and the password go back
+together, and `com.atproto.server.deleteAccount` ends the repository — the DID, the
+handle, every publication, every article, every blob.
 
-- **Add repository deletion to the app before replying.** It is what Apple will
-  require in the end, and doing it now costs one round trip instead of two.
-- **Reply as the app stands**, using the item 1 text below, which describes the
-  distinction honestly rather than calling Leave an account deletion. Expect a
-  5.1.1(v) rejection and plan for the work anyway.
-
-Whichever is chosen, **do not describe Leave Nook Plus as account deletion.** A
-reviewer who taps it and finds the handle still resolving reads that as a false
-statement, and that is a much worse position than not having the feature.
+**Leave Nook Plus** is still there, above it, and is a different act: it ends the
+membership and takes down the pages Nook generated while keeping everything the writer
+wrote. Both are in the recording, and the reply says which is which. Do not describe
+Leave as an account deletion — a reviewer who taps it and finds the handle still
+resolving reads that as a false statement, which is a much worse position than not
+having the feature.
 
 ## Fill these in before sending
 
@@ -49,7 +43,8 @@ statement, and that is a much worse position than not having the feature.
   on, with their iOS versions. Simulators do not count and must not be listed.
 - `[HANDLE]` / `[APP PASSWORD]` in item 4 — the review account. Also put them in the
   Demo Account fields; the reply is not a substitute for those.
-- Item 1's second paragraph, if repository deletion ships before the reply.
+- Nothing in item 1 — account deletion has shipped, and the text below already
+  describes what is there.
 
 ---
 
@@ -73,16 +68,20 @@ statement, and that is a much worse position than not having the feature.
 > Account creation is shown as well — it is invitation-only, so the recording uses
 > an invitation code rather than a public sign-up form.
 >
-> One thing about that section is worth stating in advance rather than leaving to
-> be discovered. Nook Plus is a membership layered on top of an AT Protocol
-> repository that belongs to the writer, not to us. "Leave Nook Plus" in Settings
-> ends the membership, deletes the service's operational data, and takes down every
-> public page the service generated. It does not delete the repository itself: the
-> account, its identifier, its handle, and every article the writer published stay
-> with them, and they keep reading and exporting them. We separated the two
-> deliberately, because a writer leaving a publishing service should not thereby
-> lose the writing. The recording shows the flow and the wording the app uses for
-> it.
+> Account deletion is in Settings › Nook Plus › Delete Account, and the recording
+> shows it end to end. The server that stores the writer's work emails a code; the
+> code and the password go back together; the account, its identifier, its handle,
+> every publication, every article, and every image are deleted, and the published
+> pages come down. It cannot be undone, and the app says so before it asks for
+> anything. Unpublished drafts live only on the device and are offered as a separate
+> choice in the same step, because deleting the account does not reach them and this
+> device may hold the only copy.
+>
+> There is a second, milder control directly above it, and the difference is worth
+> stating so it is not mistaken for the first. Nook Plus is a membership layered on
+> top of a repository that belongs to the writer. "Leave Nook Plus" ends the
+> membership and takes down the pages the service generated, and keeps the account
+> and everything in it. Both are in the recording.
 >
 > The remaining items in your list do not apply and so are not in the recording:
 > there is no paid content, subscription, or in-app purchase of any kind (the app
@@ -300,8 +299,10 @@ Delete and reinstall the app first, so the first run is genuinely a first run.
     badges, notification diagnostics.
 11. **Nook Plus** — sign in with the review credentials, write and publish a short
     article, open its public page, then Settings › Nook Plus and go through the
-    account controls including Leave Nook Plus. Show the wording; if repository
-    deletion has shipped by then, show that instead and say so in item 1's text.
+    account controls. Show Leave Nook Plus and its wording, then go through Delete
+    Account in full — request the code, enter it with the password, and let the
+    deletion complete. This is the flow App Review asked for by name; a recording
+    that stops at the confirmation dialog has not shown it.
 12. **Account creation**, from the invitation code, so registration is on the tape
     as they asked.
 

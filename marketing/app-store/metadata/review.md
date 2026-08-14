@@ -62,6 +62,12 @@ Two things worth knowing in advance:
 Background modes (fetch, processing) refresh feeds on the user's schedule. Both
 badges and new-article notifications ship off; the app asks for notification
 permission only after one of them is switched on, never at launch.
+
+Account deletion is in the app, at Settings > Nook Plus > Delete Account. The
+server emails a code, the code and the password are submitted together, and the
+account and everything in it are deleted. The control directly above it, "Leave
+Nook Plus", is a different and milder act: it ends the membership and takes down
+the pages we generate while keeping the account and everything the writer wrote.
 ```
 
 ## Age rating

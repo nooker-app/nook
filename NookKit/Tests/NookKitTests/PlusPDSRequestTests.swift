@@ -192,4 +192,64 @@ struct PlusPDSRequestTests {
                 Data([0x89]), mimeType: "image/png", bearer: "stale")
         }
     }
+
+    // MARK: - Deleting the account
+
+    /// The first half of deletion asks the host to email a code. It takes no input,
+    /// so it is the same shape as `refreshSession` and would fail the same way if a
+    /// body were sent — but it presents the ACCESS token, not the refresh one.
+    @Test("requesting deletion sends no body and presents the access token")
+    func requestAccountDeletionShape() async throws {
+        Recorder.responseJSON = "{}"
+        try await client().requestAccountDeletion(bearer: session().accessJWT)
+
+        let seen = try #require(Recorder.seen)
+        #expect(seen.url?.path == "/xrpc/com.atproto.server.requestAccountDelete")
+        #expect(seen.body == nil, "a method taking no input must send no body")
+        #expect(seen.headers["Content-Type"] == nil)
+        #expect(seen.headers["Authorization"] == "Bearer access-token")
+    }
+
+    /// The second half carries the DID, the password, and the emailed code — and no
+    /// Authorization header. The method is unauthenticated by design: a live session
+    /// is not enough to end an account, and sending one would hide that.
+    @Test("deleting an account sends the did, password, and code, unauthenticated")
+    func deleteAccountShape() async throws {
+        Recorder.responseJSON = "{}"
+        try await client().deleteAccount(
+            did: "did:plc:example", password: "hunter2", token: "  ABC-123  ")
+
+        let seen = try #require(Recorder.seen)
+        #expect(seen.url?.path == "/xrpc/com.atproto.server.deleteAccount")
+        #expect(seen.headers["Authorization"] == nil, "deletion is authorised by the code")
+
+        let body = try #require(seen.body)
+        let sent = try #require(
+            JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(sent["did"] == "did:plc:example")
+        #expect(sent["password"] == "hunter2")
+        // Trimmed, because a code arrives by email and is pasted with whatever came
+        // with it. An untrimmed one is refused as invalid, which reads as the wrong
+        // code rather than as stray whitespace.
+        #expect(sent["token"] == "ABC-123")
+    }
+
+    /// A wrong code or password must surface, not be swallowed. The host answers 400,
+    /// and a deletion that quietly did nothing would be the worst possible outcome
+    /// here: the writer believes the account is gone and it is not.
+    @Test("a refused deletion throws")
+    func deleteAccountSurfacesRefusal() async throws {
+        // Built before the status is set, not inside the expectation: `client()`
+        // resets the recorder, so a status set first is wiped by it and the refusal
+        // never happens. An `Empty` response body decodes from anything, so without
+        // this the call succeeds and the test passes while proving nothing.
+        let pds = client()
+        Recorder.status = 400
+        Recorder.responseJSON = #"{"error":"InvalidToken","message":"Token is invalid"}"#
+
+        await #expect(throws: (any Error).self) {
+            try await pds.deleteAccount(
+                did: "did:plc:example", password: "hunter2", token: "nope")
+        }
+    }
 }

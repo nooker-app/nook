@@ -53,6 +53,11 @@ public struct PlusSettingsScreenContent<Container: View>: View {
     /// Whether the writer is being asked to confirm leaving the service.
     @State private var confirmingLeave = false
 
+    /// Whether the account-deletion sheet is open. A sheet rather than a dialog
+    /// because it collects an emailed code and a password, and because the one act in
+    /// the app that cannot be undone should not be reachable by a single tap.
+    @State private var deletingAccount = false
+
     /// Whether the icon picker is open. A presentation, so it lives here rather than
     /// on the row that opens it.
     @State private var choosingIcon = false
@@ -108,6 +113,7 @@ public struct PlusSettingsScreenContent<Container: View>: View {
                 onCompose: { target in present(.compose(target)) },
                 onTakeDown: { record in pendingTakeDown = record },
                 onLeave: { confirmingLeave = true },
+                onDeleteAccount: { deletingAccount = true },
                 onDiscardFolderEdit: { edit in pendingDiscard = edit },
                 onChooseIcon: { choosingIcon = true },
                 removing: removing
@@ -166,6 +172,23 @@ public struct PlusSettingsScreenContent<Container: View>: View {
             }
         } message: {
             Text("Your posts stay in your repository and your account is untouched. Nook stops publishing your pages and forgets your membership, and coming back needs a new invitation.", bundle: .module)
+        }
+        .sheet(isPresented: $deletingAccount) {
+            PlusAccountDeletionSheet(store: store) { deletingAccount = false }
+        }
+        // Said after the sheet has closed, and said as plainly as the act deserves.
+        // The screen behind it has emptied itself back to the signed-out state, which
+        // on its own is indistinguishable from having been signed out.
+        .alert(
+            Text("Your account has been deleted", bundle: .module),
+            isPresented: Binding(
+                get: { store.accountDeleted },
+                set: { if !$0 { store.acknowledgeAccountDeletion() } }
+            )
+        ) {
+            Button { store.acknowledgeAccountDeletion() } label: { Text("OK", bundle: .module) }
+        } message: {
+            Text("Your account, your publications, and your articles are gone from the server, and your pages are coming down.", bundle: .module)
         }
         // The archive, once it is on the device. A sheet rather than a link, because
         // what is shared is the file: the service's download URL is a bearer

@@ -564,6 +564,34 @@
         }
       }
     },
+    "Also delete drafts on this device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also delete drafts on this device"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この端末の下書きも削除"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기의 초안도 삭제"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时删除此设备上的草稿"
+          }
+        }
+      }
+    },
     "An account with this name already exists. Sign in with the password you chose when you created it.": {
       "localizations": {
         "ja": {
@@ -1862,6 +1890,62 @@
         }
       }
     },
+    "Code from the email": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code from the email"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メールで届いたコード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이메일로 받은 코드"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "邮件中的代码"
+          }
+        }
+      }
+    },
+    "Confirm it is you": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm it is you"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本人確認"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "본인 확인"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证身份"
+          }
+        }
+      }
+    },
     "Continue": {
       "localizations": {
         "en": {
@@ -2349,6 +2433,34 @@
         }
       }
     },
+    "Delete Account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Account"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントを削除"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정 삭제"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除账户"
+          }
+        }
+      }
+    },
     "Delete Article": {
       "localizations": {
         "ja": {
@@ -2395,6 +2507,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除草稿"
+          }
+        }
+      }
+    },
+    "Delete Everything": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Everything"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべて削除"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모두 삭제"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部删除"
+          }
+        }
+      }
+    },
+    "Delete My Account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete My Account"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自分のアカウントを削除"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 계정 삭제"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除我的账户"
           }
         }
       }
@@ -2597,6 +2765,34 @@
         }
       }
     },
+    "Delete your account?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete your account?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントを削除しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정을 삭제할까요?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要删除账户吗？"
+          }
+        }
+      }
+    },
     "Deletes every article saved for offline reading on this device.": {
       "localizations": {
         "en": {
@@ -2621,6 +2817,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除此设备上为离线阅读保存的所有文章。"
+          }
+        }
+      }
+    },
+    "Deleting your account is the other one. It ends the account on the server that stores your writing and takes your name, your publications, and every article with it. It cannot be undone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleting your account is the other one. It ends the account on the server that stores your writing and takes your name, your publications, and every article with it. It cannot be undone."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントの削除はそれとは別です。文章が保存されているサーバーからアカウントを消し、名前も発行物もすべての記事も一緒になくなります。取り消せません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정 삭제는 그와 다릅니다. 내 글이 저장된 서버에서 계정을 없애고, 이름과 발행물과 모든 글을 함께 가져갑니다. 되돌릴 수 없습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除账户则是另一回事。它会在存储你写作的服务器上终止账户，并带走你的名称、出版物和所有文章。无法撤销。"
+          }
+        }
+      }
+    },
+    "Deleting…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleting…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除中…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "삭제하는 중…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在删除…"
           }
         }
       }
@@ -2700,6 +2952,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "开发者"
+          }
+        }
+      }
+    },
+    "Didn’t get it? Check the address the account was made with, then ask again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Didn’t get it? Check the address the account was made with, then ask again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "届きませんか？アカウント作成時に使ったアドレスを確認して、もう一度リクエストしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "받지 못했나요? 계정을 만들 때 쓴 주소를 확인한 뒤 다시 요청하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有收到？请确认创建账户时使用的地址，然后再次请求。"
           }
         }
       }
@@ -3040,6 +3320,34 @@
         }
       }
     },
+    "Drafts are unpublished writing kept only on this device, so deleting your account does not reach them. Turn this off to keep them.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drafts are unpublished writing kept only on this device, so deleting your account does not reach them. Turn this off to keep them."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下書きはこの端末にだけある未公開の文章なので、アカウントを削除しても消えません。残すにはオフにしてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "초안은 이 기기에만 있는 발행되지 않은 글이라, 계정을 삭제해도 사라지지 않습니다. 남겨 두려면 끄세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "草稿是仅保存在此设备上的未发布内容，删除账户不会影响它们。想保留就关闭此项。"
+          }
+        }
+      }
+    },
     "Drafts cannot be saved on this device.": {
       "localizations": {
         "en": {
@@ -3326,6 +3634,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "一切就绪。"
+          }
+        }
+      }
+    },
+    "Everything you have written on this account goes, permanently. There is no undo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything you have written on this account goes, permanently. There is no undo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアカウントで書いたものはすべて完全に削除されます。取り消せません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 계정으로 쓴 모든 글이 영구히 사라집니다. 되돌릴 수 없습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你用这个账户写下的一切都会被永久删除。无法撤销。"
           }
         }
       }
@@ -4569,6 +4905,34 @@
         }
       }
     },
+    "Keep My Account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep My Account"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントを残す"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정 유지"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留账户"
+          }
+        }
+      }
+    },
     "Keep Writing": {
       "localizations": {
         "en": {
@@ -4873,6 +5237,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "退出"
+          }
+        }
+      }
+    },
+    "Leaving keeps everything you wrote. Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you, and coming back needs a new invitation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leaving keeps everything you wrote. Your publications and articles stay in your repository, and your name and account are untouched. What goes is your membership and the pages Nook publishes for you, and coming back needs a new invitation."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退会しても書いたものはすべて残ります。発行物と記事はリポジトリにそのまま残り、名前とアカウントにも触れません。なくなるのはメンバーシップと Nook が公開していたページで、再開には新しい招待が必要です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "탈퇴해도 쓴 글은 모두 남습니다. 발행물과 글은 내 저장소에 그대로 있고, 이름과 계정도 건드리지 않습니다. 사라지는 것은 멤버십과 Nook이 발행해 주던 페이지이며, 다시 시작하려면 새 초대가 필요합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出会保留你写下的一切。出版物和文章仍留在你的仓库中，你的名称和账户不受影响。消失的是会员身份和 Nook 为你发布的页面，重新加入需要新的邀请。"
           }
         }
       }
@@ -7654,6 +8046,34 @@
         }
       }
     },
+    "Sending…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "送信中…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "보내는 중…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在发送…"
+          }
+        }
+      }
+    },
     "Separate columns with pipes and add a delimiter row.": {
       "localizations": {
         "en": {
@@ -8945,6 +9365,34 @@
         }
       }
     },
+    "Take a copy of your writing first if you want one — the button is in Settings, under Leaving.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take a copy of your writing first if you want one — the button is in Settings, under Leaving."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーが必要なら先にダウンロードしてください。ボタンは設定の「退会」にあります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사본이 필요하면 먼저 내려받으세요 — 버튼은 설정의 ‘탈퇴’에 있습니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果需要副本，请先下载 — 按钮在设置的“退出”一节中。"
+          }
+        }
+      }
+    },
     "Take this post down?": {
       "localizations": {
         "en": {
@@ -9959,6 +10407,34 @@
         }
       }
     },
+    "The server sends a code to the email address on the account. You will need it, along with your password, on the next step.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server sends a code to the email address on the account. You will need it, along with your password, on the next step."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーがアカウントのメールアドレスにコードを送ります。次のステップでパスワードとともに必要になります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 계정에 등록된 이메일 주소로 코드를 보냅니다. 다음 단계에서 비밀번호와 함께 필요합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器会向账户的电子邮件地址发送一个代码。下一步需要它和你的密码。"
+          }
+        }
+      }
+    },
     "The server that stores your posts refused these details. Try a different email address or password.": {
       "localizations": {
         "ja": {
@@ -10278,6 +10754,34 @@
         }
       }
     },
+    "This deletes your account on the server that stores your writing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This deletes your account on the server that stores your writing."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文章が保存されているサーバーからアカウントを削除します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 글이 저장된 서버에서 계정을 삭제합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这将删除存储你写作的服务器上的账户。"
+          }
+        }
+      }
+    },
     "This draft is only on this device, so deleting it cannot be undone.": {
       "localizations": {
         "en": {
@@ -10302,6 +10806,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "这份草稿只在本设备上，删除后无法恢复。"
+          }
+        }
+      }
+    },
+    "This is not the same as leaving Nook Plus. Leaving keeps your account and everything in it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is not the same as leaving Nook Plus. Leaving keeps your account and everything in it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus の退会とは異なります。退会ではアカウントとその中身はそのまま残ります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nook Plus 탈퇴와는 다릅니다. 탈퇴는 계정과 그 안의 모든 것을 남겨 둡니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这与退出 Nook Plus 不同。退出会保留你的账户及其中的一切。"
           }
         }
       }
@@ -11816,6 +12348,62 @@
         }
       }
     },
+    "Your account has been deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account has been deleted"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントを削除しました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정이 삭제되었습니다"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户已删除"
+          }
+        }
+      }
+    },
+    "Your account, your publications, and your articles are gone from the server, and your pages are coming down.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account, your publications, and your articles are gone from the server, and your pages are coming down."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントも発行物も記事もサーバーから消え、公開ページも取り下げられています。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정과 발행물, 글이 서버에서 사라졌고 공개 페이지도 내려가는 중입니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的账户、出版物和文章已从服务器上删除，页面正在撤下。"
+          }
+        }
+      }
+    },
     "Your address": {
       "localizations": {
         "en": {
@@ -12141,6 +12729,34 @@
         }
       }
     },
+    "Your name, your address, every publication, every article, and every image go with it. Published pages come down. Nothing here can be undone, and nothing can bring the account back — a new one starts empty, with a new invitation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name, your address, every publication, every article, and every image go with it. Published pages come down. Nothing here can be undone, and nothing can bring the account back — a new one starts empty, with a new invitation."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名前、アドレス、すべての発行物、すべての記事、すべての画像が一緒に削除されます。公開ページも取り下げられます。取り消すことはできず、アカウントを元に戻す方法もありません。新しいアカウントは新しい招待とともに空の状態から始まります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이름, 주소, 모든 발행물, 모든 글, 모든 이미지가 함께 사라집니다. 공개된 페이지도 내려갑니다. 되돌릴 수 없고 계정을 되살릴 방법도 없습니다 — 새 계정은 새 초대와 함께 빈 상태로 시작합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的名称、地址、所有出版物、所有文章和所有图片都会一并删除。已发布的页面会被撤下。此操作无法撤销，账户也无法恢复 — 新账户需要新的邀请，且从空白开始。"
+          }
+        }
+      }
+    },
     "Your pages are coming down. Everything you wrote is still in your repository, and your drafts are still on this device.": {
       "localizations": {
         "en": {
@@ -12165,6 +12781,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "你的页面正在下架。你写的内容都还在你的仓库里，草稿也仍在此设备上。"
+          }
+        }
+      }
+    },
+    "Your password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your password"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パスワード"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비밀번호"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的密码"
           }
         }
       }

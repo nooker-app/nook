@@ -106,6 +106,43 @@ public struct PlusPDSClient: Sendable {
         )
     }
 
+    /// Asks the host to email a code that authorises deleting the account.
+    ///
+    /// The host owns account deletion for the same reason it owns the password: the
+    /// account is a repository on that server, and Nook's service only ever held a
+    /// membership pointing at it. `POST /v1/account/deletion-requests` on the service
+    /// is a deprecated alias for disconnection and does not delete anything — its own
+    /// contract says so — so this is the only path that ends an account.
+    ///
+    /// Authenticated and bodiless. Bodiless matters: this host refuses `{}` on a
+    /// method that takes no input, which is the failure the note on `post` records.
+    public func requestAccountDeletion(bearer: String) async throws {
+        struct Empty: Decodable {}
+        let _: Empty = try await post(
+            "com.atproto.server.requestAccountDelete",
+            body: nil,
+            bearer: bearer
+        )
+    }
+
+    /// Deletes the account and the repository behind it, using the emailed code.
+    ///
+    /// Irreversible: the DID, the handle, every record, and every blob go. Takes the
+    /// password as well as the code because it is unauthenticated — a live session is
+    /// not enough to end an account, which is the right shape for something that
+    /// cannot be undone.
+    public func deleteAccount(did: String, password: String, token: String) async throws {
+        struct Empty: Decodable {}
+        let _: Empty = try await post(
+            "com.atproto.server.deleteAccount",
+            body: [
+                "did": did,
+                "password": password,
+                "token": token.trimmingCharacters(in: .whitespacesAndNewlines),
+            ]
+        )
+    }
+
     /// Lists a repository's publications, newest first.
     public func publications(did: String) async throws -> [ATRecord<PublicationRecord>] {
         try await list(did: did, collection: PublicationRecord.typeNSID)
