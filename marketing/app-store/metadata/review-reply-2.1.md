@@ -26,9 +26,9 @@ email address, and a password, and guideline 5.1.1(v) requires an app that creat
 accounts to delete them too. App Review asked for that flow by name in item 1.
 
 It was not there when 0.1.0 was submitted. Settings › Nook Plus › **Delete Account**
-now runs the real thing: the host emails a code, the code and the password go back
-together, and `com.atproto.server.deleteAccount` ends the repository — the DID, the
-handle, every publication, every article, every blob.
+now runs the real thing: the reader confirms with their password, the server that
+stores their writing verifies it, and the account is destroyed — the identifier, the
+handle, every publication, every article, every image.
 
 **Leave Nook Plus** is still there, above it, and is a different act: it ends the
 membership and takes down the pages Nook generated while keeping everything the writer
@@ -69,13 +69,13 @@ having the feature.
 > an invitation code rather than a public sign-up form.
 >
 > Account deletion is in Settings › Nook Plus › Delete Account, and the recording
-> shows it end to end. The server that stores the writer's work emails a code; the
-> code and the password go back together; the account, its identifier, its handle,
-> every publication, every article, and every image are deleted, and the published
-> pages come down. It cannot be undone, and the app says so before it asks for
-> anything. Unpublished drafts live only on the device and are offered as a separate
-> choice in the same step, because deleting the account does not reach them and this
-> device may hold the only copy.
+> shows it end to end. The reader confirms with their account password, which is
+> verified by the server that stores their writing rather than by the app; the
+> account, its identifier, its handle, every publication, every article, and every
+> image are then deleted, and the published pages come down. It cannot be undone,
+> and the app says so before it asks for anything. Unpublished drafts live only on
+> the device and are offered as a separate choice in the same step, because deleting
+> the account does not reach them and this device may hold the only copy.
 >
 > There is a second, milder control directly above it, and the difference is worth
 > stating so it is not mistaken for the first. Nook Plus is a membership layered on
@@ -300,9 +300,11 @@ Delete and reinstall the app first, so the first run is genuinely a first run.
 11. **Nook Plus** — sign in with the review credentials, write and publish a short
     article, open its public page, then Settings › Nook Plus and go through the
     account controls. Show Leave Nook Plus and its wording, then go through Delete
-    Account in full — request the code, enter it with the password, and let the
-    deletion complete. This is the flow App Review asked for by name; a recording
-    that stops at the confirmation dialog has not shown it.
+    Account in full — enter the password, confirm, and let the deletion complete.
+    This is the flow App Review asked for by name; a recording that stops at the
+    confirmation dialog has not shown it. Deleting the review account ends the
+    recording, so do this last, and re-create it before sending the reply so the
+    demo credentials still work.
 12. **Account creation**, from the invitation code, so registration is on the tape
     as they asked.
 

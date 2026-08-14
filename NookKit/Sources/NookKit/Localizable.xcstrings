@@ -10284,6 +10284,34 @@
         }
       }
     },
+    "The same password you sign in with. It is checked by the server that stores your writing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The same password you sign in with. It is checked by the server that stores your writing."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サインインに使うパスワードです。文章が保存されているサーバーが確認します。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인할 때 쓰는 그 비밀번호입니다. 글이 저장된 서버가 직접 확인합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就是你登录时使用的密码。由存储你写作的服务器直接验证。"
+          }
+        }
+      }
+    },
     "The saved sync folder permission expired. Choose the folder again.": {
       "localizations": {
         "en": {

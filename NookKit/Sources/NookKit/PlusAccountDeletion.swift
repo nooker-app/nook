@@ -6,16 +6,21 @@ import SwiftUI
 /// thing in Nook that destroys something the user cannot get back by any means, and
 /// it needs room to say so before it asks for anything.
 ///
-/// Two steps, in this order. The host emails a code; the code and the password are
-/// then submitted together. Neither is ceremony: the host authorises deletion with
-/// something only the account's mailbox receives, so a phone left unlocked cannot end
-/// an account, and the password is asked for again because a live session is not
-/// enough to justify something irreversible.
+/// It asks for the password, and that is not ceremony: a live session proves the
+/// reader may act as the account, not that they may destroy it, and the password is
+/// checked at the server that stores the account rather than against anything the
+/// app or the service holds.
+///
+/// It once asked for an emailed code as well, which is the path the protocol
+/// endorses and the one this screen will go back to — the host emails a token and
+/// only the account's mailbox can produce it, so a phone left unlocked cannot end an
+/// account. That is unavailable while the service's sending domain cannot reach an
+/// unverified address, and an account nobody can delete is worse than one door
+/// fewer. See `PlusStore.deleteAccount`.
 public struct PlusAccountDeletionSheet: View {
     private let store: PlusStore
     private let onFinished: () -> Void
 
-    @State private var code = ""
     @State private var password = ""
 
     /// Asked rather than assumed, and defaulting to on because somebody who has typed
@@ -30,29 +35,20 @@ public struct PlusAccountDeletionSheet: View {
         self.onFinished = onFinished
     }
 
-    private var canSubmit: Bool {
-        !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !password.isEmpty
-            && !store.isWorking
-    }
+    private var canSubmit: Bool { !password.isEmpty && !store.isWorking }
 
     public var body: some View {
         NavigationStack {
             Form {
                 explanation
-                if store.accountDeletionRequested {
-                    credentials
-                    // Above the toggle and the button, not below them. A wrong code
-                    // is reported by the button at the bottom of the form, and a
-                    // message placed after it sat below the fold — the one thing the
-                    // writer needs to read was the one thing they had to scroll for.
-                    failureSection
-                    if offersDrafts { draftsSection }
-                    submit
-                } else {
-                    request
-                    failureSection
-                }
+                credentials
+                // Above the toggle and the button, not below them. A wrong password
+                // is reported by the button at the bottom of the form, and a message
+                // placed after it sat below the fold — the one thing the writer needs
+                // to read was the one thing they had to scroll for.
+                failureSection
+                if offersDrafts { draftsSection }
+                submit
             }
             .formStyle(.grouped)
             .navigationTitle(Text("Delete Account", bundle: .module))
@@ -62,7 +58,6 @@ public struct PlusAccountDeletionSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
-                        store.cancelAccountDeletion()
                         onFinished()
                     } label: {
                         Text("Cancel", bundle: .module)
@@ -93,41 +88,14 @@ public struct PlusAccountDeletionSheet: View {
         }
     }
 
-    private var request: some View {
-        Section {
-            Button {
-                Task { await store.requestAccountDeletion() }
-            } label: {
-                if store.isWorking {
-                    Label {
-                        Text("Sending…", bundle: .module)
-                    } icon: {
-                        ProgressView().controlSize(.small)
-                    }
-                } else {
-                    Text("Email Me a Code", bundle: .module)
-                }
-            }
-            .disabled(store.isWorking)
-        } footer: {
-            Text("The server sends a code to the email address on the account. You will need it, along with your password, on the next step.", bundle: .module)
-        }
-    }
-
     private var credentials: some View {
         Section {
-            TextField(text: $code) { Text("Code from the email", bundle: .module) }
-                .autocorrectionDisabled()
-                #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .textContentType(.oneTimeCode)
-                #endif
             SecureField(text: $password) { Text("Your password", bundle: .module) }
                 .textContentType(.password)
         } header: {
             Text("Confirm it is you", bundle: .module)
         } footer: {
-            Text("Didn’t get it? Check the address the account was made with, then ask again.", bundle: .module)
+            Text("The same password you sign in with. It is checked by the server that stores your writing.", bundle: .module)
         }
     }
 
@@ -184,7 +152,6 @@ public struct PlusAccountDeletionSheet: View {
                     Task {
                         await store.deleteAccount(
                             password: password,
-                            token: code,
                             discardingDrafts: discardDrafts && offersDrafts
                         )
                         // Only on success. A failure leaves the sheet open with its

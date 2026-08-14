@@ -16,7 +16,7 @@ let package = Package(
         // Nook Plus is opt-in. Reading feeds must keep working with no
         // account and no network, so nothing on the reader path may depend on
         // these types.
-        .package(url: "https://github.com/nooker-app/nook-plus-protocol.git", exact: "0.3.1"),
+        .package(url: "https://github.com/nooker-app/nook-plus-protocol.git", exact: "0.4.1"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.1.0"),
     ],
     targets: [

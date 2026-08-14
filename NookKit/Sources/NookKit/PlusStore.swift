@@ -571,15 +571,11 @@ public final class PlusStore {
 
     // MARK: - Deleting the account
 
-    /// Whether the host has been asked to email a deletion code, so the screen can
-    /// ask for the code rather than for a decision it has already taken.
-    public private(set) var accountDeletionRequested = false
-
     /// Set once the account is gone, so the screen can say so. The session is
     /// cleared at the same moment, so nothing else can report it.
     public private(set) var accountDeleted = false
 
-    /// Asks the repository host to email a code authorising deletion.
+    /// Deletes the account, and then everything on this device that pointed at it.
     ///
     /// The last of the three things called "delete my account", and the only one
     /// that is one. Signing out ends this device's session; leaving ends the Nook
@@ -587,50 +583,35 @@ public final class PlusStore {
     /// itself — the DID, the handle, every publication, every article, every blob.
     /// Nothing survives it and nothing brings it back.
     ///
-    /// Two steps, and the code is why. Deletion is authorised by something only the
-    /// account's own mailbox receives, so a signed-in device that has been left
-    /// unlocked cannot end an account on its own.
-    public func requestAccountDeletion() async {
-        guard let session else {
-            failure = String(localized: "Sign in first.", bundle: .module)
-            return
-        }
-        await perform {
-            // Read after `perform` has renewed it: the token this sends must be the
-            // fresh one, not the one captured before the renewal.
-            let bearer = self.session?.accessJWT ?? session.accessJWT
-            try await self.pds.requestAccountDeletion(bearer: bearer)
-            self.accountDeletionRequested = true
-        }
-    }
-
-    /// Deletes the account, and then everything on this device that pointed at it.
+    /// TEMPORARY IN ITS MECHANISM, not in its existence. The protocol's own path
+    /// for this is the PDS's: `requestAccountDeletion` has the host email a code,
+    /// and `deleteAccount` spends it. Both are still in `PlusPDSClient`, unused,
+    /// because the service's sending domain cannot yet email an unverified address
+    /// — so that code never arrives, and an account nobody can delete is worse than
+    /// a second door. The service does it instead, verifying the password at the
+    /// PDS. When the mail works, this method goes back to the two PDS calls and the
+    /// screen grows its code field again.
     ///
     /// `discardingDrafts` is asked rather than assumed. Drafts are unpublished
     /// writing held only here — deleting the account does not reach them, and for
     /// text that was never published this device may hold the only copy. Discarding
     /// them quietly would be the one thing this must not do; keeping them without
     /// saying so would be the other.
-    public func deleteAccount(password: String, token: String, discardingDrafts: Bool) async {
-        guard let did = session?.did else {
+    public func deleteAccount(password: String, discardingDrafts: Bool) async {
+        guard session != nil else {
             failure = String(localized: "Sign in first.", bundle: .module)
             return
         }
         var deleted = false
         await perform {
-            try await self.pds.deleteAccount(did: did, password: password, token: token)
+            _ = try await self.service.deleteHostedAccount(
+                password: password, idempotencyKey: UUID().uuidString)
             deleted = true
         }
         guard deleted, failure == nil else { return }
         if discardingDrafts { discardAllDrafts() }
         signOut()
-        accountDeletionRequested = false
         accountDeleted = true
-    }
-
-    /// Abandons a deletion that was started but not carried out.
-    public func cancelAccountDeletion() {
-        if accountDeletionRequested { accountDeletionRequested = false }
     }
 
     /// Clears the confirmation, for a screen that has shown it.

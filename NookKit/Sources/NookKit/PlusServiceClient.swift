@@ -345,6 +345,35 @@ public struct PlusServiceClient: Sendable {
         }
     }
 
+    /// Deletes the account itself. TEMPORARY.
+    ///
+    /// The path this protocol endorses for account deletion is the PDS's own,
+    /// which emails a confirmation token — `PlusPDSClient.requestAccountDeletion`
+    /// and `deleteAccount`, both still here for when it works. The service's
+    /// sending domain cannot yet reach an unverified address, so for a real
+    /// account that mail never arrives and the account cannot be deleted at all.
+    ///
+    /// So the service does it, and the password is what makes that acceptable:
+    /// it is verified at the PDS, not against anything the service holds. When
+    /// the mail path works this endpoint goes and the two PDS calls come back.
+    public func deleteHostedAccount(password: String, idempotencyKey: String) async throws
+        -> Components.Schemas.DisconnectionReceipt
+    {
+        guard session() != nil else { throw PlusServiceError.sessionInvalid }
+        let output = try await send({
+            try await client.deleteHostedAccount(
+                headers: .init(Idempotency_hyphen_Key: idempotencyKey),
+                body: .json(.init(password: password))
+            )
+        })
+        switch output {
+        case .accepted(let accepted):
+            return try accepted.body.json
+        case .default(_, let problem):
+            throw PlusServiceError.from(problem)
+        }
+    }
+
     /// Runs a generated call, turning a transport failure into `transport`.
     ///
     /// The output itself is returned unexamined so each caller can map the
