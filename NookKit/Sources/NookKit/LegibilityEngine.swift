@@ -69,9 +69,11 @@ public final class LegibilityEngine {
         public var confidence: Int
         /// The engine stopped at its output limit, so the body is short of the page.
         public var truncated: Bool
-        /// How many comments the page carried. Nook renders none; this is here so
-        /// a diagnostic can say the thread was seen and skipped.
+        /// How many comments the page carried, which is not always how many came
+        /// back in `comments` — see `ReaderCommentThread.missing`.
         public var commentCount: Int
+        /// The page's discussion, or nil when it had none.
+        public var comments: ReaderCommentThread?
     }
 
     /// Which engine build the bundled page carries, once it has loaded. Worth
@@ -130,6 +132,15 @@ public final class LegibilityEngine {
     /// Reading is bursty: a handful of articles, then nothing. Holding a web view
     /// and a compiled module through the nothing is what this avoids.
     private static let idleSeconds: TimeInterval = 90
+
+    /// How many comments to carry back from a thread.
+    ///
+    /// Not a display limit — the reader pages through what it gets — but a bound on
+    /// what crosses out of the web view and gets stored. A front-page discussion runs
+    /// to a thousand replies, and the reader renders each body through the native HTML
+    /// parser, so the whole thread is neither cheap to move nor cheap to draw. What is
+    /// left out is reported rather than hidden.
+    static let maxComments = 250
 
     private func readyWebView() async -> WKWebView? {
         idleTeardown?.cancel()
@@ -385,8 +396,38 @@ public final class LegibilityEngine {
     private static let extractScript = """
     const d = await window.legibility.extract(source);
     const m = d.metadata || {};
+    const c = d.comments || {};
+    const items = c.items || [];
     const value = (c) => (c && typeof c.value === 'string' && c.value.trim()) ? c.value.trim() : null;
     const published = m.published || null;
+
+    // A comment body wrapped in table markup is the forum's layout, not the
+    // comment's content — Hacker News nests a table per reply. Unwrapping the cells
+    // keeps the text and drops a grid the reader would otherwise draw around every
+    // comment. Done here, where there is a DOM to do it in, rather than with a
+    // regular expression on the native side.
+    const LAYOUT = new Set(['TABLE', 'TBODY', 'THEAD', 'TFOOT', 'TR', 'TD', 'TH', 'COLGROUP', 'COL']);
+    function unwrapLayout(html) {
+      if (!html || html.indexOf('<t') === -1) return html;
+      try {
+        const holder = document.createElement('div');
+        holder.innerHTML = html;
+        // Bounded: a malicious body could nest thousands of tables, and this runs on
+        // every comment of every article.
+        for (let pass = 0; pass < 12; pass += 1) {
+          const found = holder.querySelectorAll('table, tbody, thead, tfoot, tr, td, th, colgroup, col');
+          if (!found.length) break;
+          found.forEach(function (node) {
+            if (!LAYOUT.has(node.tagName)) return;
+            while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+            node.remove();
+          });
+        }
+        return holder.innerHTML;
+      } catch (_) {
+        return html;
+      }
+    }
     return JSON.stringify({
       // `title_without_site_name` is populated only when the site-name suffix was
       // confirmed against `og:site_name`, so it is the better title when present —
@@ -403,7 +444,28 @@ public final class LegibilityEngine {
         confidence: d.article.confidence || 0,
         truncated: !!d.article.truncated,
       } : null,
-      comments: (d.comments && d.comments.count) || 0,
+      commentCount: (d.comments && d.comments.count) || 0,
+      claimedTotal: c.completeness ? (c.completeness.claimed_total ?? null) : null,
+      commentsTruncated: !!(c.completeness && c.completeness.truncated),
+      depthSource: c.depth_source || null,
+      // A prefix, not a sample: `parent` is an index into this array and a parent
+      // always precedes its reply, so keeping the first N keeps every kept item's
+      // parent with it. `commentCount` and `claimedTotal` still say what the page
+      // had, so the reader can report what it is not showing instead of implying
+      // the thread ends here.
+      comments: items.slice(0, \(LegibilityEngine.maxComments)).map(function (it, i) {
+        return {
+          i: i,
+          a: (it.author && it.author.trim()) || null,
+          t: (it.timestamp && it.timestamp.trim()) || null,
+          d: it.depth || 0,
+          p: (typeof it.parent === 'number') ? it.parent : null,
+          l: it.permalink || null,
+          x: !!it.deleted,
+          s: it.text || '',
+          h: unwrapLayout(it.html || ''),
+        };
+      }),
     });
     """
 
@@ -434,7 +496,21 @@ public final class LegibilityEngine {
         var published: String?
         var noArticle: String?
         var article: Article?
-        var comments: Int
+        var comments: [ReaderComment]
+        var commentCount: Int
+        var claimedTotal: Int?
+        var commentsTruncated: Bool
+        var depthSource: String?
+
+        /// The discussion, or nil when the page had none worth drawing.
+        var thread: ReaderCommentThread? {
+            let usable = comments.filter { $0.renderableHTML != nil || $0.isDeleted }
+            guard !usable.isEmpty else { return nil }
+            return ReaderCommentThread(
+                items: usable, count: commentCount, claimedTotal: claimedTotal,
+                isTruncated: commentsTruncated || usable.count < commentCount,
+                depthSource: depthSource)
+        }
 
         var outcome: Outcome {
             guard let article else { return .noArticle(reason: noArticle) }
@@ -451,7 +527,8 @@ public final class LegibilityEngine {
                     linkURL: article.url.flatMap(URL.init(string:)),
                     confidence: article.confidence,
                     truncated: article.truncated,
-                    commentCount: comments))
+                    commentCount: commentCount,
+                    comments: thread))
         }
     }
 }

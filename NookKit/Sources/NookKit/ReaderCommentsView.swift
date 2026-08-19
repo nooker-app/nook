@@ -1,0 +1,186 @@
+import SwiftUI
+
+/// The page's discussion, drawn under the article in the native reader.
+///
+/// Native views rather than a block of injected markup. legibility hands the thread
+/// over as data — author, time, depth, parent, and a sanitized body per item — so
+/// there is no reason to flatten it back into HTML and re-parse it: the reply
+/// structure survives, the article's own typography applies to the bodies, and none
+/// of this reaches the Markdown export, the summarizer, or the translator, all of
+/// which take the article body alone.
+public struct ReaderCommentsSection: View {
+    private let thread: ReaderCommentThread
+    private let baseURL: URL?
+    private let typography: ReaderTypography
+    /// Matches whatever the article body on this platform does — text selection on the
+    /// Mac, and off on iOS, where the reader's own tap and long-press gestures own the
+    /// body.
+    private let selectable: Bool
+
+    /// How many to draw before the "show the rest" button.
+    ///
+    /// Not politeness: every body goes through the native HTML parser, and a
+    /// front-page thread is hundreds of them. Drawing the first page keeps opening an
+    /// article the same cost it was before comments existed.
+    private static let firstPage = 30
+
+    @State private var showsAll = false
+
+    public init(
+        thread: ReaderCommentThread,
+        baseURL: URL? = nil,
+        typography: ReaderTypography = .platformDefault,
+        selectable: Bool = true
+    ) {
+        self.thread = thread
+        self.baseURL = baseURL
+        self.typography = typography
+        self.selectable = selectable
+    }
+
+    private var visible: [ReaderComment] {
+        showsAll ? thread.items : Array(thread.items.prefix(Self.firstPage))
+    }
+
+    private var hidden: Int { max(0, thread.items.count - visible.count) }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+
+            ForEach(visible) { comment in
+                ReaderCommentRow(
+                    comment: comment,
+                    depth: thread.showsDepth ? comment.depth : 0,
+                    baseURL: baseURL,
+                    typography: typography,
+                    selectable: selectable)
+            }
+
+            if hidden > 0 {
+                Button {
+                    showsAll = true
+                } label: {
+                    Text("Show \(hidden) more", bundle: .module)
+                }
+                .buttonStyle(.bordered)
+                .padding(.top, 14)
+            }
+
+            if thread.missing > 0 {
+                // Said plainly, because the alternative is implying the conversation
+                // ends here. A page that loads its replies on scroll, or paginates
+                // them, simply does not contain the rest — there is nothing to extract.
+                //
+                // Two sentences rather than one inflected key: automatic grammar
+                // agreement would need plural variations in a catalog whose other three
+                // languages have no plural forms at all.
+                (thread.missing == 1
+                    ? Text("One more comment is on the original page.", bundle: .module)
+                    : Text("\(thread.missing) more comments are on the original page.", bundle: .module))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 12)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Comments", bundle: .module)
+                .font(.headline)
+            Text(thread.claimedTotal ?? thread.count, format: .number)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Spacer(minLength: 0)
+        }
+        .padding(.bottom, 6)
+    }
+}
+
+/// One comment: who, when, and the body, indented to its place in the thread.
+private struct ReaderCommentRow: View {
+    let comment: ReaderComment
+    let depth: Int
+    let baseURL: URL?
+    let typography: ReaderTypography
+    let selectable: Bool
+
+    /// Indentation stops after a few levels. A deep chain would otherwise squeeze the
+    /// text into a column too narrow to read, and the rule on the left already says
+    /// "this is a reply" — the exact number is not what a reader is looking for.
+    private static let maxIndentedDepth = 5
+    private static let indentStep: CGFloat = 14
+
+    private var indent: CGFloat { CGFloat(min(depth, Self.maxIndentedDepth)) * Self.indentStep }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            if depth > 0 {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.12))
+                    .frame(width: 2)
+                    .padding(.leading, indent - Self.indentStep)
+                    .padding(.trailing, Self.indentStep - 2)
+                    .accessibilityHidden(true)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                byline
+                body(for: comment)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 9)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var byline: some View {
+        HStack(spacing: 6) {
+            if let author = comment.author, !author.isEmpty {
+                Text(author)
+                    .font(.caption.weight(.semibold))
+            } else {
+                Text("Someone", bundle: .module)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let posted = comment.postedAt {
+                // A parsed instant gets the same relative wording as the rest of the
+                // app, and ticks with it.
+                RelativeTimeText(posted)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let stamp = comment.timestamp, !stamp.isEmpty {
+                // The page wrote something a clock cannot read — "3 hours ago", or a
+                // format nobody standardized. Shown as it was written, because the
+                // alternative is inventing a time.
+                Text(stamp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func body(for comment: ReaderComment) -> some View {
+        if comment.isDeleted, comment.renderableHTML == nil {
+            // Kept as a placeholder rather than removed: everything replying to it
+            // hangs off this node, and a thread that cannot be reassembled reads worse
+            // than one with a gap in it.
+            Text("Deleted", bundle: .module)
+                .font(.callout.italic())
+                .foregroundStyle(.tertiary)
+        } else if let html = comment.renderableHTML {
+            // The reader's own typography, so a comment reads at the size they chose.
+            HTMLContentView(
+                html: html, baseURL: baseURL, selectable: selectable, typography: typography)
+        }
+    }
+}

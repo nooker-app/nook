@@ -10,6 +10,9 @@ public struct ReaderParserSettingsContent: View {
     // Storing an enum here and a string there is a setting that appears to reset.
     @AppStorage(ReaderParserEngine.storageKey)
     private var engine = ReaderParserEngine.fallback.rawValue
+    /// Comments come out of the same legibility read as the article, so the switch
+    /// belongs beside the parser rather than in a section of its own.
+    @AppStorage(ReaderStore.showReaderCommentsKey) private var showComments = true
     /// The master switch for the built-in reader, which lives on the Experimental
     /// screen. With it off no parser runs there, and this setting reaches only the
     /// in-app browser's reader mode — worth saying rather than leaving a control that
@@ -35,6 +38,17 @@ public struct ReaderParserSettingsContent: View {
         Text(selected.summary)
             .font(.caption)
             .foregroundStyle(.secondary)
+
+        Toggle(isOn: $showComments) {
+            Text("Show the page's comments", bundle: .module)
+        }
+        .disabled(selected != .legibility)
+
+        if selected != .legibility {
+            Text("Only Legibility reads the comment thread; Readability extracts the article body alone.", bundle: .module)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
 
         // Said plainly because the alternative surprises people: the reader does not
         // re-fetch every article you have already opened when you change this. It

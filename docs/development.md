@@ -42,6 +42,7 @@ For a physical iPhone or iPad, open `Nook.xcodeproj`, select the NookiOS scheme,
 - **Feed parsing:** `XMLParser`.
 - **Native reader:** semantic SwiftUI rendering for parsed HTML and Markdown.
 - **Article parsers:** two, chosen in Settings and switchable per article from inside the reader. [legibility](https://github.com/nooker-app/legibility) is the default — a Rust extractor compiled to WebAssembly and shipped as one self-contained page, `NookKit/Sources/NookKit/Legibility.html`. Mozilla's Readability.js is the alternative, and keeps the video and CodePen embeds legibility's sanitizer drops.
+- **Comments:** legibility returns the page's discussion as data (`ReaderCommentThread`), drawn by native views under the article. Stored per device in the SQLite replica rather than in the synced reader shard: a thread runs to hundreds of kilobytes, that shard is rewritten whole on every extraction, and comments are regenerable.
 - **Full-page reader:** a deliberate opt-in `WKWebView` that renders whichever parser is chosen, styled by the reader's own typography settings.
 - **Translation:** Foundation Models and NaturalLanguage on-device; optional Gemini through a direct network client.
 - **Persistence:** per-device JSON CRDT shards in the chosen folder plus a disposable local SQLite replica/outbox.

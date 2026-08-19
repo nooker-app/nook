@@ -31,15 +31,19 @@ public final class ReaderModeExtractor {
         /// parser drops. Always zero for Readability, which keeps them. Non-zero
         /// means the reader is missing something the page had, and should say so.
         public var droppedEmbeds: Int
+        /// The page's discussion, when the parser extracted one. Only legibility
+        /// does: Readability reads an article body and nothing else.
+        public var comments: ReaderCommentThread?
 
         public init(
             html: String, engine: ReaderParserEngine, fellBack: Bool = false,
-            droppedEmbeds: Int = 0
+            droppedEmbeds: Int = 0, comments: ReaderCommentThread? = nil
         ) {
             self.html = html
             self.engine = engine
             self.fellBack = fellBack
             self.droppedEmbeds = droppedEmbeds
+            self.comments = comments
         }
     }
 
@@ -238,7 +242,8 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
                             .success(
                                 .init(
                                     html: html, engine: .legibility,
-                                    droppedEmbeds: embedsOnPage)))
+                                    droppedEmbeds: embedsOnPage,
+                                    comments: extraction.comments)))
                         return
                     }
                 case .noArticle:

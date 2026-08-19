@@ -44,6 +44,9 @@ public final class ReplicaStore: @unchecked Sendable {
                 CREATE TABLE IF NOT EXISTS classification_attempts (
                     article_id TEXT PRIMARY KEY, attempted_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS article_comments (
+                    article_id TEXT PRIMARY KEY, payload BLOB NOT NULL, stored_at REAL NOT NULL
+                );
             """)
         }
     }
@@ -299,6 +302,63 @@ public final class ReplicaStore: @unchecked Sendable {
     ///
     /// Undelivered is written as `0` by `insertReceipt`, so match that as well as
     /// the column's nullable default.
+    // MARK: - Comment threads
+
+    /// How many articles' discussions to keep. Comments are bulky and regenerable,
+    /// and reading moves forward; the cap is what keeps a local database from growing
+    /// without bound on a device that reads a lot of forum threads.
+    private static let maxCommentThreads = 400
+
+    /// Stores an article's extracted discussion, and drops the oldest once the cap is
+    /// passed.
+    ///
+    /// Deliberately here and not in the synced reader shard. A thread runs to
+    /// hundreds of kilobytes, that shard is rewritten whole into the sync folder on
+    /// every single extraction, and a comment thread is regenerable content — so
+    /// syncing it would cost a great deal to save re-reading a page. The cost is that
+    /// an article first read on another device arrives with its body but not its
+    /// discussion, which is a missing section rather than a wrong one.
+    public func saveComments(_ payload: Data, for articleID: Article.ID) throws {
+        try lock.withLock {
+            try withDatabase { db in
+                try transaction(db) {
+                    try run(
+                        db,
+                        "INSERT OR REPLACE INTO article_comments(article_id,payload,stored_at) VALUES(?,?,?)",
+                        [.text(articleID), .blob(payload), .double(Date().timeIntervalSince1970)])
+                    // The cap is interpolated rather than bound: `LIMIT` wants an
+                    // integer, the binder here only carries text/blob/double, and this
+                    // is a compile-time constant rather than anything a page supplied.
+                    try run(
+                        db,
+                        """
+                        DELETE FROM article_comments WHERE article_id NOT IN (
+                            SELECT article_id FROM article_comments
+                            ORDER BY stored_at DESC LIMIT \(Self.maxCommentThreads)
+                        )
+                        """)
+                }
+            }
+        }
+    }
+
+    /// The stored discussion for an article, or nil when this device has none.
+    public func comments(for articleID: Article.ID) throws -> Data? {
+        try lock.withLock {
+            try withDatabase { db in
+                try scalar(db, "SELECT payload FROM article_comments WHERE article_id=?", articleID)
+            }
+        }
+    }
+
+    public func deleteComments(for articleID: Article.ID) throws {
+        try lock.withLock {
+            try withDatabase { db in
+                try run(db, "DELETE FROM article_comments WHERE article_id=?", [.text(articleID)])
+            }
+        }
+    }
+
     public func pendingNotificationIDs() throws -> Set<Article.ID> {
         try lock.withLock {
             try withDatabase { db in

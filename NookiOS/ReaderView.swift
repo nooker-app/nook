@@ -326,6 +326,16 @@ struct ReaderDetailView: View {
 
                     readerBody(article)
 
+                    // The page's own discussion, under the article it belongs to. Only
+                    // legibility extracts it, so an article read with Readability and
+                    // never re-read simply has no section here.
+                    if let comments = store.readerComments(for: article) {
+                        Divider()
+                        ReaderCommentsSection(
+                            thread: comments, baseURL: article.url,
+                            typography: readerStyle.typography, selectable: false)
+                    }
+
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 20)

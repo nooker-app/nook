@@ -55,7 +55,7 @@ public enum ReaderParserEngine: String, CaseIterable, Identifiable, Codable, Sen
     public var summary: String {
         switch self {
         case .legibility:
-            String(localized: "Nook's own extractor. Reads short posts and link posts that Readability skips, and never invents a title or date.", bundle: Bundle.module)
+            String(localized: "Nook's own extractor. Reads short posts and link posts that Readability skips, pulls in the page's comment thread, and never invents a title or date.", bundle: Bundle.module)
         case .readability:
             String(localized: "Mozilla's extractor. Keeps embedded videos and CodePen examples, which Legibility drops.", bundle: Bundle.module)
         }

@@ -399,6 +399,16 @@ public final class ReaderStore {
     /// discarded. legibility's sanitizer drops them; Readability keeps them.
     private(set) var readerDroppedEmbeds: [Article.ID: Int] = [:]
 
+    /// The discussion on each article's page, for the reader to draw under the body.
+    ///
+    /// Populated from the extraction, and on a body served from cache by a read of
+    /// this device's local database. Kept out of the synced shard on purpose — see
+    /// `ReplicaStore.saveComments`.
+    private(set) var readerCommentThreads: [Article.ID: ReaderCommentThread] = [:]
+    /// Articles whose local thread has already been looked for, so a page with no
+    /// discussion is not queried on every open.
+    private var readerCommentsLoaded: Set<Article.ID> = []
+
     /// An observable mirror of the parser preference.
     ///
     /// `ReaderParserEngine.preferred` reads `UserDefaults` directly, which nothing
@@ -467,25 +477,33 @@ public final class ReaderStore {
     private var didQuiesceForLocalReset = false
 
     private init() {
-        // `ReaderParserEngine.preferred` reads `UserDefaults` directly, and nothing
-        // observes that. Mirroring it here — and refreshing on the defaults
-        // notification the Settings picker triggers — is what makes the reader's
-        // parser menu follow a change made in the Settings window while both are on
-        // screen. Retained for the store's lifetime, which is the app's.
-        parserPreferenceObserver = NotificationCenter.default.addObserver(
+        // These preferences are read out of `UserDefaults` by non-view code, and
+        // nothing observes that. Mirroring them here — and refreshing on the defaults
+        // notification the Settings controls trigger — is what makes an open reader
+        // follow a change made in the Settings window beside it. Retained for the
+        // store's lifetime, which is the app's.
+        readerPreferenceObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: UserDefaults.standard,
             queue: .main
         ) { _ in
-            MainActor.assumeIsolated {
-                let current = ReaderParserEngine.preferred
-                if ReaderStore.shared.preferredParser != current {
-                    ReaderStore.shared.preferredParser = current
-                }
-            }
+            MainActor.assumeIsolated { ReaderStore.shared.refreshReaderPreferences() }
         }
     }
 
-    private var parserPreferenceObserver: NSObjectProtocol?
+    private var readerPreferenceObserver: NSObjectProtocol?
+
+    private func refreshReaderPreferences() {
+        let parser = ReaderParserEngine.preferred
+        if preferredParser != parser { preferredParser = parser }
+
+        let comments = UserDefaults.standard.object(forKey: Self.showReaderCommentsKey) as? Bool ?? true
+        guard showsComments != comments else { return }
+        showsComments = comments
+        // Turned on with an article already open: the thread was never looked for, so
+        // ask for it now rather than waiting for the next article.
+        guard comments, let article = selectedArticle else { return }
+        Task { await loadCommentsIfNeeded(for: article.id) }
+    }
 
     /// Loads the persisted library and starts filtering. Runs its heavy work
     /// only once, no matter how often it is called.
@@ -645,6 +663,8 @@ public final class ReaderStore {
         readerContentGenerations = [:]
         reparsingArticleIDs = []
         readerDroppedEmbeds = [:]
+        readerCommentThreads = [:]
+        readerCommentsLoaded = []
         readerParserOverrides = [:]
         readerContentByEngine = [:]
         readerContentByEngineOrder = []
@@ -2646,6 +2666,27 @@ public final class ReaderStore {
         return readerDroppedEmbeds[article.id] ?? 0
     }
 
+    /// `UserDefaults` key for showing the page's comment thread under the article.
+    /// Per-device and defaults on: the discussion comes out of a page the reader has
+    /// already fetched, so showing it costs nothing beyond the drawing.
+    public static let showReaderCommentsKey = "showReaderComments"
+
+    /// Observable, so switching the setting redraws a reader that is already open.
+    public private(set) var showsComments =
+        UserDefaults.standard.object(forKey: ReaderStore.showReaderCommentsKey) as? Bool ?? true
+
+    /// The discussion to draw under an article, or nil when there is none to draw.
+    ///
+    /// Only legibility extracts comments, but the thread belongs to the *page* rather
+    /// than to a parser, so one already extracted stays available whichever body is on
+    /// screen. Reading Readability's article and the page's replies together is not a
+    /// contradiction.
+    public func readerComments(for article: Article) -> ReaderCommentThread? {
+        guard showsComments else { return nil }
+        guard let thread = readerCommentThreads[article.id], !thread.isEmpty else { return nil }
+        return thread
+    }
+
     /// Chooses the parser for one article *without* redoing the native reader's body.
     ///
     /// What the in-app browser's switch calls. The browser keeps its own copy of the
@@ -2815,10 +2856,14 @@ public final class ReaderStore {
             // replacement is actually in hand, and a failed refresh is invisible.
             if let refreshed = await refreshedOfflineCopy(for: article) {
                 await warmReaderContent(html: refreshed.html, baseURL: article.url)
+                await loadCommentsIfNeeded(for: article.id)
                 note(html: refreshed.html, engine: refreshed.engine, for: article)
                 return
             }
             await warmReaderContent(html: html, baseURL: article.url)
+            // A downloaded article keeps whatever discussion was stored with it, which
+            // is what makes the thread readable with no network.
+            await loadCommentsIfNeeded(for: article.id)
             // A downloaded body carries no record of which parser produced it —
             // `OfflineArticleStore` stores the HTML and nothing about where it came
             // from. So there is nothing to attribute it to, and the parser menu falls
@@ -3079,6 +3124,7 @@ public final class ReaderStore {
         {
             if cached.status == .success, let html = cached.html, !html.isEmpty {
                 await warmReaderContent(html: html, baseURL: article.url)
+                await loadCommentsIfNeeded(for: article.id)
                 note(html: html, engine: cached.recordedEngine, for: article)
                 // Cached content can outlive the source page. Check the original's
                 // status in the background (non-blocking) and offer deletion if it
@@ -3126,6 +3172,10 @@ public final class ReaderStore {
             // notice never came back when the reader switched to legibility again.
             if extracted.engine == .legibility {
                 readerDroppedEmbeds[article.id] = extracted.droppedEmbeds
+            }
+            noteComments(extracted.comments, engine: extracted.engine, for: article.id)
+            if let thread = extracted.comments {
+                await warmComments(thread, baseURL: article.url)
             }
             note(html: extracted.html, engine: extracted.engine, for: article)
             // A fallback body is not written to the synced cache. The parser the
@@ -3183,6 +3233,75 @@ public final class ReaderStore {
             ReaderContentValue.failure(
                 engine: engine, previous: previous, sourceFingerprint: fingerprint),
             for: id)
+    }
+
+    /// Records a freshly-extracted discussion, and files it on this device.
+    ///
+    /// Only a legibility read says anything about the comments: it either found a
+    /// thread, or looked and there was none — and "none" has to clear the stored copy,
+    /// or a discussion deleted at the source would be drawn forever. Readability
+    /// reports nothing because it never looks, which is not the same claim, so it
+    /// leaves the page's thread exactly where it was.
+    private func noteComments(
+        _ thread: ReaderCommentThread?, engine: ReaderParserEngine, for id: Article.ID
+    ) {
+        guard engine == .legibility else { return }
+        readerCommentsLoaded.insert(id)
+        if let thread, !thread.isEmpty {
+            readerCommentThreads[id] = thread
+            persistComments(thread, for: id)
+        } else {
+            readerCommentThreads[id] = nil
+            forgetComments(for: id)
+        }
+    }
+
+    private func persistComments(_ thread: ReaderCommentThread, for id: Article.ID) {
+        guard let replicaStore else { return }
+        // Off-main: encoding a long thread and writing it to SQLite has no business on
+        // the frame that is about to draw the article.
+        Task.detached(priority: .utility) {
+            guard let payload = try? JSONEncoder().encode(thread) else { return }
+            try? replicaStore.saveComments(payload, for: id)
+        }
+    }
+
+    private func forgetComments(for id: Article.ID) {
+        guard let replicaStore else { return }
+        Task.detached(priority: .utility) { try? replicaStore.deleteComments(for: id) }
+    }
+
+    /// Reads this device's stored discussion for an article, once per session.
+    ///
+    /// The path that matters is a body served from cache — this device's or a peer's —
+    /// where no extraction ran and the thread would otherwise be missing from an
+    /// article that plainly has one.
+    private func loadCommentsIfNeeded(for id: Article.ID) async {
+        guard showsComments, !readerCommentsLoaded.contains(id) else { return }
+        // Only once the store exists. Marking the article looked-at before that would
+        // make an open during launch — before storage has been restored — the one open
+        // that permanently has no comments.
+        guard let replicaStore else { return }
+        readerCommentsLoaded.insert(id)
+        let thread = await Task.detached(priority: .userInitiated) { () -> ReaderCommentThread? in
+            guard let payload = try? replicaStore.comments(for: id) else { return nil }
+            return try? JSONDecoder().decode(ReaderCommentThread.self, from: payload)
+        }.value
+        guard let thread, !thread.isEmpty else { return }
+        readerCommentThreads[id] = thread
+        await warmComments(thread, baseURL: nil)
+    }
+
+    /// Parses the comment bodies the reader is about to draw off the main actor.
+    ///
+    /// The article body is warmed for the same reason: `HTMLContentView` parses in its
+    /// initializer, the section builds its first page eagerly, and thirty small parses
+    /// on the frame that presents the article is a frame the reader can see.
+    private func warmComments(_ thread: ReaderCommentThread, baseURL: URL?) async {
+        for comment in thread.items.prefix(30) {
+            guard let html = comment.renderableHTML else { continue }
+            await warmReaderBlocks(html: html, baseURL: baseURL)
+        }
     }
 
     /// Publishes a freshly-resolved body: flips the reader to `.ready`, records
@@ -3385,6 +3504,9 @@ public final class ReaderStore {
         readerContentGenerations[articleID] = nil
         reparsingArticleIDs.remove(articleID)
         readerDroppedEmbeds[articleID] = nil
+        readerCommentThreads[articleID] = nil
+        readerCommentsLoaded.remove(articleID)
+        forgetComments(for: articleID)
         readerParserOverrides[articleID] = nil
         readerContentByEngine[articleID] = nil
         readerContentByEngineOrder.removeAll { $0 == articleID }

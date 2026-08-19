@@ -63,6 +63,34 @@
         }
       }
     },
+    "%lld more comments are on the original page." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld more comments are on the original page."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元のページにはさらに%lld件のコメントがあります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원본 페이지에 댓글이 %lld개 더 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原始页面上还有 %lld 条评论。"
+          }
+        }
+      }
+    },
     "%lld selected" : {
       "localizations" : {
         "en" : {
@@ -2003,6 +2031,34 @@
         }
       }
     },
+    "Comments" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comments"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コメント"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "댓글"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "评论"
+          }
+        }
+      }
+    },
     "Confirm it is you" : {
       "localizations" : {
         "en" : {
@@ -2874,6 +2930,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要删除账户吗？"
+          }
+        }
+      }
+    },
+    "Deleted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleted"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除されました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "삭제됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删除"
           }
         }
       }
@@ -6510,30 +6594,30 @@
         }
       }
     },
-    "Nook's own extractor. Reads short posts and link posts that Readability skips, and never invents a title or date." : {
+    "Nook's own extractor. Reads short posts and link posts that Readability skips, pulls in the page's comment thread, and never invents a title or date." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nook's own extractor. Reads short posts and link posts that Readability skips, and never invents a title or date."
+            "value" : "Nook's own extractor. Reads short posts and link posts that Readability skips, pulls in the page's comment thread, and never invents a title or date."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nook独自の抽出エンジンです。Readabilityが見落とす短い投稿やリンク投稿も読み取り、タイトルや日付を推測で補うことはありません。"
+            "value" : "Nook独自の抽出エンジンです。Readabilityが見落とす短い投稿やリンク投稿も読み取り、ページのコメントも取り込み、タイトルや日付を推測で補うことはありません。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nook이 직접 만든 추출 엔진입니다. Readability가 놓치는 짧은 글과 링크 글도 읽어내며, 제목이나 날짜를 임의로 만들어 넣지 않습니다."
+            "value" : "Nook이 직접 만든 추출 엔진입니다. Readability가 놓치는 짧은 글과 링크 글도 읽어내고 페이지의 댓글까지 가져오며, 제목이나 날짜를 임의로 만들어 넣지 않습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nook 自研的提取引擎。能读取 Readability 会跳过的短帖和链接帖，并且从不臆造标题或日期。"
+            "value" : "Nook 自研的提取引擎。能读取 Readability 会跳过的短帖和链接帖，并一并取回页面的评论，而且从不臆造标题或日期。"
           }
         }
       }
@@ -6739,6 +6823,34 @@
         }
       }
     },
+    "One more comment is on the original page." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One more comment is on the original page."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元のページにはもう1件コメントがあります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원본 페이지에 댓글이 1개 더 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原始页面上还有 1 条评论。"
+          }
+        }
+      }
+    },
     "One-line summary (optional)" : {
       "localizations" : {
         "en" : {
@@ -6763,6 +6875,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "一句话摘要（可选）"
+          }
+        }
+      }
+    },
+    "Only Legibility reads the comment thread; Readability extracts the article body alone." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only Legibility reads the comment thread; Readability extracts the article body alone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コメントを読み取れるのはLegibilityだけです。Readabilityは本文のみを抽出します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "댓글을 읽어 오는 것은 Legibility뿐입니다. Readability는 본문만 추출합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有 Legibility 会读取评论；Readability 仅提取正文。"
           }
         }
       }
@@ -7659,34 +7799,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "阅读模式"
-          }
-        }
-      }
-    },
-    "Reader view is off, so this currently applies only to reader mode in the in-app browser." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reader view is off, so this currently applies only to reader mode in the in-app browser."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "リーダービューがオフのため、現在この設定はアプリ内ブラウザのリーダーモードにのみ適用されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "리더 보기가 꺼져 있어, 지금은 앱 내 브라우저의 리더 모드에만 적용됩니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "阅读视图已关闭，因此此设置目前仅适用于应用内浏览器的阅读模式。"
           }
         }
       }
@@ -8620,6 +8732,34 @@
         }
       }
     },
+    "Show %lld more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show %lld more"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "さらに%lld件を表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개 더 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再显示 %lld 条"
+          }
+        }
+      }
+    },
     "Show Posts in Files" : {
       "localizations" : {
         "en" : {
@@ -8722,6 +8862,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示密码"
+          }
+        }
+      }
+    },
+    "Show the page's comments" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the page's comments"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ページのコメントを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페이지의 댓글 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示页面的评论"
           }
         }
       }
@@ -8991,6 +9159,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "站点图标"
+          }
+        }
+      }
+    },
+    "Someone" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Someone"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "匿名"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "익명"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "匿名"
           }
         }
       }
