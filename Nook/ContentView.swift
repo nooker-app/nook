@@ -312,6 +312,7 @@ struct ContentView: View {
     private var readerCommandActions: ReaderCommandActions {
         let selected = store.selectedArticle
         var switchParser: (@MainActor () -> Void)?
+        var refresh: (@MainActor () -> Void)?
         var other: ReaderParserEngine?
         // Offered only where a parser is actually running. With reader content off and
         // no offline copy, the reader shows the feed's own body and nothing was parsed,
@@ -324,6 +325,11 @@ struct ContentView: View {
             other = inBrowser
                 ? store.browserParser(for: selected).other
                 : store.displayedReaderParser(for: selected).other
+            // Refresh replaces the *native* reader's body, so it is offered only
+            // where there is one to replace. The browser reloads by reopening.
+            if store.usesReaderContentByDefault || store.isOfflineSaved(selected.id) {
+                refresh = { [store] in store.refreshReaderContent(for: selected) }
+            }
             switchParser = { [store] in
                 // The browser keeps its own copy of the page and re-renders from it, so
                 // aim at that surface while it is up rather than starting the native
@@ -343,7 +349,8 @@ struct ContentView: View {
             selectPreviousArticle: store.selectPreviousArticle,
             toggleReaderMode: store.toggleBrowserMode,
             switchArticleParser: switchParser,
-            otherArticleParser: other
+            otherArticleParser: other,
+            refreshArticle: refresh
         )
     }
 
@@ -2548,8 +2555,8 @@ private struct ReaderDetailView: View {
         // Floated over the article rather than placed in it: the point of the
         // re-parse chip is that what you were reading stays where it was.
         .overlay(alignment: .top) {
-            if store.isReparsing(article) {
-                ReaderReparsingBanner(engine: store.displayedReaderParser(for: article))
+            if let reparse = store.reparse(for: article) {
+                ReaderReparsingBanner(reparse)
                     .padding(.top, 10)
             }
         }
@@ -2807,6 +2814,14 @@ private struct ReaderDetailView: View {
                 // offline copy, the reader is showing the feed's own body and no
                 // parser ran.
                 if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+                    Button {
+                        store.refreshReaderContent(for: article)
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(store.isReparsing(article))
+                    .help("Fetch this article's page again and parse it fresh (⌘⇧R)")
+
                     Menu {
                         ReaderParserMenuItems(store: store, article: article)
                     } label: {
@@ -3841,6 +3856,9 @@ struct ReaderCommandActions {
     /// wording — "Read with Readability" says what will happen; "Switch Parser"
     /// makes you try it to find out.
     var otherArticleParser: ReaderParserEngine?
+    /// Fetches the selected article's page again and parses it fresh. Nil when there is
+    /// nothing selected, or nothing a parser produced to replace.
+    var refreshArticle: (@MainActor () -> Void)?
 }
 
 private struct ReaderCommandActionsKey: FocusedValueKey {
@@ -3907,6 +3925,12 @@ struct ReaderAppCommands: Commands {
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
             .disabled(actions == nil)
+
+            Button("Refresh Article") {
+                actions?.refreshArticle?()
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+            .disabled(actions?.refreshArticle == nil)
 
             // Named after what it does — the other parser, spelled out — because a
             // menu item called "Switch Parser" can only be understood by using it.

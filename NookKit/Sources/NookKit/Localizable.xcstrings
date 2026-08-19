@@ -3914,6 +3914,34 @@
         }
       }
     },
+    "Fetching the page again…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetching the page again…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ページを再取得しています…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페이지를 다시 가져오는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重新获取页面…"
+          }
+        }
+      }
+    },
     "Filter out stories you don't want" : {
       "localizations" : {
         "en" : {

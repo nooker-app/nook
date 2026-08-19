@@ -83,17 +83,29 @@ public struct ReaderParserMenuItems: View {
     }
 }
 
-/// Shown while an article is being re-read with the other parser.
+/// Shown while an article's body is being fetched again — a parser switch, or a
+/// refresh.
 ///
 /// The body stays on screen underneath: the header and the article share one scroll
 /// view, so swapping a full article for a spinner collapses the content height and
 /// throws the reader back to the top of something they were halfway through. This is
 /// the whole feedback for the wait, so it names the parser it is waiting for.
 public struct ReaderReparsingBanner: View {
-    private let engine: ReaderParserEngine
+    private let reparse: ReaderStore.ReaderReparse
 
-    public init(engine: ReaderParserEngine) {
-        self.engine = engine
+    public init(_ reparse: ReaderStore.ReaderReparse) {
+        self.reparse = reparse
+    }
+
+    private var label: Text {
+        switch reparse {
+        case .parser(let engine):
+            // Names the parser: it is what the reader just chose, and the wait is the
+            // only place the choice is visible before the new body arrives.
+            Text("Re-reading with \(engine.label)…", bundle: .module)
+        case .refresh:
+            Text("Fetching the page again…", bundle: .module)
+        }
     }
 
     public var body: some View {
@@ -102,7 +114,7 @@ public struct ReaderReparsingBanner: View {
                 #if os(macOS)
                 .controlSize(.small)
                 #endif
-            Text("Re-reading with \(engine.label)…", bundle: .module)
+            label
                 .font(.subheadline)
         }
         .padding(.horizontal, 14)

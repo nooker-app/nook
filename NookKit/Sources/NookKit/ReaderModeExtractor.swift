@@ -66,17 +66,27 @@ public final class ReaderModeExtractor {
     /// Loads `url`, runs `engine`, and returns the extracted content — or a
     /// `.gone`/`.failed` outcome so the caller can distinguish a removed page
     /// (offer deletion) from a transient failure (offer retry).
+    /// `reloadFromOrigin` skips WebKit's HTTP cache for the page itself.
+    ///
+    /// Off by default, because a parser switch re-reads a page that has not changed and
+    /// re-downloading it would buy nothing. On by default for nothing: it is passed by
+    /// the reader's Refresh, where the whole request is "the page may be different now",
+    /// and by Try Again, where the failure may have been a cached error page in the
+    /// first place.
     public func extract(
         url: URL,
         engine: ReaderParserEngine = .preferred,
-        timeout: TimeInterval = 15
+        timeout: TimeInterval = 15,
+        reloadFromOrigin: Bool = false
     ) async -> Outcome {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
             return .failed
         }
         return await withCheckedContinuation { continuation in
             var session: ExtractionSession!
-            session = ExtractionSession(url: url, engine: engine, timeout: timeout) { [weak self] outcome in
+            session = ExtractionSession(
+                url: url, engine: engine, timeout: timeout, reloadFromOrigin: reloadFromOrigin
+            ) { [weak self] outcome in
                 self?.retain.remove(session)
                 continuation.resume(returning: outcome)
             }
@@ -101,6 +111,7 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
     private let url: URL
     private let engine: ReaderParserEngine
     private let timeout: TimeInterval
+    private let reloadFromOrigin: Bool
     // Optional so it can be released after firing, breaking the session↔closure
     // retain cycle (the completion captures the session to deregister it).
     private var onFinish: ((ReaderModeExtractor.Outcome) -> Void)?
@@ -113,11 +124,13 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
         url: URL,
         engine: ReaderParserEngine,
         timeout: TimeInterval,
+        reloadFromOrigin: Bool = false,
         onFinish: @escaping (ReaderModeExtractor.Outcome) -> Void
     ) {
         self.url = url
         self.engine = engine
         self.timeout = timeout
+        self.reloadFromOrigin = reloadFromOrigin
         self.onFinish = onFinish
     }
 
@@ -146,7 +159,15 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
         self.webView = webView
 
         startDeadline(seconds: timeout)
-        webView.load(URLRequest(url: url))
+        var request = URLRequest(url: url)
+        if reloadFromOrigin {
+            // Without this a refresh can be answered entirely out of WebKit's HTTP
+            // cache: the same bytes, parsed again, which is not what "fetch the page
+            // again" means. Subresources may still come from cache; the main document
+            // is the one this parses.
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+        }
+        webView.load(request)
     }
 
     /// (Re)starts the give-up timer.

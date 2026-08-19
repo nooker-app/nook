@@ -540,6 +540,13 @@ struct ReaderDetailView: View {
                         // and no offline copy, the reader is showing the feed's own
                         // body and there is nothing to re-read.
                         if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+                            Button {
+                                haptics.selectionChanged()
+                                store.refreshReaderContent(for: article)
+                            } label: {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(store.isReparsing(article))
                             Menu {
                                 ReaderParserMenuItems(
                                     store: store, article: article,
@@ -682,8 +689,8 @@ struct ReaderDetailView: View {
         // Floated over the article rather than placed in it: the point of the
         // re-parse chip is that what you were reading stays where it was.
         .overlay(alignment: .top) {
-            if store.isReparsing(article) {
-                ReaderReparsingBanner(engine: store.displayedReaderParser(for: article))
+            if let reparse = store.reparse(for: article) {
+                ReaderReparsingBanner(reparse)
                     .padding(.top, 10)
             }
         }

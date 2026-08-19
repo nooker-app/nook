@@ -393,7 +393,18 @@ public final class ReaderStore {
     /// spinner collapses the content height and throws the reader back to the top of
     /// a piece they were halfway through. The old body stays up, with a progress
     /// chip, until the new one is in hand.
-    private(set) var reparsingArticleIDs: Set<Article.ID> = []
+    private(set) var reparsingArticles: [Article.ID: ReaderReparse] = [:]
+
+    /// Why an article's body is being fetched again while the old one is still on
+    /// screen. The reader says which, because "re-reading with Readability" and
+    /// "refreshing" are two different waits and the difference is the whole reason
+    /// the reader asked.
+    public enum ReaderReparse: Equatable, Sendable {
+        /// The reader chose the other parser for this article.
+        case parser(ReaderParserEngine)
+        /// The reader asked for the page again, whatever the parser.
+        case refresh
+    }
 
     /// Allowlisted video/CodePen embeds the page carried that the parser on screen
     /// discarded. legibility's sanitizer drops them; Readability keeps them.
@@ -661,7 +672,7 @@ public final class ReaderStore {
         readerContentStates = [:]
         readerContentEngines = [:]
         readerContentGenerations = [:]
-        reparsingArticleIDs = []
+        reparsingArticles = [:]
         readerDroppedEmbeds = [:]
         readerCommentThreads = [:]
         readerCommentsLoaded = []
@@ -2656,7 +2667,12 @@ public final class ReaderStore {
     /// Whether an in-place re-parse is in flight for this article, so the reader can
     /// say so while keeping the current body on screen.
     public func isReparsing(_ article: Article) -> Bool {
-        reparsingArticleIDs.contains(article.id)
+        reparsingArticles[article.id] != nil
+    }
+
+    /// What the reader is waiting for, or nil when it is not waiting.
+    public func reparse(for article: Article) -> ReaderReparse? {
+        reparsingArticles[article.id]
     }
 
     /// Embeds the parser on screen dropped, if any — the one visible difference
@@ -2722,7 +2738,7 @@ public final class ReaderStore {
             readerContentTasks[article.id]?.cancel()
             readerContentTasks[article.id] = nil
             readerContentGenerations[article.id] = nil
-            reparsingArticleIDs.remove(article.id)
+            reparsingArticles[article.id] = nil
             noteReaderContentByEngine(cached, engine: engine, for: article.id)
             readerContentEngines[article.id] = engine
             readerContentStates[article.id] = .ready(cached)
@@ -2734,7 +2750,7 @@ public final class ReaderStore {
         // check-mark moves immediately (the override drives it once the provenance is
         // cleared), and the reader shows a "re-reading" chip.
         if case .ready = readerContentStates[article.id] {
-            reparsingArticleIDs.insert(article.id)
+            reparsingArticles[article.id] = .parser(engine)
         } else {
             readerContentStates[article.id] = .loading
         }
@@ -2759,7 +2775,7 @@ public final class ReaderStore {
     /// not as the article disappearing — so the surviving body keeps its place and
     /// the check-mark returns to whichever engine produced it.
     private func abandonReparse(for article: Article) -> Bool {
-        guard reparsingArticleIDs.remove(article.id) != nil else { return false }
+        guard reparsingArticles.removeValue(forKey: article.id) != nil else { return false }
         guard case .ready(let previous)? = readerContentStates[article.id],
               !previous.isEmpty
         else { return false }
@@ -3037,19 +3053,53 @@ public final class ReaderStore {
         return "<p>\(article.summary)</p>"
     }
 
-    /// Re-runs extraction for an article, bypassing the cache (the "Try Again"
-    /// action on the fallback notice).
+    /// Fetches the article page again and parses it again, whether or not a body is
+    /// already in hand.
     ///
-    /// Keeps whichever parser the reader was showing: "Try Again" means try again,
-    /// and silently changing the engine underneath it would make the separate
-    /// "read this with the other parser" action indistinguishable from this one.
-    public func retryReaderContent(for article: Article) {
+    /// Two callers, one behaviour: "Try Again" on the failure notice, where there is
+    /// nothing on screen to keep, and Refresh in the reader, where there is. The
+    /// difference is only what the reader sees while it waits — a placeholder in the
+    /// first case, the article they were reading in the second.
+    ///
+    /// Keeps whichever parser is showing. Refresh means the page may have changed;
+    /// silently changing the parser as well would make it indistinguishable from the
+    /// separate "read this with the other parser" action.
+    public func refreshReaderContent(for article: Article) {
+        guard !isReparsing(article) else { return }
         let engine = displayedReaderParser(for: article)
-        readerContentStates[article.id] = .loading
+
+        if case .ready = readerContentStates[article.id] {
+            // The body stays up while the new one is fetched — the header and the
+            // article share one scroll view, so a placeholder would collapse the
+            // content height and lose the reader's place in a piece they are part-way
+            // through.
+            reparsingArticles[article.id] = .refresh
+        } else {
+            readerContentStates[article.id] = .loading
+        }
+
+        // Every body this session holds for this article is from the old page. Keeping
+        // them would let a parser switch after a refresh serve a pre-refresh body from
+        // the session cache, which is the one thing a refresh was asked to rule out.
+        readerContentByEngine[article.id] = nil
+        readerContentByEngineOrder.removeAll { $0 == article.id }
+        readerParsersTried[article.id] = nil
+        // The discussion is re-extracted with the body, so this device's stored copy is
+        // about to be replaced. Looking it up again in the meantime would restore the
+        // old thread over the new one.
+        readerCommentsLoaded.insert(article.id)
+
         startReaderContentTask(for: article) {
             await self.loadReaderContent(
-                for: article, forceRefresh: true, engine: engine, immediate: true)
+                for: article, forceRefresh: true, engine: engine, immediate: true,
+                reloadFromOrigin: true)
         }
+    }
+
+    /// The failure notice's "Try Again", which is a refresh with nothing on screen to
+    /// preserve.
+    public func retryReaderContent(for article: Article) {
+        refreshReaderContent(for: article)
     }
 
     private func startReaderContentTask(
@@ -3082,7 +3132,8 @@ public final class ReaderStore {
         forceRefresh: Bool,
         engine: ReaderParserEngine = .preferred,
         immediate: Bool = false,
-        acceptCacheFrom: ReaderParserEngine? = nil
+        acceptCacheFrom: ReaderParserEngine? = nil,
+        reloadFromOrigin: Bool = false
     ) async {
         if readerContentStore == nil, let storage {
             readerContentStore = ReaderContentStore(storage: storage, deviceID: deviceID)
@@ -3142,9 +3193,9 @@ public final class ReaderStore {
         // 200 for a page that's really gone (so extraction "succeeds" on the error
         // page and Try Again would show it as content) — an explicit HEAD 404/410
         // is authoritative, so treat it as gone without extracting.
-        if await originalIsGone(url: article.url) {
+        if await originalIsGone(url: article.url, ignoringCache: reloadFromOrigin) {
             if Task.isCancelled { return }
-            reparsingArticleIDs.remove(article.id)
+            reparsingArticles[article.id] = nil
             readerContentStates[article.id] = .gone
             readerContentEngines[article.id] = engine
             await recordReaderFailureUnlessBodyCached(
@@ -3154,7 +3205,8 @@ public final class ReaderStore {
         }
 
         if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
-        let outcome = await readerModeExtractor?.extract(url: article.url, engine: engine) ?? .timedOut
+        let outcome = await readerModeExtractor?.extract(
+            url: article.url, engine: engine, reloadFromOrigin: reloadFromOrigin) ?? .timedOut
         // Cancellation does not stop an extraction that is already in flight, so a
         // superseded load returns here with a real answer. Publishing it would let the
         // parser the reader switched away from overwrite the one they switched to.
@@ -3194,7 +3246,7 @@ public final class ReaderStore {
             // cached body is deliberately left alone — it is the only copy of an
             // article that no longer exists anywhere, and `revalidateCachedOriginal`
             // has always shown `.gone` over a kept body rather than replacing it.
-            reparsingArticleIDs.remove(article.id)
+            reparsingArticles[article.id] = nil
             readerContentStates[article.id] = .gone
             readerContentEngines[article.id] = engine
             await recordReaderFailureUnlessBodyCached(
@@ -3308,7 +3360,7 @@ public final class ReaderStore {
     /// which parser produced it, and keeps it for an instant switch back.
     private func note(html: String, engine: ReaderParserEngine, for article: Article) {
         noteReaderContentByEngine(html, engine: engine, for: article.id)
-        reparsingArticleIDs.remove(article.id)
+        reparsingArticles[article.id] = nil
         readerContentEngines[article.id] = engine
         readerContentStates[article.id] = .ready(html)
     }
@@ -3339,11 +3391,15 @@ public final class ReaderStore {
     /// Whether the article's original URL explicitly reports gone (404/410) via a
     /// lightweight HEAD request. Conservative: any other status, a rejected HEAD,
     /// or a transient error returns false, so a live page is never flagged.
-    private func originalIsGone(url: URL) async -> Bool {
+    private func originalIsGone(url: URL, ignoringCache: Bool = false) async -> Bool {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return false }
         var request = URLRequest(url: url)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 12
+        // A refresh asks the server, not the cache — otherwise this check can answer
+        // from a stored response for a page whose status has since changed, in either
+        // direction.
+        if ignoringCache { request.cachePolicy = .reloadIgnoringLocalCacheData }
         let status = (try? await URLSession.shared.data(for: request))
             .flatMap { ($0.1 as? HTTPURLResponse)?.statusCode }
         return status == 404 || status == 410
@@ -3502,7 +3558,7 @@ public final class ReaderStore {
         readerContentStates[articleID] = nil
         readerContentEngines[articleID] = nil
         readerContentGenerations[articleID] = nil
-        reparsingArticleIDs.remove(articleID)
+        reparsingArticles[articleID] = nil
         readerDroppedEmbeds[articleID] = nil
         readerCommentThreads[articleID] = nil
         readerCommentsLoaded.remove(articleID)

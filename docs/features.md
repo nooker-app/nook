@@ -22,6 +22,7 @@ The cloud provider and Nook have separate roles: iCloud Drive, Dropbox, or anoth
 - Read in a native renderer with typography, inline styling, links, images, video and audio destinations, code blocks, quotes, nested lists, and tables.
 - Normalize spacing based on semantic block relationships so feed HTML reads more like a deliberately typeset article.
 - Switch per feed between the native reader, a full-article `WKWebView` reader, and the original page.
+- Refresh an article in the reader to fetch its page again and parse it fresh, even when a parsed body is already in hand — for a post that was corrected, a page that had not finished loading the first time, or an extraction that came out thin. The article you were reading stays on screen while the new one is fetched, and the request skips the HTTP cache so what comes back is the page as it is now.
 - Choose which parser turns an article page into reader content: legibility (the default, Nook's own — it reads short posts and link posts, and never invents a title or date) or Mozilla's Readability (which keeps embedded videos and CodePen examples). Switch parser for a single article from inside either reader without leaving it; when legibility drops an embed the reader says so and offers the switch.
 - Read the page's comment thread under the article, drawn natively: authors, times, and reply indentation, with a deleted comment kept as a placeholder so its replies still make sense. Extracted by legibility from the page Nook already fetched — no comment service, no account — kept on the device rather than synced, and reported honestly when the page did not contain the whole thread. Comments follow the article's Translate action — same backend, same glossary — and stay out of the Markdown export and the summarizer, both of which take the article body alone.
 - Customize font, size, line height, letter spacing, background, and text color.
@@ -136,6 +137,7 @@ The permission prompt is asked once by iOS and answered for good, so Nook does n
 | `⌘ ⇧ M` | Mark selected as read |
 | `⌘ ⇧ S` | Star selected |
 | `⌘ ⇧ F` | Toggle reader / original page |
+| `⌘ ⇧ R` | Refresh the selected article's page and parse it fresh |
 | `⌘ ⌥ P` | Read the selected article with the other parser |
 | `⌘ F` | Search articles |
 | `⌘ ,` | Settings |
