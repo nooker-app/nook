@@ -364,10 +364,72 @@ public final class ReaderStore {
     /// Rebuilt per session; the durable results live in the CRDT reader shards.
     private(set) var readerContentStates: [Article.ID: ReaderContentState] = [:]
     private var readerContentTasks: [Article.ID: Task<Void, Never>] = [:]
+
+    /// Which parser produced the content currently on screen for an article.
+    ///
+    /// Kept beside the state rather than inside `.ready` so every existing
+    /// `case .ready(let html)` keeps working: the reader needs this only to
+    /// check-mark the right item in its parser menu and to name the other engine
+    /// in a failure notice.
+    private(set) var readerContentEngines: [Article.ID: ReaderParserEngine] = [:]
+
+    /// Bodies this session has already extracted, per article and parser.
+    ///
+    /// This is what makes the reader's parser switch instant on the way back. The
+    /// synced cache holds one body per article, so returning to the previous
+    /// parser would otherwise re-load the page and re-parse it for a result that
+    /// was on screen ten seconds ago.
+    private var readerContentByEngine: [Article.ID: [ReaderParserEngine: String]] = [:]
+    /// How many articles' per-engine bodies to keep. Reading moves forward, so the
+    /// value of an older article's alternate body falls off quickly, and each entry
+    /// is a whole article's markup.
+    private static let maxReaderContentByEngine = 8
+    private var readerContentByEngineOrder: [Article.ID] = []
+
+    /// Articles being re-read with a different parser right now.
+    ///
+    /// A re-parse deliberately does NOT drop back to `.loading`: the header and the
+    /// body share one scroll view, so replacing a full article with a one-line
+    /// spinner collapses the content height and throws the reader back to the top of
+    /// a piece they were halfway through. The old body stays up, with a progress
+    /// chip, until the new one is in hand.
+    private(set) var reparsingArticleIDs: Set<Article.ID> = []
+
+    /// Allowlisted video/CodePen embeds the page carried that the parser on screen
+    /// discarded. legibility's sanitizer drops them; Readability keeps them.
+    private(set) var readerDroppedEmbeds: [Article.ID: Int] = [:]
+
+    /// An observable mirror of the parser preference.
+    ///
+    /// `ReaderParserEngine.preferred` reads `UserDefaults` directly, which nothing
+    /// observes — so on macOS, where Settings and a reader window are visible at
+    /// once, changing the parser left the reader's menu showing the old one until
+    /// something unrelated redrew. Views read this; the extractor reads the raw
+    /// preference.
+    public private(set) var preferredParser: ReaderParserEngine = .preferred
+
+    /// A parser chosen for one article from inside the reader, overriding the
+    /// preference for that article only.
+    ///
+    /// Session-scoped and deliberately not synced: it is a "read this one the other
+    /// way" gesture, not a setting, and it belongs to the reading session it was
+    /// made in. Both reading surfaces honour it, so switching in the browser and
+    /// switching in the native reader are the same act.
+    private var readerParserOverrides: [Article.ID: ReaderParserEngine] = [:]
+
+    /// Which parsers have been tried on an article this session, so a page that no
+    /// engine can read is not re-loaded once per engine per sync.
+    ///
+    /// A cached *failure* from the other engine is worth reconsidering — legibility
+    /// reads short posts Readability rejects — but only once. Without this, two
+    /// devices on different parsers would take turns re-fetching a page that has no
+    /// article in it every time a shard merged.
+    private var readerParsersTried: [Article.ID: Set<ReaderParserEngine>] = [:]
+
     /// The CRDT-synced cache of extracted reader content (separate from every
     /// other store; see `ReaderContentStore`). Created with storage.
     private var readerContentStore: ReaderContentStore?
-    /// Headless Readability extractor, created on first use.
+    /// Headless page loader + parser driver, created on first use.
     private var readerModeExtractor: ReaderModeExtractor?
 
     // Article bodies live in a separate sidecar so the launch baseline stays
@@ -404,7 +466,26 @@ public final class ReaderStore {
     public private(set) var isPreparingLocalReset = false
     private var didQuiesceForLocalReset = false
 
-    private init() {}
+    private init() {
+        // `ReaderParserEngine.preferred` reads `UserDefaults` directly, and nothing
+        // observes that. Mirroring it here — and refreshing on the defaults
+        // notification the Settings picker triggers — is what makes the reader's
+        // parser menu follow a change made in the Settings window while both are on
+        // screen. Retained for the store's lifetime, which is the app's.
+        parserPreferenceObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: UserDefaults.standard,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                let current = ReaderParserEngine.preferred
+                if ReaderStore.shared.preferredParser != current {
+                    ReaderStore.shared.preferredParser = current
+                }
+            }
+        }
+    }
+
+    private var parserPreferenceObserver: NSObjectProtocol?
 
     /// Loads the persisted library and starts filtering. Runs its heavy work
     /// only once, no matter how often it is called.
@@ -499,6 +580,7 @@ public final class ReaderStore {
         batchMergeFlushTask = nil
         self.offlineSaveTasks.removeAll()
         self.readerContentTasks.removeAll()
+        self.readerContentGenerations.removeAll()
         saveDrainTask = nil
         shardSaveDrainTask = nil
         refreshingFeedIDs.removeAll()
@@ -559,6 +641,14 @@ public final class ReaderStore {
         activeFaviconFetches = 0
         feedUpdateTokens = [:]
         readerContentStates = [:]
+        readerContentEngines = [:]
+        readerContentGenerations = [:]
+        reparsingArticleIDs = []
+        readerDroppedEmbeds = [:]
+        readerParserOverrides = [:]
+        readerContentByEngine = [:]
+        readerContentByEngineOrder = []
+        readerParsersTried = [:]
         bodyCache = [:]
         didLoadBodyCache = false
         isLoadingBodyCache = false
@@ -2510,6 +2600,150 @@ public final class ReaderStore {
         readerContentStates[article.id]
     }
 
+    /// Which parser produced the body the reader is showing for this article, or
+    /// nil when nothing has been extracted yet.
+    ///
+    /// Not the same as `ReaderParserEngine.preferred`: an article extracted before
+    /// the preference changed keeps its body, and an explicit in-reader switch
+    /// changes this for one article without touching the preference.
+    public func readerContentEngine(for article: Article) -> ReaderParserEngine? {
+        readerContentEngines[article.id]
+    }
+
+    /// The parser this article is being read with: whatever actually produced the
+    /// body on screen, else an in-reader override, else the preference.
+    ///
+    /// The first term matters. A body already extracted is served whichever parser
+    /// produced it (see `ReaderContentValue.isCurrent(for:)`), so on an article read
+    /// before the preference changed, the honest answer is the old engine — and a
+    /// parser menu that check-marked the preference instead would be telling the
+    /// reader something they can see is untrue.
+    public func displayedReaderParser(for article: Article) -> ReaderParserEngine {
+        readerContentEngines[article.id] ?? readerParserOverrides[article.id] ?? preferredParser
+    }
+
+    /// The parser the in-app browser should render with.
+    ///
+    /// Deliberately does **not** consult `readerContentEngines`. That value is the
+    /// provenance of the *native* body and changes asynchronously — when a
+    /// background extraction lands, or when a peer's Readability body arrives over
+    /// sync. Reading it here meant an extraction the reader never asked for could
+    /// re-render the page they were in the middle of and scroll it to the top.
+    public func browserParser(for article: Article) -> ReaderParserEngine {
+        readerParserOverrides[article.id] ?? preferredParser
+    }
+
+    /// Whether an in-place re-parse is in flight for this article, so the reader can
+    /// say so while keeping the current body on screen.
+    public func isReparsing(_ article: Article) -> Bool {
+        reparsingArticleIDs.contains(article.id)
+    }
+
+    /// Embeds the parser on screen dropped, if any — the one visible difference
+    /// between the two engines, which is otherwise silent.
+    public func droppedEmbedCount(for article: Article) -> Int {
+        guard displayedReaderParser(for: article) == .legibility else { return 0 }
+        return readerDroppedEmbeds[article.id] ?? 0
+    }
+
+    /// Chooses the parser for one article *without* redoing the native reader's body.
+    ///
+    /// What the in-app browser's switch calls. The browser keeps its own copy of the
+    /// page and re-renders from it, so the switch is free there; running the native
+    /// reader's full re-extraction as a side effect would download the article again
+    /// and throw away the body waiting behind the sheet.
+    public func setBrowserParser(_ engine: ReaderParserEngine, for article: Article) {
+        guard browserParser(for: article) != engine else { return }
+        readerParserOverrides[article.id] = engine
+    }
+
+    /// Reads this one article with `engine`, in place, without leaving the reader.
+    ///
+    /// Both surfaces follow it: the in-app browser re-renders from its stashed copy
+    /// of the page with no second download, and the native reader serves this
+    /// session's copy instantly if the engine has already run on this article, or
+    /// re-extracts if it has not. A no-op when that parser is already what is being
+    /// read, so tapping the checked item does not throw away what is on screen.
+    public func setReaderParser(_ engine: ReaderParserEngine, for article: Article) {
+        guard displayedReaderParser(for: article) != engine else { return }
+        readerParserOverrides[article.id] = engine
+
+        // The native reader has no extracted body to redo — the reader-content
+        // setting is off, or this article was never opened there. The override still
+        // stands, so the browser picks it up and the reader will use it if it ever
+        // does extract.
+        guard readerContentStates[article.id] != nil else { return }
+
+        if let cached = readerContentByEngine[article.id]?[engine], !cached.isEmpty {
+            // Stop whatever switch this one supersedes. Without this, switching away
+            // and straight back left the earlier extraction running: its chip stayed
+            // up and its result landed on top of the body just restored.
+            readerContentTasks[article.id]?.cancel()
+            readerContentTasks[article.id] = nil
+            readerContentGenerations[article.id] = nil
+            reparsingArticleIDs.remove(article.id)
+            noteReaderContentByEngine(cached, engine: engine, for: article.id)
+            readerContentEngines[article.id] = engine
+            readerContentStates[article.id] = .ready(cached)
+            return
+        }
+
+        // Keep the article on screen while the new body is fetched. Dropping to
+        // `.loading` would blank it and lose the reader's place; the parser menu's
+        // check-mark moves immediately (the override drives it once the provenance is
+        // cleared), and the reader shows a "re-reading" chip.
+        if case .ready = readerContentStates[article.id] {
+            reparsingArticleIDs.insert(article.id)
+        } else {
+            readerContentStates[article.id] = .loading
+        }
+        readerContentEngines[article.id] = nil
+        startReaderContentTask(for: article) {
+            // `immediate`: the reader is already on screen and the person just
+            // asked for this, so the transition-protecting delay would only read
+            // as lag.
+            await self.loadReaderContent(
+                for: article, forceRefresh: true, engine: engine, immediate: true,
+                // The synced cache holds one body per article. If it happens to be
+                // this engine's, use it: re-loading the page to re-derive a body
+                // already in the sync folder is the one case where "force refresh"
+                // costs a download and buys nothing.
+                acceptCacheFrom: engine)
+        }
+    }
+
+    /// Puts back what was on screen when a re-parse comes up empty.
+    ///
+    /// A switch that finds nothing should read as "that parser can't read this one",
+    /// not as the article disappearing — so the surviving body keeps its place and
+    /// the check-mark returns to whichever engine produced it.
+    private func abandonReparse(for article: Article) -> Bool {
+        guard reparsingArticleIDs.remove(article.id) != nil else { return false }
+        guard case .ready(let previous)? = readerContentStates[article.id],
+              !previous.isEmpty
+        else { return false }
+        readerContentEngines[article.id] = readerContentByEngine[article.id]?
+            .first(where: { $0.value == previous })?.key
+        readerParserOverrides[article.id] = nil
+        return true
+    }
+
+    /// Records a body against the engine that produced it, evicting the oldest
+    /// article once the session cache is full.
+    private func noteReaderContentByEngine(
+        _ html: String, engine: ReaderParserEngine, for id: Article.ID
+    ) {
+        if readerContentByEngine[id] == nil {
+            readerContentByEngineOrder.removeAll { $0 == id }
+            readerContentByEngineOrder.append(id)
+            while readerContentByEngineOrder.count > Self.maxReaderContentByEngine {
+                let oldest = readerContentByEngineOrder.removeFirst()
+                readerContentByEngine[oldest] = nil
+            }
+        }
+        readerContentByEngine[id, default: [:]][engine] = html
+    }
+
     /// Kicks off reader-mode extraction for an article when the experiment is on
     /// and we haven't already started (or finished) it this session. Idempotent.
     public func ensureReaderContent(for article: Article) {
@@ -2528,8 +2762,9 @@ public final class ReaderStore {
         }
         guard usesReaderContentByDefault else { return }
         readerContentStates[article.id] = .loading
+        let engine = readerParserOverrides[article.id] ?? .preferred
         startReaderContentTask(for: article) {
-            await self.loadReaderContent(for: article, forceRefresh: false)
+            await self.loadReaderContent(for: article, forceRefresh: false, engine: engine)
         }
     }
 
@@ -2540,22 +2775,25 @@ public final class ReaderStore {
     /// case is why this returns the new content instead of clearing the old: the
     /// reader may be offline, and a saved article that opens empty would be a worse
     /// outcome than one showing the previous wording.
-    private func refreshedOfflineCopy(for article: Article) async -> String? {
+    private func refreshedOfflineCopy(
+        for article: Article
+    ) async -> (html: String, engine: ReaderParserEngine)? {
         let saved = OfflineArticleStore.shared.info(for: article.id)
         guard !NookPostOrigin.cachedBodyIsCurrent(saved?.sourceFingerprint, for: article) else {
             return nil
         }
         if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
-        guard case .success(let html)? = await readerModeExtractor?.extract(url: article.url),
-            !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard case .success(let extracted)? = await readerModeExtractor?.extract(url: article.url),
+            !extracted.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return nil }
+        let (html, engine) = (extracted.html, extracted.engine)
 
         OfflineArticleStore.shared.save(
             id: article.id, title: article.title, url: article.url,
             feedTitle: saved?.feedTitle ?? feed(for: article.feedID)?.displayTitle ?? "",
             html: html, now: Date(),
             sourceFingerprint: NookPostOrigin.fingerprint(of: article))
-        return html
+        return (html, engine)
     }
 
     /// Serves an offline-saved article like the extraction path serves a cache
@@ -2576,11 +2814,18 @@ public final class ReaderStore {
             // article has to open with no network, so the copy stays until a
             // replacement is actually in hand, and a failed refresh is invisible.
             if let refreshed = await refreshedOfflineCopy(for: article) {
-                await warmReaderContent(html: refreshed, baseURL: article.url)
-                readerContentStates[article.id] = .ready(refreshed)
+                await warmReaderContent(html: refreshed.html, baseURL: article.url)
+                note(html: refreshed.html, engine: refreshed.engine, for: article)
                 return
             }
             await warmReaderContent(html: html, baseURL: article.url)
+            // A downloaded body carries no record of which parser produced it —
+            // `OfflineArticleStore` stores the HTML and nothing about where it came
+            // from. So there is nothing to attribute it to, and the parser menu falls
+            // back to showing the preference. Choosing the other parser still works:
+            // it re-extracts over the network, which is the honest cost of asking a
+            // question a saved copy cannot answer.
+            readerContentEngines[article.id] = nil
             readerContentStates[article.id] = .ready(html)
             return
         }
@@ -2721,14 +2966,19 @@ public final class ReaderStore {
             return html
         }
         if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
-        if case .success(let html)? = await readerModeExtractor?.extract(url: article.url),
-           !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            await readerContentStore?.record(
-                ReaderContentValue(
-                    status: .success, html: html,
-                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
-                for: article.id)
-            return html
+        if case .success(let extracted)? = await readerModeExtractor?.extract(url: article.url),
+           !extracted.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // A fallback body is not filed as the chosen parser's work; see
+            // `loadReaderContent`. The download itself still keeps it.
+            if !extracted.fellBack {
+                await readerContentStore?.record(
+                    ReaderContentValue(
+                        status: .success, html: extracted.html,
+                        sourceFingerprint: NookPostOrigin.fingerprint(of: article),
+                        engine: extracted.engine),
+                    for: article.id)
+            }
+            return extracted.html
         }
         return Self.feedBodyHTML(for: article)
     }
@@ -2744,10 +2994,16 @@ public final class ReaderStore {
 
     /// Re-runs extraction for an article, bypassing the cache (the "Try Again"
     /// action on the fallback notice).
+    ///
+    /// Keeps whichever parser the reader was showing: "Try Again" means try again,
+    /// and silently changing the engine underneath it would make the separate
+    /// "read this with the other parser" action indistinguishable from this one.
     public func retryReaderContent(for article: Article) {
+        let engine = displayedReaderParser(for: article)
         readerContentStates[article.id] = .loading
         startReaderContentTask(for: article) {
-            await self.loadReaderContent(for: article, forceRefresh: true)
+            await self.loadReaderContent(
+                for: article, forceRefresh: true, engine: engine, immediate: true)
         }
     }
 
@@ -2757,13 +3013,32 @@ public final class ReaderStore {
     ) {
         guard !isPreparingLocalReset else { return }
         readerContentTasks[article.id]?.cancel()
+        // Stamped, and only cleared by the task that is still the current one. An
+        // extraction cannot be interrupted once it is in flight, so a superseded task
+        // finishes late — and clearing the slot unconditionally handed away the
+        // *successor's* cancellation handle, which meant a third parser switch had
+        // nothing to cancel the second with.
+        readerContentGeneration &+= 1
+        let generation = readerContentGeneration
+        readerContentGenerations[article.id] = generation
         readerContentTasks[article.id] = Task { [weak self] in
             await operation()
-            self?.readerContentTasks[article.id] = nil
+            guard let self, readerContentGenerations[article.id] == generation else { return }
+            readerContentTasks[article.id] = nil
+            readerContentGenerations[article.id] = nil
         }
     }
 
-    private func loadReaderContent(for article: Article, forceRefresh: Bool) async {
+    private var readerContentGeneration = 0
+    private var readerContentGenerations: [Article.ID: Int] = [:]
+
+    private func loadReaderContent(
+        for article: Article,
+        forceRefresh: Bool,
+        engine: ReaderParserEngine = .preferred,
+        immediate: Bool = false,
+        acceptCacheFrom: ReaderParserEngine? = nil
+    ) async {
         if readerContentStore == nil, let storage {
             readerContentStore = ReaderContentStore(storage: storage, deviceID: deviceID)
         }
@@ -2773,32 +3048,46 @@ public final class ReaderStore {
         // extractor's offscreen WKWebView (miss path) both stall the slide-in if
         // run on the transition frame. The loading placeholder is already showing,
         // so this is invisible.
-        try? await Task.sleep(for: .milliseconds(350))
-        if Task.isCancelled { return }
+        //
+        // Skipped for an in-reader parser switch: the reader has been up for a
+        // while, nothing is transitioning, and a third of a second of nothing after
+        // a deliberate tap reads as lag.
+        if !immediate {
+            try? await Task.sleep(for: .milliseconds(350))
+            if Task.isCancelled { return }
+        }
+
+        readerParsersTried[article.id, default: []].insert(engine)
 
         // Serve a synced/cached result first (from this device or a peer), so a
         // page already extracted anywhere isn't re-fetched.
-        // A cached failure from an older extractor is ignored, so improving
+        // A cached failure from an older extractor — or from the other parser, which
+        // may simply not read this kind of page — is ignored, so improving
         // extraction reaches articles that already failed. Without this the fix
         // for short posts would never have been seen: the failure was cached and
         // synced, and a cache hit never re-extracts.
         // A Nook post the author edited is the one case where a cached body is the
         // wrong body. Its fingerprint no longer matches what the feed serves, so the
         // extraction is redone; every other source keeps exactly what it fetched.
-        if !forceRefresh, let cached = await readerContentStore?.value(for: article.id),
-            cached.isCurrent,
+        if Task.isCancelled { return }
+
+        if let cached = await readerContentStore?.value(for: article.id),
+            !forceRefresh
+                || (cached.status == .success && cached.recordedEngine == acceptCacheFrom),
+            cached.isCurrent(for: engine) || alreadyTriedBothParsers(article.id),
             NookPostOrigin.cachedBodyIsCurrent(cached.sourceFingerprint, for: article)
         {
             if cached.status == .success, let html = cached.html, !html.isEmpty {
                 await warmReaderContent(html: html, baseURL: article.url)
-                readerContentStates[article.id] = .ready(html)
+                note(html: html, engine: cached.recordedEngine, for: article)
                 // Cached content can outlive the source page. Check the original's
                 // status in the background (non-blocking) and offer deletion if it
                 // now returns 404/410 — a fresh extraction would catch this, but a
                 // cache hit never re-fetches.
                 revalidateCachedOriginal(article: article)
-            } else {
+            } else if !abandonReparse(for: article) {
                 readerContentStates[article.id] = .failed
+                readerContentEngines[article.id] = cached.recordedEngine
             }
             return
         }
@@ -2808,46 +3097,109 @@ public final class ReaderStore {
         // page and Try Again would show it as content) — an explicit HEAD 404/410
         // is authoritative, so treat it as gone without extracting.
         if await originalIsGone(url: article.url) {
+            if Task.isCancelled { return }
+            reparsingArticleIDs.remove(article.id)
             readerContentStates[article.id] = .gone
-            await readerContentStore?.record(
-                ReaderContentValue(
-                    status: .failed, html: nil,
-                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
+            readerContentEngines[article.id] = engine
+            await recordReaderFailureUnlessBodyCached(
+                engine: engine, fingerprint: NookPostOrigin.fingerprint(of: article),
                 for: article.id)
             return
         }
 
         if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
-        let outcome = await readerModeExtractor?.extract(url: article.url) ?? .failed
+        let outcome = await readerModeExtractor?.extract(url: article.url, engine: engine) ?? .timedOut
+        // Cancellation does not stop an extraction that is already in flight, so a
+        // superseded load returns here with a real answer. Publishing it would let the
+        // parser the reader switched away from overwrite the one they switched to.
+        if Task.isCancelled { return }
+        let fingerprint = NookPostOrigin.fingerprint(of: article)
         switch outcome {
-        case .success(let html) where !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
+        case .success(let extracted) where !extracted.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
             // Parse into native blocks AND import their styled text into the caches
             // BEFORE flipping to .ready, so the reader renders fully styled from a
             // warm cache on the first frame — no parse or importer burst on the
             // transition frame, and no placeholder→styled reflow.
-            await warmReaderContent(html: html, baseURL: article.url)
-            readerContentStates[article.id] = .ready(html)
+            await warmReaderContent(html: extracted.html, baseURL: article.url)
+            // Written only for the parser that drops them. Readability keeps embeds and
+            // always reports zero, and letting that zero overwrite the count meant the
+            // notice never came back when the reader switched to legibility again.
+            if extracted.engine == .legibility {
+                readerDroppedEmbeds[article.id] = extracted.droppedEmbeds
+            }
+            note(html: extracted.html, engine: extracted.engine, for: article)
+            // A fallback body is not written to the synced cache. The parser the
+            // reader chose could not run *this time*; recording Readability's answer
+            // as a success would pin the article to it on every device for good,
+            // because a cached success is never reconsidered.
+            guard !extracted.fellBack else { return }
             await readerContentStore?.record(
                 ReaderContentValue(
-                    status: .success, html: html,
-                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
+                    status: .success, html: extracted.html,
+                    sourceFingerprint: fingerprint,
+                    engine: extracted.engine),
                 for: article.id)
         case .gone:
-            // The original is gone (404/410); the reader will offer to delete it.
+            // The original is gone (404/410); the reader will offer to delete it. The
+            // cached body is deliberately left alone — it is the only copy of an
+            // article that no longer exists anywhere, and `revalidateCachedOriginal`
+            // has always shown `.gone` over a kept body rather than replacing it.
+            reparsingArticleIDs.remove(article.id)
             readerContentStates[article.id] = .gone
-            await readerContentStore?.record(
-                ReaderContentValue(
-                    status: .failed, html: nil,
-                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
-                for: article.id)
-        default:
+            readerContentEngines[article.id] = engine
+            await recordReaderFailureUnlessBodyCached(
+                engine: engine, fingerprint: fingerprint, for: article.id)
+        case .timedOut:
+            // Nook ran out of time. Not recorded: a cached failure is synced and then
+            // believed on every device, and a slow network is not a fact about the
+            // page. The reader offers Try Again, and a later open re-extracts.
+            if abandonReparse(for: article) { return }
             readerContentStates[article.id] = .failed
-            await readerContentStore?.record(
-                ReaderContentValue(
-                    status: .failed, html: nil,
-                    sourceFingerprint: NookPostOrigin.fingerprint(of: article)),
-                for: article.id)
+            readerContentEngines[article.id] = engine
+        default:
+            // Recorded before the body is put back, and whether or not it is: this
+            // parser looked at this page and found nothing, and that is worth knowing
+            // so the next attempt does not download it again to learn the same thing.
+            await recordReaderFailureUnlessBodyCached(
+                engine: engine, fingerprint: fingerprint, for: article.id)
+            if abandonReparse(for: article) { return }
+            readerContentStates[article.id] = .failed
+            readerContentEngines[article.id] = engine
         }
+    }
+
+    /// Records that `engine` found no article, keeping whatever verdict the shard
+    /// already held so a page neither parser can read converges instead of two
+    /// devices overwriting each other forever.
+    private func recordReaderFailureUnlessBodyCached(
+        engine: ReaderParserEngine, fingerprint: String?, for id: Article.ID
+    ) async {
+        let previous = await readerContentStore?.value(for: id)
+        // A body already extracted is worth more than a verdict about the parser that
+        // just came up empty — most of all when the page has gone, where the cached
+        // copy is the only one left anywhere.
+        guard previous?.status != .success || previous?.html?.isEmpty != false else { return }
+        await readerContentStore?.record(
+            ReaderContentValue.failure(
+                engine: engine, previous: previous, sourceFingerprint: fingerprint),
+            for: id)
+    }
+
+    /// Publishes a freshly-resolved body: flips the reader to `.ready`, records
+    /// which parser produced it, and keeps it for an instant switch back.
+    private func note(html: String, engine: ReaderParserEngine, for article: Article) {
+        noteReaderContentByEngine(html, engine: engine, for: article.id)
+        reparsingArticleIDs.remove(article.id)
+        readerContentEngines[article.id] = engine
+        readerContentStates[article.id] = .ready(html)
+    }
+
+    /// Whether both parsers have already had a go at this article this session.
+    ///
+    /// Once they have, a cached failure is the answer however it is stamped —
+    /// re-loading the page again would find the same nothing.
+    private func alreadyTriedBothParsers(_ id: Article.ID) -> Bool {
+        (readerParsersTried[id]?.count ?? 0) >= ReaderParserEngine.allCases.count
     }
 
     /// Background HEAD check of a cached article's original URL. If the source now
@@ -3029,6 +3381,14 @@ public final class ReaderStore {
         if selectedArticleID == articleID { selectedArticleID = nil }
         articles.removeAll { $0.id == articleID }
         readerContentStates[articleID] = nil
+        readerContentEngines[articleID] = nil
+        readerContentGenerations[articleID] = nil
+        reparsingArticleIDs.remove(articleID)
+        readerDroppedEmbeds[articleID] = nil
+        readerParserOverrides[articleID] = nil
+        readerContentByEngine[articleID] = nil
+        readerContentByEngineOrder.removeAll { $0 == articleID }
+        readerParsersTried[articleID] = nil
         retainedArticleIDs.remove(articleID)
         recordArticleDeleted(articleID)
         // Guard the refresh merge immediately: the feed most likely still

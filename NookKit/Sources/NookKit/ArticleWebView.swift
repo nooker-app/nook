@@ -18,6 +18,9 @@ public struct ArticleWebView {
     let url: URL
     let useReaderMode: Bool
     let style: ReaderStyle
+    /// Which parser turns the page into the reader view. Changing it re-renders in
+    /// place from the stashed copy of the page — no reload, no second download.
+    let parserEngine: ReaderParserEngine
     let linkOpensInApp: Bool
     /// When true, translate the page's text in place into `translationLanguage`.
     let translate: Bool
@@ -42,11 +45,19 @@ public struct ArticleWebView {
     /// host can hand the exact page — not just the original article URL — to
     /// Safari / the system browser for login/passkey flows.
     var onURLChange: (URL?) -> Void
+    /// Which parser actually produced the reader view on screen.
+    ///
+    /// Not always the one that was asked for: it may have been unable to run, or it
+    /// may have found no article — in which case the body from before the switch is
+    /// still up. Reported so the parser menu's check-mark describes what is being
+    /// read rather than what was requested.
+    var onParserResolved: (ReaderParserEngine) -> Void
 
     public init(
         url: URL,
         useReaderMode: Bool,
         style: ReaderStyle,
+        parserEngine: ReaderParserEngine = .preferred,
         linkOpensInApp: Bool,
         translate: Bool = false,
         translationLanguage: String = "",
@@ -56,11 +67,13 @@ public struct ArticleWebView {
         onOverscrollEnded: @escaping (CGFloat) -> Void = { _ in },
         onBottomOverscroll: @escaping (CGFloat) -> Void = { _ in },
         onBottomOverscrollEnded: @escaping (CGFloat) -> Void = { _ in },
-        onURLChange: @escaping (URL?) -> Void = { _ in }
+        onURLChange: @escaping (URL?) -> Void = { _ in },
+        onParserResolved: @escaping (ReaderParserEngine) -> Void = { _ in }
     ) {
         self.url = url
         self.useReaderMode = useReaderMode
         self.style = style
+        self.parserEngine = parserEngine
         self.linkOpensInApp = linkOpensInApp
         self.translate = translate
         self.translationLanguage = translationLanguage
@@ -71,6 +84,7 @@ public struct ArticleWebView {
         self.onBottomOverscroll = onBottomOverscroll
         self.onBottomOverscrollEnded = onBottomOverscrollEnded
         self.onURLChange = onURLChange
+        self.onParserResolved = onParserResolved
     }
 
     @MainActor
@@ -85,13 +99,20 @@ public struct ArticleWebView {
         let controller = configuration.userContentController
 
         coordinator.usesReaderMode = useReaderMode
+        coordinator.parserEngine = parserEngine
         if useReaderMode {
+            // Readability ships whichever parser is chosen: it is the fallback when
+            // legibility cannot run at all, and user scripts are installed once, at
+            // construction, so there is no later chance to add it.
             if let readabilitySource = Self.readabilitySource {
                 controller.addUserScript(WKUserScript(source: readabilitySource, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
             }
-            // The reader script posts `nookContentReady` once it has rebuilt the
-            // DOM, so translation runs against the reader's text, not the raw page.
-            controller.addUserScript(WKUserScript(source: readerScript(style: style), injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+            controller.addUserScript(WKUserScript(source: ReaderParserScripts.shared, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+            // The renderer posts `nookContentReady` once it has rebuilt the DOM, so
+            // translation runs against the reader's text, not the raw page.
+            controller.addUserScript(WKUserScript(source: Self.readerRenderScript(style: style), injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+            controller.addUserScript(WKUserScript(source: Self.readerDriverScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+            controller.add(coordinator, name: "nookReaderSource")
         } else {
             // Original mode: signal readiness when the page (and its resources)
             // finish loading, so translation never runs against a half-loaded page.
@@ -147,10 +168,19 @@ public struct ArticleWebView {
         return try? String(contentsOf: url, encoding: .utf8)
     }()
 
-    func readerScript(style: ReaderStyle) -> String {
+    /// Defines `window.__nookRenderReader(payloadJSON)`: given `{ok, title,
+    /// byline, content}`, it replaces the page with Nook's reader view, styled from
+    /// `style`.
+    ///
+    /// Split from the driver below so a parser switch can re-render without a
+    /// reload. The page is downloaded once, `window.__nook.stash()` keeps a copy of
+    /// it, and native can re-parse that copy with the other engine and call this
+    /// again — which is the whole difference between an instant switch and a second
+    /// trip to the network.
+    static func readerRenderScript(style: ReaderStyle) -> String {
         """
         (function () {
-          var attempts = 0;
+          if (window.__nookRenderReader) return;
           var originalURL = document.baseURI;
           var signaledReady = false;
           function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -163,59 +193,51 @@ public struct ArticleWebView {
             try { window.webkit.messageHandlers.nookContentReady.postMessage(1); } catch (e) {}
           }
 
-          function normalizeMedia(root) {
-            root.querySelectorAll('img').forEach(function (img) {
-              if (!img.getAttribute('src')) {
-                var lazy = img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
-                if (lazy) img.setAttribute('src', lazy);
-              }
-              img.setAttribute('loading', 'lazy');
-            });
-            root.querySelectorAll('iframe, video, source').forEach(function (media) {
-              var src = media.getAttribute('src') || media.getAttribute('data-src');
-              if (src) {
-                try { media.setAttribute('src', new URL(src, originalURL).href); } catch (_) {}
-              }
-            });
+          function applyStyle() {
+            if (document.getElementById('nook-reader-style')) return;
+            var style = document.createElement('style');
+            style.id = 'nook-reader-style';
+            style.textContent = [
+            ':root { color-scheme: light dark; }',
+            'html, body { margin: 0; padding: 0; background: \(style.backgroundCSS); color: \(style.textCSS); }',
+            '#nook-reader { max-width: 720px; margin: 0 auto; padding: 44px 28px 96px; font-family: \(style.font.cssFamily); font-size: \(style.fontSize)px; line-height: \(style.lineHeight); letter-spacing: \(style.letterSpacing)em; }',
+            '#nook-reader h1 { font-size: 1.7em; line-height: 1.25; font-weight: 700; margin: 0 0 12px; letter-spacing: normal; }',
+            '#nook-reader .nook-byline { color: \(style.secondaryTextCSS); margin: 0 0 24px; font-size: 0.85em; }',
+            '#nook-reader h2, #nook-reader h3 { line-height: 1.3; margin: 1.6em 0 0.6em; }',
+            '#nook-reader p { margin: 0 0 1.1em; }',
+            '#nook-reader img, #nook-reader video, #nook-reader figure { max-width: 100%; height: auto; border-radius: 6px; }',
+            '#nook-reader video { width: 100%; }',
+            '#nook-reader iframe { display: block; width: 100%; max-width: 100%; min-height: 281px; border: 0; border-radius: 6px; }',
+            '#nook-reader .cp_embed_wrapper iframe, #nook-reader iframe.cp_embed_iframe { min-height: 450px; }',
+            '#nook-reader .wp-has-aspect-ratio iframe { aspect-ratio: 16 / 9; height: auto; }',
+            '#nook-reader figure { margin: 1.4em 0; }',
+            '#nook-reader figcaption { font-size: 0.8em; color: \(style.secondaryTextCSS); }',
+            '#nook-reader a { color: LinkText; }',
+            '#nook-reader pre { overflow-x: auto; background: color-mix(in srgb, \(style.textCSS) 8%, transparent); padding: 12px; border-radius: 6px; }',
+            '#nook-reader code { font-family: ui-monospace, monospace; }',
+            '#nook-reader table { display: block; overflow-x: auto; border-collapse: collapse; }',
+            '#nook-reader td, #nook-reader th { border: 1px solid color-mix(in srgb, \(style.textCSS) 20%, transparent); padding: 6px 10px; }',
+            '#nook-reader blockquote { margin: 0 0 1.1em; padding-left: 16px; border-left: 3px solid color-mix(in srgb, \(style.textCSS) 25%, transparent); color: \(style.secondaryTextCSS); }'
+            ].join('\\n');
+            document.head.appendChild(style);
           }
 
-          function extractedArticle() {
-            if (typeof Readability !== 'undefined') {
-              var clone = document.cloneNode(true);
-              normalizeMedia(clone);
-              // Readability intentionally removes most iframes. Interactive
-              // CodePen examples are article content for developer sites, so
-              // retain them alongside its standard video-provider allowlist.
-              var allowedEmbeds = /\\/\\/(www\\.)?((dailymotion|youtube|youtube-nocookie|player\\.vimeo|v\\.qq|codepen)\\.(com|io)|(archive|upload\\.wikimedia)\\.org|player\\.twitch\\.tv)/i;
-              var parsed = new Readability(clone, { allowedVideoRegex: allowedEmbeds }).parse();
-              if (parsed && parsed.content && parsed.textContent && parsed.textContent.trim().length > 80) {
-                return parsed;
-              }
-            }
-
-            // Some script-heavy or unusually marked-up sites defeat the
-            // scoring heuristic even though they expose a clear semantic body.
-            var fallback = document.querySelector('article .article-content, article [itemprop="articleBody"], article, main');
-            if (!fallback || (fallback.innerText || '').trim().length < 80) return null;
-            var content = fallback.cloneNode(true);
-            normalizeMedia(content);
-            return {
-              title: document.querySelector('h1') ? document.querySelector('h1').textContent.trim() : document.title,
-              byline: '',
-              content: content.innerHTML
-            };
-          }
-
-          function renderReader() {
+          window.__nookRenderReader = function (payloadJSON) {
+            // Per render, not per document. The IIFE around this runs once per page
+            // (it self-guards), so a latch declared out there stayed set after the
+            // first render — and a re-render for a parser switch then posted no
+            // readiness at all, leaving translation waiting for a signal that would
+            // never come.
+            signaledReady = false;
             try {
-              var article = extractedArticle();
-              if (!article) {
-                attempts += 1;
-                if (attempts < 3) { setTimeout(renderReader, attempts * 250); return; }
-                // Extraction failed for good: the original page stays, so let
-                // translation proceed against whatever content is present.
+              var article = null;
+              try { article = JSON.parse(payloadJSON); } catch (_) {}
+              if (!article || !article.ok || !article.content) {
+                // Nothing came out of the page. The untouched original stays, and
+                // the mode toggle still lets the reader see it — but translation
+                // must not keep waiting for a reader view that will never arrive.
                 signalReady();
-                return;
+                return false;
               }
 
               var titleHTML = article.title ? '<h1>' + esc(article.title) + '</h1>' : '';
@@ -223,47 +245,50 @@ public struct ArticleWebView {
 
               document.head.innerHTML = '<meta name="viewport" content="width=device-width, initial-scale=1"><base href="' + esc(originalURL) + '">';
               document.body.innerHTML = '<div id="nook-reader">' + titleHTML + bylineHTML + article.content + '</div>';
-              normalizeMedia(document.body);
-
-              var style = document.createElement('style');
-              style.textContent = [
-              ':root { color-scheme: light dark; }',
-              'html, body { margin: 0; padding: 0; background: \(style.backgroundCSS); color: \(style.textCSS); }',
-              '#nook-reader { max-width: 720px; margin: 0 auto; padding: 44px 28px 96px; font-family: \(style.font.cssFamily); font-size: \(style.fontSize)px; line-height: \(style.lineHeight); letter-spacing: \(style.letterSpacing)em; }',
-              '#nook-reader h1 { font-size: 1.7em; line-height: 1.25; font-weight: 700; margin: 0 0 12px; letter-spacing: normal; }',
-              '#nook-reader .nook-byline { color: \(style.secondaryTextCSS); margin: 0 0 24px; font-size: 0.85em; }',
-              '#nook-reader h2, #nook-reader h3 { line-height: 1.3; margin: 1.6em 0 0.6em; }',
-              '#nook-reader p { margin: 0 0 1.1em; }',
-              '#nook-reader img, #nook-reader video, #nook-reader figure { max-width: 100%; height: auto; border-radius: 6px; }',
-              '#nook-reader video { width: 100%; }',
-              '#nook-reader iframe { display: block; width: 100%; max-width: 100%; min-height: 281px; border: 0; border-radius: 6px; }',
-              '#nook-reader .cp_embed_wrapper iframe, #nook-reader iframe.cp_embed_iframe { min-height: 450px; }',
-              '#nook-reader .wp-has-aspect-ratio iframe { aspect-ratio: 16 / 9; height: auto; }',
-              '#nook-reader figure { margin: 1.4em 0; }',
-              '#nook-reader figcaption { font-size: 0.8em; color: \(style.secondaryTextCSS); }',
-              '#nook-reader a { color: LinkText; }',
-              '#nook-reader pre { overflow-x: auto; background: color-mix(in srgb, \(style.textCSS) 8%, transparent); padding: 12px; border-radius: 6px; }',
-              '#nook-reader code { font-family: ui-monospace, monospace; }',
-              '#nook-reader blockquote { margin: 0 0 1.1em; padding-left: 16px; border-left: 3px solid color-mix(in srgb, \(style.textCSS) 25%, transparent); color: \(style.secondaryTextCSS); }'
-              ].join('\\n');
-              document.head.appendChild(style);
+              window.__nook.normalizeMedia(document.body);
+              applyStyle();
+              // A re-render (the reader switched parsers) starts at the top of the
+              // new article rather than at the old one's scroll offset, which would
+              // land somewhere arbitrary in different markup.
+              window.scrollTo(0, 0);
               window.dispatchEvent(new Event('resize'));
               signalReady();
+              return true;
             } catch (error) {
               // Keep the untouched original page available if every extraction
               // path fails; the mode toggle still lets the user switch back.
               signalReady();
+              return false;
             }
-          }
-
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', renderReader, { once: true });
-          } else {
-            setTimeout(renderReader, 0);
-          }
+          };
         })();
         """
     }
+
+    /// Snapshots the page and asks native to parse it.
+    ///
+    /// Whichever engine is chosen, the parse happens natively: legibility runs in
+    /// its own web view, and Readability — though it could run here — goes the same
+    /// way so that one code path decides what the article is and both engines are
+    /// switchable from the same place.
+    static let readerDriverScript = """
+    (function () {
+      function run() {
+        try {
+          window.__nook.stash();
+          window.webkit.messageHandlers.nookReaderSource.postMessage(window.__nook.source());
+        } catch (e) {
+          try { window.webkit.messageHandlers.nookContentReady.postMessage(1); } catch (_) {}
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', run, { once: true });
+      } else {
+        setTimeout(run, 0);
+      }
+    })();
+    """
 }
 
 // MARK: - macOS
@@ -281,6 +306,7 @@ extension ArticleWebView: NSViewRepresentable {
         webView.allowsBackForwardNavigationGestures = true
         context.coordinator.onLoadingProgress = onLoadingProgress
         context.coordinator.onURLChange = onURLChange
+        context.coordinator.onParserResolved = onParserResolved
         context.coordinator.attach(to: webView)
         context.coordinator.observeProgress(of: webView)
         context.coordinator.observeURL(of: webView)
@@ -298,14 +324,20 @@ extension ArticleWebView: NSViewRepresentable {
         context.coordinator.onTranslatingChange = onTranslatingChange
         context.coordinator.onLoadingProgress = onLoadingProgress
         context.coordinator.onURLChange = onURLChange
+        context.coordinator.onParserResolved = onParserResolved
+        context.coordinator.applyParser(parserEngine)
         context.coordinator.applyTranslation(translate: translate, languageName: translationLanguage)
     }
 
     public static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
         coordinator.detach()
         coordinator.stopObservingProgress()
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nookScroll")
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nookContentReady")
+        let controller = webView.configuration.userContentController
+        controller.removeScriptMessageHandler(forName: "nookScroll")
+        controller.removeScriptMessageHandler(forName: "nookContentReady")
+        // Added only in reader mode; removing a handler that was never added is a
+        // no-op, so this needs no matching condition.
+        controller.removeScriptMessageHandler(forName: "nookReaderSource")
     }
 }
 #endif
@@ -330,6 +362,7 @@ extension ArticleWebView: UIViewRepresentable {
         context.coordinator.onBottomOverscroll = onBottomOverscroll
         context.coordinator.onBottomOverscrollEnded = onBottomOverscrollEnded
         context.coordinator.onURLChange = onURLChange
+        context.coordinator.onParserResolved = onParserResolved
         context.coordinator.observeProgress(of: webView)
         context.coordinator.observeURL(of: webView)
         webView.scrollView.panGestureRecognizer.addTarget(context.coordinator, action: #selector(Coordinator.handleScrollPan(_:)))
@@ -345,14 +378,20 @@ extension ArticleWebView: UIViewRepresentable {
         context.coordinator.onBottomOverscroll = onBottomOverscroll
         context.coordinator.onBottomOverscrollEnded = onBottomOverscrollEnded
         context.coordinator.onURLChange = onURLChange
+        context.coordinator.onParserResolved = onParserResolved
+        context.coordinator.applyParser(parserEngine)
         context.coordinator.applyTranslation(translate: translate, languageName: translationLanguage)
     }
 
     public static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         coordinator.stopObservingProgress()
         webView.scrollView.panGestureRecognizer.removeTarget(coordinator, action: #selector(Coordinator.handleScrollPan(_:)))
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nookScroll")
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "nookContentReady")
+        let controller = webView.configuration.userContentController
+        controller.removeScriptMessageHandler(forName: "nookScroll")
+        controller.removeScriptMessageHandler(forName: "nookContentReady")
+        // Added only in reader mode; removing a handler that was never added is a
+        // no-op, so this needs no matching condition.
+        controller.removeScriptMessageHandler(forName: "nookReaderSource")
     }
 }
 #endif
@@ -369,6 +408,7 @@ extension ArticleWebView {
         var onBottomOverscroll: (CGFloat) -> Void = { _ in }
         var onBottomOverscrollEnded: (CGFloat) -> Void = { _ in }
         var onURLChange: (URL?) -> Void = { _ in }
+        var onParserResolved: (ReaderParserEngine) -> Void = { _ in }
         private var progressObservation: NSKeyValueObservation?
         private var urlObservation: NSKeyValueObservation?
 
@@ -413,7 +453,11 @@ extension ArticleWebView {
 
         // In-place translation state.
         private var translationApplied = false
-        private var translationInFlight = false
+        /// The navigation token of the translation run that owns the indicator, or nil
+        /// when nothing is running. A token rather than a `Bool` so a run abandoned by
+        /// a re-render cannot switch the indicator off under its successor.
+        private var translationInFlightToken: Int?
+        private var translationInFlight: Bool { translationInFlightToken != nil }
         private var wantsTranslation = false
         private var translationLanguage = ""
         /// Whether the translatable content has settled — the reader script has
@@ -424,6 +468,22 @@ extension ArticleWebView {
         /// Whether this web view renders the reader view; drives which readiness
         /// signal applies and is only informational for the coordinator.
         var usesReaderMode = false
+        /// The parser currently rendering this page. Changed by `updateNSView` /
+        /// `updateUIView` when the reader switches engines.
+        var parserEngine: ReaderParserEngine = .preferred
+        /// The page as it arrived, absolute-URL'd, kept so a parser switch re-renders
+        /// without downloading the article again. Cleared on navigation.
+        private var readerSource: String?
+        /// The in-flight parse. Cancelled when a newer one starts, so switching twice
+        /// quickly renders the second choice rather than whichever finished last.
+        private var readerParseTask: Task<Void, Never>?
+        private var readerParseToken = 0
+        /// The parser whose output is on screen, or nil while the untouched original
+        /// page is still showing.
+        private var renderedParser: ReaderParserEngine?
+        /// How many times the first render has come up empty, for a page still filling
+        /// itself in. Reset once anything has been drawn.
+        private var readerRenderAttempts = 0
         /// Bumped on each navigation so an in-flight translation from a previous
         /// page can detect it became stale and refuse to inject into the new one.
         private var navigationToken = 0
@@ -478,7 +538,7 @@ extension ArticleWebView {
                 wantsTranslation = false
                 let wasActive = translationApplied || translationInFlight
                 translationApplied = false
-                finishTranslating()
+                if let token = translationInFlightToken { finishTranslating(token: token) }
                 if wasActive { webView?.reload() }
             }
         }
@@ -500,7 +560,7 @@ extension ArticleWebView {
             // freshly-navigated page can't be translated against stale/blank DOM.
             guard wantsTranslation, contentReady, !translationApplied, !translationInFlight,
                   !translationLanguage.isEmpty, let webView else { return }
-            translationInFlight = true
+            translationInFlightToken = navigationToken
             reportTranslating(true)
             beginBlockTranslation(webView, languageName: translationLanguage)
         }
@@ -521,7 +581,7 @@ extension ArticleWebView {
                       let data = json.data(using: .utf8),
                       let blocks = try? JSONDecoder().decode([TextBlock].self, from: data),
                       !blocks.isEmpty else {
-                    self.finishTranslating()
+                    self.finishTranslating(token: token)
                     return
                 }
                 Task { [weak self] in
@@ -549,12 +609,21 @@ extension ArticleWebView {
                 webView.evaluateJavaScript(Self.applyBlockScript(id: block.id, marked: result.translation), completionHandler: nil)
             }
             if token == navigationToken { translationApplied = true }
-            finishTranslating()
+            finishTranslating(token: token)
         }
 
+        /// Clears the translating indicator, but only for the run that owns it.
+        ///
+        /// The token is the whole point. An abandoned run — the page re-rendered
+        /// under it, or the reader switched parser — returns from its last `await`
+        /// long after a new run has started, and an unguarded clear here handed the
+        /// new run's flag away: the next `updateNSView` saw nothing in flight and
+        /// started a *second* loop writing into the same blocks, doubling the
+        /// translation requests and interleaving their output.
         @MainActor
-        private func finishTranslating() {
-            translationInFlight = false
+        private func finishTranslating(token: Int) {
+            guard translationInFlightToken == token else { return }
+            translationInFlightToken = nil
             reportTranslating(false)
         }
 
@@ -1182,13 +1251,190 @@ extension ArticleWebView {
             navigationToken &+= 1
             contentReady = false
             translationApplied = false
-            translationInFlight = false
+            if let token = translationInFlightToken { finishTranslating(token: token) }
+            // The stashed page belonged to the page being replaced. Keeping it would
+            // let a parser switch redraw the previous article over this one.
+            readerSource = nil
+            renderedParser = nil
+            readerRenderAttempts = 0
+            readerParseToken &+= 1
+            readerParseTask?.cancel()
+            readerParseTask = nil
             #if canImport(AppKit)
             engaged = false
             bottomEngaged = false
             overscroll = 0
             bottomOverscroll = 0
             #endif
+        }
+
+        /// Re-renders the reader with `engine` if it is not the one already showing.
+        ///
+        /// Called from `updateNSView` / `updateUIView`, which SwiftUI runs on every
+        /// unrelated state change too — hence the equality guard: re-parsing on a
+        /// scroll callback would rebuild the page under the reader's hands.
+        func applyParser(_ engine: ReaderParserEngine) {
+            guard usesReaderMode, engine != parserEngine else { return }
+            parserEngine = engine
+            // The body about to be replaced is what any live translation was written
+            // against, and its per-block ids will not line up with different markup.
+            // Bumping the token abandons that run; the renderer re-posts readiness
+            // when the new body lands, and translation starts again from there.
+            navigationToken &+= 1
+            contentReady = false
+            if let token = translationInFlightToken { finishTranslating(token: token) }
+            renderReader()
+        }
+
+        /// Parses the stashed page with the current engine and hands the result to
+        /// the page to draw.
+        private func renderReader() {
+            guard usesReaderMode, let source = readerSource, !source.isEmpty else { return }
+            readerParseToken += 1
+            let token = readerParseToken
+            readerParseTask?.cancel()
+            readerParseTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                let engine = parserEngine
+                // Checked again after the hop: a second switch arriving before this
+                // task started should cost nothing rather than a full parse of a
+                // document that is already superseded.
+                guard token == readerParseToken else { return }
+                let article = await Self.parse(source: source, engine: engine, page: webView)
+                guard !Task.isCancelled, token == readerParseToken, let webView else { return }
+                let payload = (try? JSONEncoder().encode(article)).flatMap { String(data: $0, encoding: .utf8) }
+                let drew = (try? await webView.callAsyncJavaScript(
+                    "return window.__nookRenderReader(payload);",
+                    arguments: ["payload": payload ?? "null"],
+                    contentWorld: .page)) as? Bool ?? false
+                guard token == readerParseToken else { return }
+
+                if drew {
+                    renderedParser = article.engine
+                    readerRenderAttempts = 0
+                    // The DOM this replaced is what any applied translation was
+                    // written into, so it is gone with it. Cleared only here, on a
+                    // render that really happened: clearing it for a switch that then
+                    // found nothing left the translated text on screen with no way to
+                    // undo it, because "show original" reloads only when it believes
+                    // a translation is applied.
+                    translationApplied = false
+                } else if renderedParser == nil, readerRenderAttempts < 2 {
+                    // Nothing came out, and nothing has been drawn yet. A page that
+                    // assembles its body by script may genuinely have none at
+                    // `DOMContentLoaded` — the reader retried three times before this
+                    // change, and dropping that turned "slow to fill in" into "no
+                    // article here". Re-snapshot and try again; the page is already
+                    // loaded, so this costs nothing on the network.
+                    readerRenderAttempts += 1
+                    let delay = Duration.milliseconds(300 * readerRenderAttempts)
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(for: delay)
+                        guard let self, token == readerParseToken else { return }
+                        readerSource = (try? await webView.evaluateJavaScript(
+                            "window.__nook ? window.__nook.source() : ''")) as? String ?? readerSource
+                        renderReader()
+                    }
+                    return
+                } else if let standing = renderedParser {
+                    // The parser found nothing and the body from before the switch is
+                    // still on screen. Roll the coordinator's own choice back first,
+                    // so telling the host what is actually being read does not come
+                    // straight back as another switch — and a re-render that produced
+                    // the same markup would still have scrolled the reader to the top.
+                    parserEngine = standing
+                }
+                // A fallback is not a choice; see `ReaderArticle.fellBack`.
+                if !article.fellBack {
+                    onParserResolved(renderedParser ?? article.engine)
+                }
+            }
+        }
+
+        /// What the reader should draw, or `ok: false` when no article came out of
+        /// the page — in which case the untouched original stays up.
+        private struct ReaderArticle: Encodable {
+            var ok: Bool
+            var title: String?
+            var byline: String?
+            var content: String?
+            /// Which parser produced it — or, when nothing came out, which one looked.
+            /// Not sent to the page (`CodingKeys` leaves it out); it is here so the
+            /// coordinator can report what was actually used.
+            var engine: ReaderParserEngine
+            /// True when `engine` is not the parser that was asked for, because that one
+            /// could not run. Deliberately not reported to the host: it would write a
+            /// per-article override, and a transient timeout would then pin the article
+            /// to the parser nobody chose — including in the synced cache the native
+            /// reader writes.
+            var fellBack = false
+
+            static func none(_ engine: ReaderParserEngine) -> ReaderArticle {
+                ReaderArticle(ok: false, title: nil, byline: nil, content: nil, engine: engine)
+            }
+
+            enum CodingKeys: String, CodingKey { case ok, title, byline, content }
+        }
+
+        private static func parse(
+            source: String, engine: ReaderParserEngine, page: WKWebView?
+        ) async -> ReaderArticle {
+            if engine == .legibility {
+                switch await LegibilityEngine.shared.extract(document: source) {
+                case .article(let extraction):
+                    let html = extraction.html.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !html.isEmpty {
+                        return ReaderArticle(
+                            ok: true, title: extraction.title, byline: extraction.byline,
+                            content: extraction.html, engine: .legibility)
+                    }
+                    // A link submission has no body of its own; the payload is the
+                    // headline and the outbound link, and drawing that is not the
+                    // same as failing to draw anything.
+                    if extraction.isLinkOnly, let link = extraction.linkURL {
+                        let href = link.absoluteString
+                        let escaped = href
+                            .replacingOccurrences(of: "&", with: "&amp;")
+                            .replacingOccurrences(of: "<", with: "&lt;")
+                            .replacingOccurrences(of: ">", with: "&gt;")
+                            .replacingOccurrences(of: "\"", with: "&quot;")
+                        return ReaderArticle(
+                            ok: true, title: extraction.title, byline: extraction.byline,
+                            content: "<p><a href=\"\(escaped)\">\(escaped)</a></p>",
+                            engine: .legibility)
+                    }
+                    return .none(.legibility)
+                case .noArticle:
+                    return .none(.legibility)
+                case .unavailable:
+                    // The engine could not run at all. Readability is injected and
+                    // the page is stashed, so use it rather than show nothing.
+                    var fallback = await readability(in: page)
+                    fallback.fellBack = true
+                    return fallback
+                }
+            }
+            return await readability(in: page)
+        }
+
+        private static func readability(in page: WKWebView?) async -> ReaderArticle {
+            guard let page else { return .none(.readability) }
+            let json = try? await page.evaluateJavaScript(
+                "JSON.stringify(window.__nook ? (window.__nook.readability() || null) : null)") as? String
+            guard let json, let data = json.data(using: .utf8),
+                  let article = try? JSONDecoder().decode(Parsed.self, from: data),
+                  let content = article.content,
+                  !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return .none(.readability) }
+            return ReaderArticle(
+                ok: true, title: article.title, byline: article.byline, content: content,
+                engine: .readability)
+        }
+
+        private struct Parsed: Decodable {
+            var title: String?
+            var byline: String?
+            var content: String?
         }
 
         public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -1215,6 +1461,11 @@ extension ArticleWebView {
         }
 
         public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "nookReaderSource" {
+                readerSource = message.body as? String
+                renderReader()
+                return
+            }
             if message.name == "nookContentReady" {
                 // The page's translatable content has settled (reader rendered or
                 // original page loaded): now translation may run.

@@ -23,12 +23,43 @@ public struct ReaderContentValue: Codable, Sendable, Equatable {
     /// whatever its length.
     public static let currentExtractorVersion = 2
 
+    /// Per-engine, because two engines cannot share one counter: bumping
+    /// legibility's rules must not expire every failure Readability recorded, and
+    /// the reverse. Readability keeps the number the field already holds on disk.
+    public static func currentExtractorVersion(for engine: ReaderParserEngine) -> Int {
+        switch engine {
+        case .readability: currentExtractorVersion
+        // Deliberately a hand-bumped integer and not the wasm build stamp: the
+        // asset is regenerated whenever the pin moves, and expiring every cached
+        // failure on every rebuild would be a re-extraction storm for no reason.
+        case .legibility: 1
+        }
+    }
+
     public var status: Status
     /// The extracted reader HTML for `.success`; `nil` for `.failed`.
     public var html: String?
     /// The extractor that produced this. Absent in records written before this
     /// was tracked, which are treated as older than any current version.
     public var extractorVersion: Int?
+
+    /// Which parser produced this. Absent in every record written before two
+    /// engines existed, and those all came from Readability.js — so absence means
+    /// `.readability` rather than "unknown".
+    public var engine: ReaderParserEngine?
+
+    /// For a failure: every parser that has come up empty on this page, and the
+    /// extractor version each was at when it did.
+    ///
+    /// Accumulated rather than overwritten, because otherwise two devices on
+    /// different parsers ping-pong forever on any page neither can read — each sees
+    /// the other's stamp, decides its own parser has not been tried, re-loads the
+    /// page, and rewrites the whole shard into iCloud Drive. Keyed by
+    /// `ReaderParserEngine.rawValue`, with a version per entry: the two engines
+    /// number their rules independently, so one `extractorVersion` field cannot say
+    /// whether *this* parser's verdict is stale. Additive — an older peer ignores the
+    /// key.
+    public var failedEngines: [String: Int]?
 
     /// The article as the feed served it when this body was extracted, as a
     /// fingerprint. Absent in records written before this was tracked.
@@ -40,21 +71,73 @@ public struct ReaderContentValue: Codable, Sendable, Equatable {
 
     public init(
         status: Status, html: String?, extractorVersion: Int? = currentExtractorVersion,
-        sourceFingerprint: String? = nil
+        sourceFingerprint: String? = nil,
+        engine: ReaderParserEngine? = nil,
+        failedEngines: [String: Int]? = nil
     ) {
         self.status = status
         self.html = html
         self.extractorVersion = extractorVersion
         self.sourceFingerprint = sourceFingerprint
+        self.engine = engine
+        self.failedEngines = failedEngines
     }
 
-    /// Whether this result still reflects what the extractor would do now.
+    /// A failure record for `engine`, carrying forward whatever `previous` already
+    /// knew — so a page that neither parser can read ends up saying so once, rather
+    /// than each device overwriting the other's verdict with its own.
+    public static func failure(
+        engine: ReaderParserEngine,
+        previous: ReaderContentValue?,
+        sourceFingerprint: String?
+    ) -> ReaderContentValue {
+        // Only a previous *failure* carries anything forward. Verdicts about a page
+        // that used to extract were about different markup.
+        var failed = previous?.status == .failed ? previous?.failedVersions ?? [:] : [:]
+        failed[engine.rawValue] = currentExtractorVersion(for: engine)
+        return ReaderContentValue(
+            status: .failed, html: nil,
+            extractorVersion: currentExtractorVersion(for: engine),
+            sourceFingerprint: sourceFingerprint,
+            engine: engine,
+            failedEngines: failed)
+    }
+
+    /// The parser this record came from, reading an absent field as the only one
+    /// that existed when it was written.
+    public var recordedEngine: ReaderParserEngine { engine ?? .readability }
+
+    /// The parsers a failure record has ruled out, and the version each was at.
+    /// Records written before the list existed name exactly one, at whatever the
+    /// single `extractorVersion` field said.
+    public var failedVersions: [String: Int] {
+        if let failedEngines, !failedEngines.isEmpty { return failedEngines }
+        return [recordedEngine.rawValue: extractorVersion ?? 0]
+    }
+
+    /// The parsers a failure record has ruled out.
+    public var recordedFailures: [ReaderParserEngine] {
+        failedVersions.keys.compactMap(ReaderParserEngine.init(rawValue:))
+    }
+
+    /// Whether this result still reflects what `engine` would do now.
     ///
-    /// Success is always trusted: extracted content does not become wrong because
-    /// the extractor improved, and re-fetching every page after an update would
-    /// be a poor trade. Only a failure is worth reconsidering.
-    public var isCurrent: Bool {
-        status == .success || (extractorVersion ?? 0) >= Self.currentExtractorVersion
+    /// Success is always trusted, **including a success from the other parser**.
+    /// Extracted content does not become wrong because a different extractor is
+    /// now preferred, and the alternative is worse than it looks: the cache is
+    /// synced, so a device set to legibility and a device set to Readability would
+    /// each keep invalidating the other's body, re-loading the page and rewriting
+    /// a multi-megabyte shard into iCloud Drive, forever. The engine preference
+    /// decides which parser runs when there is nothing cached; it is not a reason
+    /// to re-fetch what is.
+    ///
+    /// A **failure** is different, and is the case worth reconsidering: legibility
+    /// reads short posts and link posts that Readability rejects outright, so a
+    /// failure it recorded says nothing about what the other engine would find.
+    public func isCurrent(for engine: ReaderParserEngine) -> Bool {
+        if status == .success { return true }
+        guard let recorded = failedVersions[engine.rawValue] else { return false }
+        return recorded >= Self.currentExtractorVersion(for: engine)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -62,6 +145,8 @@ public struct ReaderContentValue: Codable, Sendable, Equatable {
         case html = "h"
         case extractorVersion = "v"
         case sourceFingerprint = "f"
+        case engine = "e"
+        case failedEngines = "g"
     }
 }
 

@@ -14,7 +14,7 @@ BUILD_FLAGS := CODE_SIGNING_ALLOWED=NO
 # project in Xcode still shows the prompt once — click "Trust & Enable".
 PLUGIN_FLAGS := -skipPackagePluginValidation
 
-.PHONY: build clean open app-store-screenshots app-store-capture app-store-check-faces macos-signing-secrets
+.PHONY: build clean open legibility legibility-check app-store-screenshots app-store-capture app-store-check-faces macos-signing-secrets
 
 build:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath $(DERIVED_DATA_PATH) $(PLUGIN_FLAGS) $(BUILD_FLAGS) build
@@ -24,6 +24,16 @@ clean:
 
 open:
 	xed .
+
+# The reader's legibility engine ships as a generated, checked-in asset
+# (NookKit/Sources/NookKit/Legibility.html) so that building Nook needs no Rust
+# toolchain. Regenerate it only to move the pin in tools/legibility.pin.
+legibility:
+	tools/build-legibility.sh
+
+# Verifies the checked-in asset was built from the commit the pin names.
+legibility-check:
+	tools/build-legibility.sh --check
 
 app-store-screenshots:
 	marketing/app-store/render.sh

@@ -177,10 +177,19 @@ struct ReaderDetailView: View {
     /// ready, else the feed's own content HTML (nil = plain-paragraph body). The
     /// translator must consume exactly this so its per-block overrides line up
     /// with the rendered blocks.
-    /// Cache-warming identity: changes when the article switches, and again when
-    /// reader-mode content becomes ready (so the extracted HTML gets warmed too).
+    /// Cache-warming identity: changes when the article switches, and again whenever
+    /// the reader's HTML changes — reader-mode content arriving, or a different parser
+    /// producing a different body.
+    ///
+    /// The body's identity and not just "ready": on a switch back to a body this
+    /// session already has, the state goes `.ready(A)` → `.ready(B)` with no
+    /// `.loading` in between, so a key that only said "ready" never changed and the
+    /// one switch that should have been free was the one that hitched through the
+    /// importer on first scroll.
     private func warmingKey(for article: Article) -> String {
-        if case .ready = store.readerContentState(for: article) { return "\(article.id)|ready" }
+        if case .ready(let html) = store.readerContentState(for: article) {
+            return "\(article.id)|ready|\(html.hashValue)"
+        }
         return "\(article.id)"
     }
 
@@ -516,6 +525,19 @@ struct ReaderDetailView: View {
                         } label: {
                             Label("Categories", systemImage: "tag")
                         }
+                        // Only where a parser actually ran: with reader content off
+                        // and no offline copy, the reader is showing the feed's own
+                        // body and there is nothing to re-read.
+                        if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+                            Menu {
+                                ReaderParserMenuItems(
+                                    store: store, article: article,
+                                    onChange: { haptics.selectionChanged() })
+                            } label: {
+                                Label("Parser", systemImage: "text.viewfinder")
+                            }
+                            .accessibilityValue(Text(store.displayedReaderParser(for: article).label))
+                        }
                         Link(destination: article.url) {
                             Label("Open Original", systemImage: "safari")
                         }
@@ -646,6 +668,15 @@ struct ReaderDetailView: View {
         } message: {
             Text("It's removed from your list on all your devices. This can't be undone.")
         }
+        // Floated over the article rather than placed in it: the point of the
+        // re-parse chip is that what you were reading stays where it was.
+        .overlay(alignment: .top) {
+            if store.isReparsing(article) {
+                ReaderReparsingBanner(engine: store.displayedReaderParser(for: article))
+                    .padding(.top, 10)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: store.isReparsing(article))
         .id(article.id)
         .transition(.push(from: readerNavForward ? .bottom : .top))
     }
@@ -738,7 +769,17 @@ struct ReaderDetailView: View {
         if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
             switch store.readerContentState(for: article) {
             case .ready(let html):
-                HTMLContentView(html: html, baseURL: article.url, selectable: false, translator: nativeTranslator, typography: readerStyle.typography)
+                VStack(alignment: .leading, spacing: 12) {
+                    if store.droppedEmbedCount(for: article) > 0 {
+                        ReaderDroppedEmbedsNotice(
+                            count: store.droppedEmbedCount(for: article),
+                            onUseReadability: {
+                                haptics.selectionChanged()
+                                store.setReaderParser(.readability, for: article)
+                            })
+                    }
+                    HTMLContentView(html: html, baseURL: article.url, selectable: false, translator: nativeTranslator, typography: readerStyle.typography)
+                }
             case .gone:
                 VStack(alignment: .leading, spacing: 14) {
                     ReaderUnavailableNotice(
@@ -750,11 +791,18 @@ struct ReaderDetailView: View {
                 }
             case .failed:
                 // The page is still there; it just yielded no body. Deleting is
-                // not the remedy, so it is not offered.
+                // not the remedy, so it is not offered — but the other parser
+                // might be, and it reads pages this one refuses.
                 VStack(alignment: .leading, spacing: 14) {
                     ReaderUnavailableNotice(
                         reason: .notExtracted,
+                        otherParser: store.displayedReaderParser(for: article).other,
                         onRetry: { store.retryReaderContent(for: article) },
+                        onUseOtherParser: {
+                            haptics.selectionChanged()
+                            store.setReaderParser(
+                                store.displayedReaderParser(for: article).other, for: article)
+                        },
                         onDelete: { deleteAndClose(article) }
                     )
                     originalArticleBody(article)
@@ -977,16 +1025,33 @@ struct ReaderDetailView: View {
         }
     }
 
+    /// Opens the in-app browser on tap; long-press chooses the article parser.
+    ///
+    /// A `Menu` with a `primaryAction` rather than a sixth button: five 52-point
+    /// controls plus capsule padding already fill the bar on a 375-point phone, and
+    /// the coach mark spotlights this button's frame, so it has to stay one control
+    /// in one place.
     private func readerOpenButton(_ article: Article) -> some View {
-        Button {
-            openBrowser(for: article)
+        Menu {
+            // Only where a parser ran. With reader content off and no offline copy the
+            // reader shows the feed's own body, and a long press would open a menu whose
+            // items change nothing on screen.
+            if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+                ReaderParserMenuItems(
+                    store: store, article: article,
+                    onChange: { haptics.selectionChanged() })
+            }
         } label: {
             Image(systemName: "doc.plaintext")
                 .font(.system(size: 20))
                 .frame(width: 52, height: 48)
+        } primaryAction: {
+            openBrowser(for: article)
         }
         .reportGlobalFrame(OriginalButtonFrameKey.self)
         .help("Open Reader / Original")
+        .accessibilityLabel(Text("Open Reader / Original"))
+        .accessibilityValue(Text(store.displayedReaderParser(for: article).label))
     }
 
     @ViewBuilder
@@ -1418,6 +1483,9 @@ struct InAppBrowserSheet: View {
     @State private var isTranslationOn = false
     @State private var translationInFlight = false
     @State private var loadingProgress: Double = 0
+    /// Only for the parser switch's selection click. The re-render is instant, so
+    /// without it the tap is the one control here with no response at all.
+    @State private var haptics = ReaderHaptics()
     @State private var bottomPull: CGFloat = 0
     /// The page's live URL (following redirects / navigation), handed to Safari.
     @State private var currentWebURL: URL?
@@ -1470,6 +1538,7 @@ struct InAppBrowserSheet: View {
                 url: article.url,
                 useReaderMode: store.browserMode == .reader,
                 style: style,
+                parserEngine: store.browserParser(for: article),
                 linkOpensInApp: linkOpensInApp,
                 translate: isTranslationOn,
                 translationLanguage: targetLanguageName,
@@ -1477,8 +1546,16 @@ struct InAppBrowserSheet: View {
                 onLoadingProgress: { loadingProgress = $0 },
                 onBottomOverscroll: { bottomPull = $0 },
                 onBottomOverscrollEnded: handleBottomRelease,
-                onURLChange: { currentWebURL = $0 }
+                onURLChange: { currentWebURL = $0 },
+                // The parser that actually drew the page, which is not always the one
+                // asked for: it may not have run, or may have found no article and
+                // left the previous body up. The menu's check-mark follows this.
+                onParserResolved: { store.setBrowserParser($0, for: article) }
             )
+            // The parser is deliberately NOT part of this identity. `ArticleWebView`
+            // keeps a copy of the page and re-renders from it, so switching engines
+            // costs nothing; putting it here would tear the web view down and
+            // download the article again.
             .id("\(article.id)|\(store.browserMode.rawValue)|\(style.identity)")
             .ignoresSafeArea(edges: .bottom)
             .overlay(alignment: .top) {
@@ -1499,13 +1576,30 @@ struct InAppBrowserSheet: View {
                     Button("Done") { dismiss() }
                 }
                 ToolbarItem(placement: .principal) {
-                    Button {
-                        store.toggleBrowserMode()
-                    } label: {
-                        Label(
-                            store.browserMode == .reader ? "Reader" : "Original",
-                            systemImage: store.browserMode == .reader ? "doc.plaintext" : "globe"
-                        )
+                    if store.browserMode == .reader {
+                        // Tap switches reader/original, as it always has; long-press
+                        // chooses the parser. The principal slot holds one item and
+                        // the trailing group is already three controls.
+                        Menu {
+                            ReaderParserMenuItems(
+                                store: store, article: article, surface: .browser,
+                                onChange: { haptics.selectionChanged() })
+                        } label: {
+                            Label("Reader", systemImage: "doc.plaintext")
+                        } primaryAction: {
+                            store.toggleBrowserMode()
+                        }
+                        .accessibilityLabel(Text("Reader Mode"))
+                        .accessibilityValue(Text(store.browserParser(for: article).label))
+                    } else {
+                        // A plain button on the original page: no parser runs there,
+                        // so a menu would have nothing in it and long-pressing would
+                        // present an empty container.
+                        Button {
+                            store.toggleBrowserMode()
+                        } label: {
+                            Label("Original", systemImage: "globe")
+                        }
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {

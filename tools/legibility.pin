@@ -1,0 +1,13 @@
+# The legibility commit that Nook's bundled engine was built from.
+#
+# NookKit/Sources/NookKit/Legibility.html is generated, checked in, and read at
+# runtime by LegibilityEngine. It is checked in on purpose: building it needs a
+# Rust toolchain and a wasm target, and `make build` has to work for someone who
+# has neither. This file is the provenance the generated asset cannot carry —
+# tools/build-legibility.sh reads it, and the build stamp inside the generated
+# page must match the short commit here.
+repo=https://github.com/nooker-app/legibility.git
+commit=ce8f078c1645f911c133b11749224d529ed43378
+# The module the commit above compiles to, as the generated page stamps it. The
+# commit says what the tree was; this says what was actually built.
+wasm=367e664c

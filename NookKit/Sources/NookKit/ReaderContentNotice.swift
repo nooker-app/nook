@@ -34,19 +34,25 @@ public struct ReaderUnavailableNotice: View {
     }
 
     private let reason: Reason
+    private let otherParser: ReaderParserEngine?
     private let onRetry: () -> Void
     private let onOpenOriginal: (() -> Void)?
+    private let onUseOtherParser: (() -> Void)?
     private let onDelete: () -> Void
 
     public init(
         reason: Reason,
+        otherParser: ReaderParserEngine? = nil,
         onRetry: @escaping () -> Void,
         onOpenOriginal: (() -> Void)? = nil,
+        onUseOtherParser: (() -> Void)? = nil,
         onDelete: @escaping () -> Void
     ) {
         self.reason = reason
+        self.otherParser = otherParser
         self.onRetry = onRetry
         self.onOpenOriginal = onOpenOriginal
+        self.onUseOtherParser = onUseOtherParser
         self.onDelete = onDelete
     }
 
@@ -64,7 +70,14 @@ public struct ReaderUnavailableNotice: View {
         case .gone:
             Text("The page has been taken down. The saved copy is shown below, and you can delete the article if you no longer want it.", bundle: .module)
         case .notExtracted:
-            Text("The page is still there, but no article text came out of it. The saved copy is shown below.", bundle: .module)
+            if otherParser != nil {
+                // The two parsers disagree about which pages have an article in
+                // them — that is why both ship — so "try the other one" is real
+                // advice here and not a shrug.
+                Text("The page is still there, but no article text came out of it. Another parser may read it. The saved copy is shown below.", bundle: .module)
+            } else {
+                Text("The page is still there, but no article text came out of it. The saved copy is shown below.", bundle: .module)
+            }
         }
     }
 
@@ -87,6 +100,16 @@ public struct ReaderUnavailableNotice: View {
                     Text("Try Again", bundle: .module)
                 }
                 .buttonStyle(.bordered)
+
+                // Offered before "Open Original": on a page one parser cannot read
+                // and the other can, this is the action that ends with the article
+                // on screen rather than with a web page.
+                if let onUseOtherParser, let otherParser, reason == .notExtracted {
+                    Button(action: onUseOtherParser) {
+                        Text("Read with \(otherParser.label)", bundle: .module)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
 
                 if let onOpenOriginal, reason == .notExtracted {
                     Button(action: onOpenOriginal) {

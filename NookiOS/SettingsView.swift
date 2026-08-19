@@ -351,6 +351,14 @@ private struct ReadingSettingsScreen: View {
             }
             .warmRows()
 
+            // Its own Section, not a row under In-App Browser: the parser decides
+            // what the built-in reader shows as much as what the browser's reader
+            // mode shows.
+            Section("Article Parser") {
+                ReaderParserSettingsContent()
+            }
+            .warmRows()
+
             Section("In-App Browser") {
                 Picker("In-App Browser", selection: $readerViewMode) {
                     ForEach(ReaderViewMode.allCases) { Text($0.label).tag($0) }

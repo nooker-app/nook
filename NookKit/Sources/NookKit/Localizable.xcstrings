@@ -35,6 +35,34 @@
         }
       }
     },
+    "%lld embedded videos aren't shown here." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld embedded videos aren't shown here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "埋め込み動画が%lld件表示されていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "임베드된 영상 %lld개가 표시되지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有 %lld 个嵌入视频未显示。"
+          }
+        }
+      }
+    },
     "%lld selected" : {
       "localizations" : {
         "en" : {
@@ -636,6 +664,34 @@
         }
       }
     },
+    "An embedded video isn't shown here." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An embedded video isn't shown here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "埋め込み動画が1件表示されていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "임베드된 영상 1개가 표시되지 않았습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有 1 个嵌入视频未显示。"
+          }
+        }
+      }
+    },
     "An invitation code. Publishing is limited to invited writers for now." : {
       "localizations" : {
         "en" : {
@@ -726,6 +782,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apple Intelligence"
+          }
+        }
+      }
+    },
+    "Article Parser" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Article Parser"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記事パーサ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기사 파서"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文章解析器"
           }
         }
       }
@@ -5707,6 +5791,34 @@
         }
       }
     },
+    "Mozilla's extractor. Keeps embedded videos and CodePen examples, which Legibility drops." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mozilla's extractor. Keeps embedded videos and CodePen examples, which Legibility drops."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mozillaの抽出エンジンです。Legibilityが削除する埋め込み動画やCodePenの例をそのまま残します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mozilla의 추출 엔진입니다. Legibility가 제거하는 임베드 영상과 CodePen 예제를 그대로 남깁니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mozilla 的提取引擎。会保留 Legibility 丢弃的嵌入视频和 CodePen 示例。"
+          }
+        }
+      }
+    },
     "Name" : {
       "localizations" : {
         "en" : {
@@ -6394,6 +6506,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nook 将你的文章存放在自有服务器上的仓库中，发布需要该服务器上的账户。是否支持其他服务器尚未决定。"
+          }
+        }
+      }
+    },
+    "Nook's own extractor. Reads short posts and link posts that Readability skips, and never invents a title or date." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook's own extractor. Reads short posts and link posts that Readability skips, and never invents a title or date."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook独自の抽出エンジンです。Readabilityが見落とす短い投稿やリンク投稿も読み取り、タイトルや日付を推測で補うことはありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook이 직접 만든 추출 엔진입니다. Readability가 놓치는 짧은 글과 링크 글도 읽어내며, 제목이나 날짜를 임의로 만들어 넣지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nook 自研的提取引擎。能读取 Readability 会跳过的短帖和链接帖，并且从不臆造标题或日期。"
           }
         }
       }
@@ -7411,6 +7551,34 @@
         }
       }
     },
+    "Re-reading with %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Re-reading with %@…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@で読み直しています…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@로 다시 읽는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在用 %@ 重新读取…"
+          }
+        }
+      }
+    },
     "Read straight from your own repository, so this is what actually exists — not a copy Nook keeps." : {
       "localizations" : {
         "en" : {
@@ -7439,6 +7607,34 @@
         }
       }
     },
+    "Read with %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read with %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@で読む"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@로 읽기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 %@ 读取"
+          }
+        }
+      }
+    },
     "Reader Mode" : {
       "localizations" : {
         "en" : {
@@ -7463,6 +7659,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "阅读模式"
+          }
+        }
+      }
+    },
+    "Reader view is off, so this currently applies only to reader mode in the in-app browser." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reader view is off, so this currently applies only to reader mode in the in-app browser."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リーダービューがオフのため、現在この設定はアプリ内ブラウザのリーダーモードにのみ適用されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리더 보기가 꺼져 있어, 지금은 앱 내 브라우저의 리더 모드에만 적용됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阅读视图已关闭，因此此设置目前仅适用于应用内浏览器的阅读模式。"
+          }
+        }
+      }
+    },
+    "Reader view is off, so this currently applies to reader mode in the in-app browser and to articles you download for offline reading." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reader view is off, so this currently applies to reader mode in the in-app browser and to articles you download for offline reading."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リーダービューがオフのため、現在この設定はアプリ内ブラウザのリーダーモードと、オフライン用にダウンロードする記事にのみ適用されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리더 보기가 꺼져 있어, 지금은 앱 내 브라우저의 리더 모드와 오프라인용으로 다운로드하는 글에만 적용됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阅读视图已关闭，因此此设置目前仅适用于应用内浏览器的阅读模式，以及你下载供离线阅读的文章。"
           }
         }
       }
@@ -10265,6 +10517,34 @@
         }
       }
     },
+    "The page is still there, but no article text came out of it. Another parser may read it. The saved copy is shown below." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The page is still there, but no article text came out of it. Another parser may read it. The saved copy is shown below."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ページはまだ存在しますが、本文を取り出せませんでした。別のパーサなら読み取れる場合があります。以下には保存済みのコピーを表示しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페이지는 그대로 있지만 본문을 추출하지 못했습니다. 다른 파서로는 읽힐 수 있습니다. 아래에는 저장된 사본을 표시합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "页面仍然存在，但未能提取出正文。换用另一个解析器可能可以读取。下方显示的是已保存的副本。"
+          }
+        }
+      }
+    },
     "The page is still there, but no article text came out of it. The saved copy is shown below." : {
       "localizations" : {
         "ja" : {
@@ -10732,6 +11012,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此账号不可用。"
+          }
+        }
+      }
+    },
+    "This applies to articles Nook reads from now on. An article you have already opened — here or on another device — keeps the parser that read it; use the parser menu in the reader to re-read one." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This applies to articles Nook reads from now on. An article you have already opened — here or on another device — keeps the parser that read it; use the parser menu in the reader to re-read one."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この設定は、これから読み取る記事に適用されます。すでに開いた記事は、この端末でも他の端末でも、読み取ったときのパーサをそのまま使います。読み直すにはリーダーのパーサメニューを使ってください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 설정은 앞으로 읽어 들이는 글에 적용됩니다. 이미 열어 본 글은 이 기기든 다른 기기든 그때 사용한 파서를 그대로 유지합니다. 다시 읽으려면 리더의 파서 메뉴를 사용하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设置适用于此后读取的文章。已打开过的文章——无论在本机还是其他设备——都会保留当时使用的解析器；若要重新读取，请使用阅读器中的解析器菜单。"
           }
         }
       }

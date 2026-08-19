@@ -584,6 +584,34 @@
         }
       }
     },
+    "Article Parser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Article Parser"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "記事パーサ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기사 파서"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文章解析器"
+          }
+        }
+      }
+    },
     "Article Rules": {
       "localizations": {
         "ja": {
@@ -1184,6 +1212,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "选择 iCloud 同步文件夹"
+          }
+        }
+      }
+    },
+    "Choose the article parser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the article parser"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "記事パーサを選ぶ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기사 파서 선택"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择文章解析器"
           }
         }
       }
@@ -4056,6 +4112,34 @@
         }
       }
     },
+    "Parser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parser"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "パーサ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파서"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解析器"
+          }
+        }
+      }
+    },
     "Paste an RSS or Atom feed URL, or a website address. Nook will check it before closing.": {
       "localizations": {
         "ja": {
@@ -4218,6 +4302,34 @@
         }
       }
     },
+    "Re-read this article with the other parser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-read this article with the other parser"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この記事をもう一方のパーサで読み直す"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글을 다른 파서로 다시 읽기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用另一个解析器重新读取这篇文章"
+          }
+        }
+      }
+    },
     "Read": {
       "localizations": {
         "en": {
@@ -4242,6 +4354,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "已读"
+          }
+        }
+      }
+    },
+    "Read with %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read with %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@で読む"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@로 읽기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用 %@ 读取"
+          }
+        }
+      }
+    },
+    "Read with the Other Parser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read with the Other Parser"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "もう一方のパーサで読む"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 파서로 읽기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用另一个解析器读取"
           }
         }
       }

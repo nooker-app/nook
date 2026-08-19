@@ -302,18 +302,48 @@ struct ContentView: View {
                 Task { await plusStore.loadContent() }
             }
         }
-        .focusedSceneValue(
-            \.readerCommandActions,
-            composeSession == nil
-                ? ReaderCommandActions(
-                    refreshAll: store.refreshAll,
-                    markSelectedRead: store.markSelectedRead,
-                    toggleSelectedStarred: store.toggleSelectedStarred,
-                    selectNextArticle: store.selectNextArticle,
-                    selectPreviousArticle: store.selectPreviousArticle,
-                    toggleReaderMode: store.toggleBrowserMode
-                )
-                : nil
+        .focusedSceneValue(\.readerCommandActions, composeSession == nil ? readerCommandActions : nil)
+    }
+
+    /// The menu-bar commands' bindings. Built here rather than inline in the
+    /// `.focusedSceneValue` call: the parser action is a closure that returns a
+    /// closure, and inside that already-long modifier chain the type checker gave up
+    /// on the whole `body`.
+    private var readerCommandActions: ReaderCommandActions {
+        let selected = store.selectedArticle
+        var switchParser: (@MainActor () -> Void)?
+        var other: ReaderParserEngine?
+        // Offered only where a parser is actually running. With reader content off and
+        // no offline copy, the reader shows the feed's own body and nothing was parsed,
+        // so an enabled menu item would do nothing at all.
+        if let selected,
+           store.isBrowserPresented
+               || store.usesReaderContentByDefault
+               || store.isOfflineSaved(selected.id) {
+            let inBrowser = store.isBrowserPresented
+            other = inBrowser
+                ? store.browserParser(for: selected).other
+                : store.displayedReaderParser(for: selected).other
+            switchParser = { [store] in
+                // The browser keeps its own copy of the page and re-renders from it, so
+                // aim at that surface while it is up rather than starting the native
+                // reader's re-extraction behind the sheet.
+                if store.isBrowserPresented {
+                    store.setBrowserParser(store.browserParser(for: selected).other, for: selected)
+                } else {
+                    store.setReaderParser(store.displayedReaderParser(for: selected).other, for: selected)
+                }
+            }
+        }
+        return ReaderCommandActions(
+            refreshAll: store.refreshAll,
+            markSelectedRead: store.markSelectedRead,
+            toggleSelectedStarred: store.toggleSelectedStarred,
+            selectNextArticle: store.selectNextArticle,
+            selectPreviousArticle: store.selectPreviousArticle,
+            toggleReaderMode: store.toggleBrowserMode,
+            switchArticleParser: switchParser,
+            otherArticleParser: other
         )
     }
 
@@ -2035,6 +2065,7 @@ private struct InAppBrowserPanel: View {
                 url: article.url,
                 useReaderMode: store.browserMode == .reader,
                 style: style,
+                parserEngine: store.browserParser(for: article),
                 linkOpensInApp: linkOpensInApp,
                 translate: isTranslationOn,
                 translationLanguage: targetLanguageName,
@@ -2051,8 +2082,16 @@ private struct InAppBrowserPanel: View {
                     }
                 },
                 onBottomOverscroll: { bottomPull = $0 },
-                onBottomOverscrollEnded: handleBottomRelease
+                onBottomOverscrollEnded: handleBottomRelease,
+                // The parser that actually drew the page, which is not always the one
+                // asked for: it may not have run, or may have found no article and
+                // left the previous body up. The menu's check-mark follows this.
+                onParserResolved: { store.setBrowserParser($0, for: article) }
             )
+            // The parser is deliberately NOT part of this identity. `ArticleWebView`
+            // keeps a copy of the page and re-renders from it, so switching engines
+            // costs nothing; putting it here would tear the web view down and
+            // download the article again.
             .id("\(article.id)|\(store.browserMode.rawValue)|\(style.identity)")
             .overlay(alignment: .bottom) {
                 BottomPullAffordance(pull: bottomPull, nextTitle: store.article(after: article.id)?.title)
@@ -2116,6 +2155,20 @@ private struct InAppBrowserPanel: View {
                     )
                 }
                 .help("Switch Reader / Original (⌘⇧F)")
+
+                // Reader mode only: on the original page nothing is parsed, so the
+                // control would be inert. Icon-only, like its neighbours.
+                if store.browserMode == .reader {
+                    Menu {
+                        ReaderParserMenuItems(store: store, article: article, surface: .browser)
+                    } label: {
+                        Image(systemName: "text.viewfinder")
+                    }
+                    .fixedSize()
+                    .help("Choose the article parser")
+                    .accessibilityLabel(Text("Article Parser"))
+                    .accessibilityValue(Text(store.browserParser(for: article).label))
+                }
 
                 Spacer()
 
@@ -2482,6 +2535,15 @@ private struct ReaderDetailView: View {
             onNext: { navigateReader(forward: true) },
             onPrevious: { navigateReader(forward: false) }
         )
+        // Floated over the article rather than placed in it: the point of the
+        // re-parse chip is that what you were reading stays where it was.
+        .overlay(alignment: .top) {
+            if store.isReparsing(article) {
+                ReaderReparsingBanner(engine: store.displayedReaderParser(for: article))
+                    .padding(.top, 10)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: store.isReparsing(article))
         .id(article.id)
         .transition(.push(from: readerNavForward ? .bottom : .top))
     }
@@ -2538,7 +2600,14 @@ private struct ReaderDetailView: View {
         if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
             switch store.readerContentState(for: article) {
             case .ready(let html):
-                HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
+                VStack(alignment: .leading, spacing: 14) {
+                    if store.droppedEmbedCount(for: article) > 0 {
+                        ReaderDroppedEmbedsNotice(
+                            count: store.droppedEmbedCount(for: article),
+                            onUseReadability: { store.setReaderParser(.readability, for: article) })
+                    }
+                    HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
+                }
             case .gone:
                 VStack(alignment: .leading, spacing: 16) {
                     ReaderUnavailableNotice(
@@ -2550,11 +2619,17 @@ private struct ReaderDetailView: View {
                 }
             case .failed:
                 // The page is still there; it just yielded no body. Deleting is
-                // not the remedy, so it is not offered.
+                // not the remedy, so it is not offered — but the other parser
+                // might be, and it reads pages this one refuses.
                 VStack(alignment: .leading, spacing: 16) {
                     ReaderUnavailableNotice(
                         reason: .notExtracted,
+                        otherParser: store.displayedReaderParser(for: article).other,
                         onRetry: { store.retryReaderContent(for: article) },
+                        onUseOtherParser: {
+                            store.setReaderParser(
+                                store.displayedReaderParser(for: article).other, for: article)
+                        },
                         onDelete: { store.deleteArticle(articleID: article.id) }
                     )
                     originalArticleBody(article)
@@ -2717,6 +2792,20 @@ private struct ReaderDetailView: View {
                     Label("Categories", systemImage: "tag")
                 }
                 .fixedSize()
+
+                // Only where it can do something: with reader content off and no
+                // offline copy, the reader is showing the feed's own body and no
+                // parser ran.
+                if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+                    Menu {
+                        ReaderParserMenuItems(store: store, article: article)
+                    } label: {
+                        Label("Parser", systemImage: "text.viewfinder")
+                    }
+                    .fixedSize()
+                    .help("Re-read this article with the other parser")
+                    .accessibilityValue(Text(store.displayedReaderParser(for: article).label))
+                }
             }
             .buttonStyle(.bordered)
         }
@@ -3478,6 +3567,12 @@ private struct ReadingSettingsSections: View {
                 .disabled(!markReadOnOpen)
         }
 
+        // Its own Section, not a row under In-App Browser: the parser decides what
+        // the built-in reader shows as much as what the browser's reader mode shows.
+        Section("Article Parser") {
+            ReaderParserSettingsContent()
+        }
+
         Section("In-App Browser") {
             Picker("In-App Browser", selection: $readerViewMode) {
                 ForEach(ReaderViewMode.allCases) { Text($0.label).tag($0) }
@@ -3728,6 +3823,14 @@ struct ReaderCommandActions {
     var selectNextArticle: @MainActor () -> Void
     var selectPreviousArticle: @MainActor () -> Void
     var toggleReaderMode: @MainActor () -> Void
+    /// Re-reads the selected article with the parser it is not using. Nil when
+    /// nothing is selected, which disables the menu item rather than making it do
+    /// nothing.
+    var switchArticleParser: (@MainActor () -> Void)?
+    /// The parser the selected article is being read with, for the menu item's own
+    /// wording — "Read with Readability" says what will happen; "Switch Parser"
+    /// makes you try it to find out.
+    var otherArticleParser: ReaderParserEngine?
 }
 
 private struct ReaderCommandActionsKey: FocusedValueKey {
@@ -3743,6 +3846,13 @@ extension FocusedValues {
 
 struct ReaderAppCommands: Commands {
     @FocusedValue(\.readerCommandActions) private var actions
+
+    private var otherParserTitle: String {
+        guard let other = actions?.otherArticleParser else {
+            return String(localized: "Read with the Other Parser")
+        }
+        return String(localized: "Read with \(other.label)")
+    }
 
     var body: some Commands {
         CommandMenu("Feeds") {
@@ -3787,6 +3897,17 @@ struct ReaderAppCommands: Commands {
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
             .disabled(actions == nil)
+
+            // Named after what it does — the other parser, spelled out — because a
+            // menu item called "Switch Parser" can only be understood by using it.
+            Button(otherParserTitle) {
+                actions?.switchArticleParser?()
+            }
+            // ⌥ rather than ⇧: ⌘⇧P is Page Setup by macOS convention, and taking a
+            // reserved shortcut for an app-specific action is how a menu surprises
+            // someone.
+            .keyboardShortcut("p", modifiers: [.command, .option])
+            .disabled(actions?.switchArticleParser == nil)
         }
 
         CommandGroup(after: .help) {

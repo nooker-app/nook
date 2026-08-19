@@ -31,6 +31,15 @@ final class ReaderHaptics {
         generator.impactOccurred(intensity: on ? 1.0 : 0.85)
     }
 
+    /// The light click a selection change gets on iOS — used when the reader
+    /// switches article parser, so the re-parse registers as something that
+    /// happened even before the new body lands.
+    func selectionChanged() {
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        generator.selectionChanged()
+    }
+
     /// Starts the long-press build-up pattern.
     func startLongPressBuildup() {
         guard supportsHaptics, let engine else { return }

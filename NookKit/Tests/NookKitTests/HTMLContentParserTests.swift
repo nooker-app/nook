@@ -277,19 +277,29 @@ struct HTMLContentParserTests {
         #expect(code == "if (a < b) {\n    return &value;\n}")
     }
 
-    @Test("Reader script retains interactive embeds and has a semantic fallback")
+    @Test("The shared parser script retains interactive embeds and has a semantic fallback")
     func readerScriptRichContentFallbacks() {
-        let script = ArticleWebView(
-            url: URL(string: "https://example.com/article")!,
-            useReaderMode: true,
-            style: ReaderStyle(),
-            linkOpensInApp: true
-        ).readerScript(style: ReaderStyle())
+        let script = ReaderParserScripts.shared
 
         #expect(script.contains("codepen"))
         #expect(script.contains("article .article-content"))
         #expect(script.contains("normalizeMedia"))
-        #expect(script.contains("attempts < 3"))
+    }
+
+    /// Readability still gets its retries; they moved to the driver when the shared
+    /// parser helpers were split out of it.
+    @Test("The Readability driver retries a page whose body arrives late")
+    func readabilityDriverRetries() {
+        #expect(ExtractionSession.script(for: .readability).contains("attempts < 3"))
+    }
+
+    /// The browser's reader renders through one native path for both engines, so the
+    /// injected script has to hand the page over rather than parse it in place.
+    @Test("The browser reader hands the page to native and can re-render in place")
+    func readerDriverSnapshotsAndDefers() {
+        #expect(ArticleWebView.readerDriverScript.contains("window.__nook.stash()"))
+        #expect(ArticleWebView.readerDriverScript.contains("nookReaderSource"))
+        #expect(ArticleWebView.readerRenderScript(style: ReaderStyle()).contains("__nookRenderReader"))
     }
 
     // The markup below is copied from https://nooker.app/@tim/hello-nook, which is
