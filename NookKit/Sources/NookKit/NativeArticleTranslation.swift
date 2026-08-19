@@ -430,6 +430,7 @@ public final class NativeArticleTranslator {
         isActive = true
         isTranslating = true
         generation += 1
+        run = generation
         let token = generation
         // Warm the on-device model ahead of the block-by-block burst so the first
         // block doesn't pay the cold-start latency.
@@ -457,6 +458,96 @@ public final class NativeArticleTranslator {
         }
     }
 
+    // MARK: - Comments
+
+    /// Translated comment bodies, keyed by the comment's position in the thread.
+    ///
+    /// Separate from `overrides`, which addresses the *article's* top-level blocks by
+    /// index. A comment is its own little document with its own block numbering, so
+    /// handing the article's overrides to a comment would put the article's first
+    /// paragraph where the comment's first paragraph belongs.
+    public private(set) var translatedComments: [Int: String] = [:]
+    /// Bumped on every `start`, so a view can tell one run's requests from the next's
+    /// and ask again after the reader switched articles or turned translation off and
+    /// on.
+    public private(set) var run = 0
+
+    private var commentQueue: [ReaderComment] = []
+    private var commentsRequested: Set<Int> = []
+    private var commentWorker: Task<Void, Never>?
+    /// Which worker owns the queue, so one that finishes late cannot clear its
+    /// successor's handle — which would let a third request start a second worker
+    /// draining the same queue beside it.
+    private var commentWorkerID: Int?
+    private var commentWorkersStarted = 0
+    private var commentLanguage = ""
+
+    /// The translated body for a comment, or nil to render the original.
+    func translatedComment(id: Int) -> String? {
+        isActive ? translatedComments[id] : nil
+    }
+
+    /// Asks for one comment to be translated, the same way and by the same backend as
+    /// the article.
+    ///
+    /// Idempotent, and driven by the reader as comments come into view: a front-page
+    /// thread runs to hundreds of replies, and translating the ones nobody has revealed
+    /// would spend a model call — or a network request — on each of them.
+    ///
+    /// The work queues rather than running immediately, and the queue waits for the
+    /// article to finish. That order is the point: the article pass is what builds the
+    /// glossary, the keep-verbatim terms and the subject domain, and a reply translated
+    /// without them renders the same proper noun a different way than the passage it
+    /// replies to.
+    public func requestCommentTranslation(_ comment: ReaderComment, into languageName: String) {
+        guard isActive, !languageName.isEmpty, comment.renderableHTML != nil else { return }
+        guard translatedComments[comment.id] == nil, commentsRequested.insert(comment.id).inserted
+        else { return }
+        commentLanguage = languageName
+        commentQueue.append(comment)
+        guard commentWorkerID == nil else { return }
+        commentWorkersStarted += 1
+        let worker = commentWorkersStarted
+        commentWorkerID = worker
+        let token = generation
+        let article = task
+        commentWorker = Task { [weak self] in
+            await article?.value
+            await self?.drainComments(token: token, worker: worker)
+        }
+    }
+
+    private func drainComments(token: Int, worker: Int) async {
+        defer {
+            if commentWorkerID == worker {
+                commentWorkerID = nil
+                commentWorker = nil
+            }
+        }
+        while token == generation, commentWorkerID == worker, !commentQueue.isEmpty {
+            let comment = commentQueue.removeFirst()
+            guard let html = comment.renderableHTML else { continue }
+            // The same fragment path the article uses for a table cell or a quote:
+            // inline markup serialized to markers, translated, rebuilt, and dropped to
+            // plain text rather than corrupt markup if the markers come back broken.
+            guard let (translated, _) = await translateFragment(
+                html, language: commentLanguage, context: "", token: token)
+            else { continue }
+            guard token == generation else { return }
+            translatedComments[comment.id] = translated
+        }
+    }
+
+    private func stopComments() {
+        commentWorker?.cancel()
+        commentWorker = nil
+        commentWorkerID = nil
+        commentQueue = []
+        commentsRequested = []
+        commentLanguage = ""
+        translatedComments = [:]
+    }
+
     /// Turns translation off and reverts to the original content.
     public func stop() {
         task?.cancel()
@@ -481,6 +572,7 @@ public final class NativeArticleTranslator {
         glossary = [:]
         articleSession = nil
         useCoherentMode = false
+        stopComments()
     }
 
     /// Gemini's preferred path: one ordinary Markdown stream for the article,

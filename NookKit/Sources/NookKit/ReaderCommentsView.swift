@@ -5,9 +5,13 @@ import SwiftUI
 /// Native views rather than a block of injected markup. legibility hands the thread
 /// over as data — author, time, depth, parent, and a sanitized body per item — so
 /// there is no reason to flatten it back into HTML and re-parse it: the reply
-/// structure survives, the article's own typography applies to the bodies, and none
-/// of this reaches the Markdown export, the summarizer, or the translator, all of
-/// which take the article body alone.
+/// structure survives, the article's own typography applies to the bodies, and none of
+/// this reaches the Markdown export or the summarizer, both of which take the article
+/// body alone.
+///
+/// Translation *is* shared. When the reader has the article translated, each comment
+/// is translated too — same backend, same glossary, same terminology — and requested
+/// only for the comments actually on screen.
 public struct ReaderCommentsSection: View {
     private let thread: ReaderCommentThread
     private let baseURL: URL?
@@ -16,6 +20,12 @@ public struct ReaderCommentsSection: View {
     /// Mac, and off on iOS, where the reader's own tap and long-press gestures own the
     /// body.
     private let selectable: Bool
+    /// The reader's translator, when one is running. Comments follow the article: if it
+    /// is translated, they are.
+    private var translator: NativeArticleTranslator?
+    /// The language the article is being translated into, for the requests this section
+    /// makes.
+    private let translationLanguage: String
 
     /// How many to draw before the "show the rest" button.
     ///
@@ -30,12 +40,16 @@ public struct ReaderCommentsSection: View {
         thread: ReaderCommentThread,
         baseURL: URL? = nil,
         typography: ReaderTypography = .platformDefault,
-        selectable: Bool = true
+        selectable: Bool = true,
+        translator: NativeArticleTranslator? = nil,
+        translationLanguage: String = ""
     ) {
         self.thread = thread
         self.baseURL = baseURL
         self.typography = typography
         self.selectable = selectable
+        self.translator = translator
+        self.translationLanguage = translationLanguage
     }
 
     private var visible: [ReaderComment] {
@@ -54,7 +68,12 @@ public struct ReaderCommentsSection: View {
                     depth: thread.showsDepth ? comment.depth : 0,
                     baseURL: baseURL,
                     typography: typography,
-                    selectable: selectable)
+                    selectable: selectable,
+                    // Deliberately not handed the translator itself: its block
+                    // overrides address the *article's* blocks by index, so a comment
+                    // asking for "block 0" would be given the article's first
+                    // paragraph. The translated body, resolved here, is what it needs.
+                    translatedHTML: translator?.translatedComment(id: comment.id))
             }
 
             if hidden > 0 {
@@ -84,6 +103,22 @@ public struct ReaderCommentsSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Re-runs when a translation run starts or stops, and when the reader reveals
+        // more of the thread — so the requests track what is actually being read
+        // instead of spending a model call on every reply nobody has looked at.
+        .task(id: translationRequestKey) { requestTranslations() }
+    }
+
+    private var translationRequestKey: String {
+        guard let translator, translator.isActive else { return "off" }
+        return "\(translator.run)|\(visible.count)"
+    }
+
+    private func requestTranslations() {
+        guard let translator, translator.isActive, !translationLanguage.isEmpty else { return }
+        for comment in visible {
+            translator.requestCommentTranslation(comment, into: translationLanguage)
+        }
     }
 
     private var header: some View {
@@ -107,6 +142,9 @@ private struct ReaderCommentRow: View {
     let baseURL: URL?
     let typography: ReaderTypography
     let selectable: Bool
+    /// The translated body, once it has arrived. Until then the original is shown, the
+    /// same way the article's paragraphs stay put until theirs land.
+    let translatedHTML: String?
 
     /// Indentation stops after a few levels. A deep chain would otherwise squeeze the
     /// text into a column too narrow to read, and the rule on the left already says
@@ -177,7 +215,7 @@ private struct ReaderCommentRow: View {
             Text("Deleted", bundle: .module)
                 .font(.callout.italic())
                 .foregroundStyle(.tertiary)
-        } else if let html = comment.renderableHTML {
+        } else if let html = translatedHTML ?? comment.renderableHTML {
             // The reader's own typography, so a comment reads at the size they chose.
             HTMLContentView(
                 html: html, baseURL: baseURL, selectable: selectable, typography: typography)

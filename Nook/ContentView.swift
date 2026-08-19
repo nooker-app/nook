@@ -2422,7 +2422,8 @@ private struct ReaderDetailView: View {
                 if let comments = store.readerComments(for: article) {
                     Divider()
                     ReaderCommentsSection(
-                        thread: comments, baseURL: article.url, typography: readerTypography)
+                        thread: comments, baseURL: article.url, typography: readerTypography,
+                        translator: nativeTranslator, translationLanguage: targetLanguageName)
                 }
 
                 Divider()

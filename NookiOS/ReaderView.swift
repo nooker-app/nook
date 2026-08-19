@@ -333,7 +333,8 @@ struct ReaderDetailView: View {
                         Divider()
                         ReaderCommentsSection(
                             thread: comments, baseURL: article.url,
-                            typography: readerStyle.typography, selectable: false)
+                            typography: readerStyle.typography, selectable: false,
+                            translator: nativeTranslator, translationLanguage: targetLanguageName)
                     }
 
                     Spacer(minLength: 0)
