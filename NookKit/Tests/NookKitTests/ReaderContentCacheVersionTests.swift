@@ -180,19 +180,28 @@ struct ReaderContentCacheVersionTests {
 
     /// One counter for two parsers would mean that improving legibility's rules
     /// expired every failure Readability had recorded, re-loading a page for each.
+    ///
+    /// Written against the live constants rather than the numbers they happen to
+    /// hold: the two counters moved to the same value once, and a test that asserted
+    /// they differ would have failed on a change that was correct.
     @Test("each parser has its own extractor version")
     func versionsAreIndependent() {
-        let legibilityFailure = ReaderContentValue(
-            status: .failed, html: nil,
-            extractorVersion: ReaderContentValue.currentExtractorVersion(for: .legibility),
-            engine: .legibility)
-        #expect(legibilityFailure.isCurrent(for: .legibility))
+        for engine in ReaderParserEngine.allCases {
+            let current = ReaderContentValue.currentExtractorVersion(for: engine)
+            let fresh = ReaderContentValue.failure(
+                engine: engine, previous: nil, sourceFingerprint: nil)
+            #expect(fresh.isCurrent(for: engine), "\(engine.label)'s own verdict is current")
 
-        // Readability's counter is at 2 and legibility's at 1, so a legibility
-        // failure stamped 1 must not be read as "older than version 2".
-        #expect(
-            ReaderContentValue.currentExtractorVersion(for: .legibility)
-                != ReaderContentValue.currentExtractorVersion(for: .readability),
-            "this test is only meaningful while the two counters differ")
+            // Stamped one version back: the parser has learned something since, so the
+            // verdict has to expire. This is the whole mechanism — it is what lets an
+            // engine update reach the articles that already failed.
+            let stale = ReaderContentValue(
+                status: .failed, html: nil,
+                failedEngines: [engine.rawValue: current - 1])
+            #expect(stale.isCurrent(for: engine) == false, "\(engine.label)'s old verdict expires")
+
+            // And it says nothing about the other parser either way.
+            #expect(fresh.isCurrent(for: engine.other) == false)
+        }
     }
 }

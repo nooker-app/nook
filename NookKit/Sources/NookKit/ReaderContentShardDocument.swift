@@ -32,7 +32,14 @@ public struct ReaderContentValue: Codable, Sendable, Equatable {
         // Deliberately a hand-bumped integer and not the wasm build stamp: the
         // asset is regenerated whenever the pin moves, and expiring every cached
         // failure on every rebuild would be a re-extraction storm for no reason.
-        case .legibility: 1
+        // Bumped only when the engine learns to read pages it used to refuse.
+        //
+        // 2: an article whose body is a bullet list is no longer withheld as an
+        // index page, and a link aggregator's front page is no longer served as a
+        // one-headline article. The first is why this bump exists — pages that
+        // returned nothing are cached as failures, and the fix reaches none of them
+        // until the record expires.
+        case .legibility: 2
         }
     }
 
