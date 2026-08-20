@@ -261,6 +261,69 @@ struct LegibilityCommentsTests {
         #expect(extraction.commentCount == 0)
     }
 
+    /// A nested thread whose parents contain their replies in the markup.
+    ///
+    /// Rendered Reddit builds one `<shreddit-comment>` per comment and puts replies
+    /// *inside* the comment they answer. Each parent's body therefore used to carry
+    /// its whole subthread — so the reader drew the top comment with the entire
+    /// discussion repeated inside it, and then every reply again as its own row. The
+    /// exclusion set that keeps a byline out of a body now keeps nested items out too.
+    @Test("a parent's body does not carry its replies")
+    func nestedRepliesAreNotDuplicated() async throws {
+        let shared = "relative [contain:style] col-start-2"
+        func comment(
+            _ id: String, _ author: String, _ when: String, _ text: String, _ replies: String = ""
+        ) -> String {
+            """
+            <shreddit-comment class="\(shared)" thingid="t1_\(id)" author="\(author)" depth="0">
+              <details open><summary><span>collapse</span></summary></details>
+              <div slot="commentMeta"><a href="/user/\(author)">\(author)</a><time datetime="\(when)">\(when)</time></div>
+              <div slot="comment" id="t1_\(id)-comment-rtjson-content"><div><p>\(text)</p></div></div>
+              \(replies)
+            </shreddit-comment>
+            """
+        }
+        let page = """
+            <!doctype html>
+            <html lang="en"><head><meta charset="utf-8"><title>Ask: what reader do you use? : r/rss</title></head>
+            <body>
+            <shreddit-post><h1 slot="title">Ask: what reader do you use?</h1>
+            <div slot="text-body"><p>\(String(repeating: "Looking for something native and offline-first. ", count: 6))</p></div>
+            </shreddit-post>
+            <div id="comment-tree">
+            \(comment("a1", "alice", "2026-08-01T10:00:00Z", "ROOT only text here.",
+                comment("b1", "bob", "2026-08-01T10:05:00Z", "CHILD only text here.",
+                    comment("c1", "carol", "2026-08-01T10:09:00Z", "GRANDCHILD only text here."))))
+            \(comment("d1", "dave", "2026-08-01T10:20:00Z", "A second root with no replies at all."))
+            \(comment("e1", "erin", "2026-08-01T10:25:00Z", "A third root, also childless."))
+            \(comment("f1", "frank", "2026-08-01T10:30:00Z", "A fourth root, likewise."))
+            \(comment("g1", "grace", "2026-08-01T10:35:00Z", "A fifth root, likewise."))
+            </div>
+            </body></html>
+            """
+
+        guard case .article(let extraction) = await LegibilityEngine().extract(document: page) else {
+            Issue.record("expected the submission to extract")
+            return
+        }
+        let thread = try #require(extraction.comments)
+
+        // Every comment, not just the childless ones: a parent that holds replies has
+        // a different shape from one that does not, and matching on shape alone once
+        // lost the whole nested branch along with its root.
+        #expect(thread.items.count == 7)
+        #expect(thread.items.map(\.author) == ["alice", "bob", "carol", "dave", "erin", "frank", "grace"])
+        #expect(thread.items.map(\.depth) == [0, 1, 2, 0, 0, 0, 0])
+        #expect(thread.items.map(\.parent) == [nil, 0, 1, nil, nil, nil, nil])
+
+        // The defect itself, asserted on the body the reader draws.
+        let root = try #require(thread.items.first?.renderableHTML)
+        #expect(root.contains("ROOT only text"))
+        #expect(!root.contains("CHILD only text"), "a reply is its own item, joined back by `parent`")
+        #expect(!root.contains("GRANDCHILD only text"))
+        #expect(thread.items[1].renderableHTML?.contains("GRANDCHILD only text") == false)
+    }
+
     /// A thread longer than the cap comes back as a prefix, and says so.
     ///
     /// A prefix and not a sample, because `parent` is an index into the array: a
