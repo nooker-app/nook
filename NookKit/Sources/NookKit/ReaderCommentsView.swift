@@ -29,10 +29,17 @@ public struct ReaderCommentsSection: View {
 
     /// How many to draw before the "show the rest" button.
     ///
-    /// Not politeness: every body goes through the native HTML parser, and a
-    /// front-page thread is hundreds of them. Drawing the first page keeps opening an
-    /// article the same cost it was before comments existed.
-    private static let firstPage = 30
+    /// Not politeness — measured. Comment rows are drawn eagerly (see
+    /// `defersOffscreenBlocks` below), and mounting one costs about 5.7ms, so thirty
+    /// of them put 227ms of synchronous layout on the frame that presents the
+    /// article, of which at most one row is on screen. Article length is nearly free
+    /// by comparison: 600 blocks with no comments mount in 19–22ms.
+    ///
+    /// Eight costs 95ms, which is 130ms off every open of a commented article, and the
+    /// rest is deferred rather than dropped — "Show N more" pays 154ms when it is
+    /// actually asked for. Internal so `ReaderStore` warms exactly the rows that will
+    /// be drawn.
+    static let firstPage = 8
 
     @State private var showsAll = false
 

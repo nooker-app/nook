@@ -507,6 +507,11 @@ private struct ReaderWorkspaceView: View {
                     .background(Color(nsColor: .windowBackgroundColor))
             }
         }
+        #if DEBUG
+        // Installed here because nothing above this carries an `.id`, so the one
+        // registration outlives every article change. Debug only; see `GeometryLog`.
+        .onAppear { GeometryLog.observeAllClips() }
+        #endif
     }
 }
 
@@ -2536,6 +2541,9 @@ private struct ReaderDetailView: View {
         // on, restart the translator against the now-rendered extracted HTML so
         // its per-block overrides line up with what's shown.
         .onChange(of: store.readerContentState(for: article)) { _, newValue in
+            #if DEBUG
+            GeometryLog.note("change.content", extra: "state=\(String(describing: newValue))".prefix(40).description)
+            #endif
             guard nativeTranslator.isActive, case .ready(let extracted) = newValue else { return }
             nativeTranslator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
         }
@@ -2563,6 +2571,24 @@ private struct ReaderDetailView: View {
         .animation(.easeInOut(duration: 0.2), value: store.isReparsing(article))
         .id(article.id)
         .transition(.push(from: readerNavForward ? .bottom : .top))
+        #if DEBUG
+        .onAppear {
+            GeometryLog.note(
+                "reader.appear",
+                extra: "comments=\(store.readerComments(for: article)?.items.count ?? 0) "
+                    + "inspector=\(UserDefaults.standard.bool(forKey: "inspectorPresented"))")
+        }
+        .background {
+            // The gap above the title, recorded as a number rather than described: the
+            // header's own height, which the byline is the only variable term in.
+            GeometryReader { proxy in
+                Color.clear.onAppear {
+                    GeometryLog.note(
+                        "reader.width", extra: "paneW=\(Int(proxy.size.width))")
+                }
+            }
+        }
+        #endif
     }
 
     /// Summaries consume exactly the Markdown represented by the visible native
@@ -2716,32 +2742,70 @@ private struct ReaderDetailView: View {
         return summary != firstParagraph
     }
 
+    /// The feed's name and icon.
+    @ViewBuilder
+    private func bylineFeed(_ article: Article) -> some View {
+        if let feed = store.feed(for: article.feedID) {
+            Label {
+                Text(feed.displayTitle)
+            } icon: {
+                if let icon = store.faviconImage(for: feed) {
+                    icon
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                } else {
+                    Image(systemName: feed.systemImage)
+                }
+            }
+        }
+    }
+
+    /// When it was published and how long it takes to read.
+    private func bylineMetadata(_ article: Article) -> some View {
+        HStack(spacing: 8) {
+            Text(article.publishedAt.localized(date: .abbreviated, time: .shortened))
+            Text("·")
+            Text("\(article.estimatedReadMinutes) min read")
+        }
+    }
+
     private func articleHeader(_ article: Article) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                if let feed = store.feed(for: article.feedID) {
-                    Label {
-                        Text(feed.displayTitle)
-                    } icon: {
-                        if let icon = store.faviconImage(for: feed) {
-                            icon
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 14, height: 14)
-                                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                        } else {
-                            Image(systemName: feed.systemImage)
-                        }
-                    }
+            // Two bounded shapes rather than one unbounded row, and this is not
+            // cosmetic. Five text children in an `HStack` with no limit each get a
+            // narrow slice when the row cannot fit, and every one of them wraps into
+            // its own near-empty column. Measured with `fittingSize`: 15pt tall at
+            // 632pt of content width, 45pt at 400, 255pt at 151, and 585-600pt at
+            // 120 and below — a floor it never goes under. It sits directly above
+            // the title, which is what put half a screen of blank space above the
+            // headline. Bounded, the title's y is 65.0pt at all eighteen measured
+            // window/inspector configurations instead of running to 710.
+            //
+            // It moved the article as well. The favicon arrives asynchronously, and
+            // when it lands the row re-wraps: parked mid-document, the scroll offset
+            // never changed (0.00pt) while the paragraph being read moved by exactly
+            // minus the row's height change — ΔdocH == ΔbylineH, to the point.
+            //
+            // `ViewThatFits` rather than a bare `lineLimit(1)` so the date and the
+            // reading time drop to their own line instead of being truncated away;
+            // both branches are bounded, so neither can wrap. It is also cheaper than
+            // what it replaces: 1.021ms against 1.266ms to build and measure at the
+            // width where the old row wrapped worst.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    bylineFeed(article)
+                    Text("·")
+                    bylineMetadata(article)
                 }
+                .lineLimit(1)
 
-                Text("·")
-
-                Text(article.publishedAt.localized(date: .abbreviated, time: .shortened))
-
-                Text("·")
-
-                Text("\(article.estimatedReadMinutes) min read")
+                VStack(alignment: .leading, spacing: 2) {
+                    bylineFeed(article)
+                    bylineMetadata(article)
+                }
+                .lineLimit(1)
             }
             .font(.callout)
             .foregroundStyle(.secondary)

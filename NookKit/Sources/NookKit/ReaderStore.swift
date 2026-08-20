@@ -513,7 +513,7 @@ public final class ReaderStore {
         // Turned on with an article already open: the thread was never looked for, so
         // ask for it now rather than waiting for the next article.
         guard comments, let article = selectedArticle else { return }
-        Task { await loadCommentsIfNeeded(for: article.id) }
+        Task { await loadCommentsIfNeeded(for: article) }
     }
 
     /// Loads the persisted library and starts filtering. Runs its heavy work
@@ -614,6 +614,7 @@ public final class ReaderStore {
         shardSaveDrainTask = nil
         refreshingFeedIDs.removeAll()
         spinningFeedIDs.removeAll()
+        isRefreshing = false
         isBatchRefreshing = false
         isDrainingSaves = false
         isDrainingShardSaves = false
@@ -725,8 +726,22 @@ public final class ReaderStore {
         storage?.directoryURL
     }
 
-    public var isRefreshing: Bool {
-        !refreshingFeedIDs.isEmpty
+    /// Stored, and written only when it actually changes.
+    ///
+    /// It used to be `!refreshingFeedIDs.isEmpty`. Reading it subscribed the reader to
+    /// the whole set, so every feed starting and finishing republished it — two
+    /// invalidations per feed per refresh, each one costing 3-11ms of revalidation on
+    /// an open article with a comment thread, for a Bool that changed twice.
+    public private(set) var isRefreshing = false
+
+    private func syncIsRefreshing() {
+        let refreshing = !refreshingFeedIDs.isEmpty
+        if isRefreshing != refreshing {
+            isRefreshing = refreshing
+            #if DEBUG && os(macOS)
+            GeometryLog.note("store.refreshing", extra: "on=\(refreshing)")
+            #endif
+        }
     }
 
     public var selectedArticle: Article? {
@@ -1489,11 +1504,13 @@ public final class ReaderStore {
     private func beginFeedFetch(_ id: Feed.ID, spinner: Bool) {
         refreshingFeedIDs.insert(id)
         if spinner { spinningFeedIDs.insert(id) }
+        syncIsRefreshing()
     }
 
     private func endFeedFetch(_ id: Feed.ID) {
         refreshingFeedIDs.remove(id)
         spinningFeedIDs.remove(id)
+        syncIsRefreshing()
     }
 
     /// Bumps a feed's update token so the sidebar flashes it once. The token only
@@ -1934,34 +1951,87 @@ public final class ReaderStore {
         Task { await drainAICategorizeQueue() }
     }
 
+    /// Drains the queue in batches, the way `performBulkCategorize` already does.
+    ///
+    /// It used to assign each article as its answer came back, and each assignment
+    /// writes `articles` — one republish of the whole array per classified article,
+    /// up to sixty-four per sweep, arriving every half-second to few seconds for
+    /// minutes after any sync, while nobody is touching the machine. Anything reading
+    /// `articles` is invalidated by each one, and the reader reads it at the top of
+    /// its body, so an open article and its whole comment thread were revalidated on
+    /// every tick: 3ms on a plain article, 11ms on a long one with a thread.
+    ///
+    /// Batched, that is one republish per twenty-five. The badges appear in groups
+    /// rather than one at a time, which is what the bulk path deliberately does too.
     private func drainAICategorizeQueue() async {
         defer { aiCategorizeRunning = false }
         let provider = TranslationSettings.categoryProvider()
+        var pending: [Article.ID: [String]] = [:]
+        let flushEvery = 25
+
+        func flush() {
+            guard !pending.isEmpty else { return }
+            var updated = articles
+            let indexByID = Dictionary(
+                updated.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+            for (id, cats) in pending {
+                if let index = indexByID[id] {
+                    let previous = updated[index].categories
+                    guard previous != cats else { continue }
+                    updated[index].categories = cats
+                    recordArticleCategories(id, from: previous, to: cats)
+                } else {
+                    // Left the library mid-pass; recorded additively so the
+                    // assignment still syncs if it comes back.
+                    recordArticleCategories(id, from: [], to: cats)
+                }
+            }
+            articles = updated
+            scheduleShardSave()
+            pending.removeAll(keepingCapacity: true)
+        }
+
         while !aiCategorizeQueue.isEmpty {
             let id = aiCategorizeQueue.removeFirst()
             guard let article = articles.first(where: { $0.id == id }) else { continue }
-            await classifyAndAssign(article, provider: provider)
+            if let combined = await classification(for: article, provider: provider) {
+                pending[id] = combined
+            }
+            if pending.count >= flushEvery { flush() }
         }
+        flush()
     }
 
     /// Classifies one article with AI and merges the result onto its existing
     /// (keyword) categories, capped at 3. AI never removes; if it finds none,
     /// nothing is added.
-    private func classifyAndAssign(_ article: Article, provider: TranslationProvider) async {
-        guard article.categories.count < ArticleCategory.maxPerArticle, !categories.isEmpty else { return }
+    /// The categories this article should end up with, or nil to leave it alone.
+    ///
+    /// Returns rather than assigns so the caller can batch the writes; assigning here
+    /// republished the whole `articles` array once per article.
+    private func classification(
+        for article: Article, provider: TranslationProvider
+    ) async -> [String]? {
+        guard article.categories.count < ArticleCategory.maxPerArticle, !categories.isEmpty
+        else { return nil }
         let names = await NaturalTranslator.classify(
             title: article.title, summary: article.summary,
             into: categories.map(\.name), provider: provider
         )
-        guard !names.isEmpty else { return }
+        guard !names.isEmpty else { return nil }
         let idByName = Dictionary(categories.map { ($0.name.lowercased(), $0.id) }, uniquingKeysWith: { first, _ in first })
         // Re-read the current assignment (it may have changed while awaiting).
-        guard let current = articles.first(where: { $0.id == article.id })?.categories else { return }
+        guard let current = articles.first(where: { $0.id == article.id })?.categories else { return nil }
         var combined = current
         for cid in names.compactMap({ idByName[$0.lowercased()] }) where !combined.contains(cid) && combined.count < ArticleCategory.maxPerArticle {
             combined.append(cid)
         }
-        if combined != current { setArticleCategories(articleID: article.id, combined) }
+        // Only ids that are real categories survive, de-duplicated, order preserved —
+        // the cleaning `setArticleCategories` used to do on the way in.
+        let valid = Set(categories.map(\.id))
+        var seen = Set<String>()
+        let cleaned = combined.filter { valid.contains($0) && seen.insert($0).inserted }
+        return cleaned == current ? nil : cleaned
     }
 
     // MARK: - Classification backlog sweep
@@ -2872,14 +2942,14 @@ public final class ReaderStore {
             // replacement is actually in hand, and a failed refresh is invisible.
             if let refreshed = await refreshedOfflineCopy(for: article) {
                 await warmReaderContent(html: refreshed.html, baseURL: article.url)
-                await loadCommentsIfNeeded(for: article.id)
+                await loadCommentsIfNeeded(for: article)
                 note(html: refreshed.html, engine: refreshed.engine, for: article)
                 return
             }
             await warmReaderContent(html: html, baseURL: article.url)
             // A downloaded article keeps whatever discussion was stored with it, which
             // is what makes the thread readable with no network.
-            await loadCommentsIfNeeded(for: article.id)
+            await loadCommentsIfNeeded(for: article)
             // A downloaded body carries no record of which parser produced it —
             // `OfflineArticleStore` stores the HTML and nothing about where it came
             // from. So there is nothing to attribute it to, and the parser menu falls
@@ -3175,7 +3245,7 @@ public final class ReaderStore {
         {
             if cached.status == .success, let html = cached.html, !html.isEmpty {
                 await warmReaderContent(html: html, baseURL: article.url)
-                await loadCommentsIfNeeded(for: article.id)
+                await loadCommentsIfNeeded(for: article)
                 note(html: html, engine: cached.recordedEngine, for: article)
                 // Cached content can outlive the source page. Check the original's
                 // status in the background (non-blocking) and offer deletion if it
@@ -3328,7 +3398,13 @@ public final class ReaderStore {
     /// The path that matters is a body served from cache — this device's or a peer's —
     /// where no extraction ran and the thread would otherwise be missing from an
     /// article that plainly has one.
-    private func loadCommentsIfNeeded(for id: Article.ID) async {
+    /// Takes the article rather than its id so the base URL is always in hand. It was
+    /// an id, and the warm below had nothing to pass — so it passed nil, the block
+    /// cache is keyed on `(html, baseURL)`, and every warmed entry landed under a key
+    /// no row would ever ask for. The warm was dead on the path that needs it most,
+    /// and all thirty comment bodies parsed on the main actor as they mounted.
+    private func loadCommentsIfNeeded(for article: Article) async {
+        let id = article.id
         guard showsComments, !readerCommentsLoaded.contains(id) else { return }
         // Only once the store exists. Marking the article looked-at before that would
         // make an open during launch — before storage has been restored — the one open
@@ -3340,25 +3416,36 @@ public final class ReaderStore {
             return try? JSONDecoder().decode(ReaderCommentThread.self, from: payload)
         }.value
         guard let thread, !thread.isEmpty else { return }
+        #if DEBUG && os(macOS)
+        GeometryLog.note("store.comments.land", extra: "n=\(thread.items.count)")
+        #endif
         readerCommentThreads[id] = thread
-        await warmComments(thread, baseURL: nil)
+        await warmComments(thread, baseURL: article.url)
     }
 
-    /// Parses the comment bodies the reader is about to draw off the main actor.
+    /// Warms the styled text of the comment bodies the reader is about to draw.
     ///
-    /// The article body is warmed for the same reason: `HTMLContentView` parses in its
-    /// initializer, the section builds its first page eagerly, and thirty small parses
-    /// on the frame that presents the article is a frame the reader can see.
-    private func warmComments(_ thread: ReaderCommentThread, baseURL: URL?) async {
-        for comment in thread.items.prefix(30) {
+    /// Not the block parse. That was the first thing this did and it measured as dead
+    /// work — 5.2ms spent, 0ms saved, with the right cache key as much as the wrong
+    /// one — because a comment body is a few hundred bytes and parsing it was never
+    /// the cost. The cost is the one the article has: the main-actor styled-text
+    /// import each body runs after it mounts, which also changes its height. Warming
+    /// that is what the rows need.
+    private func warmComments(_ thread: ReaderCommentThread, baseURL: URL) async {
+        for comment in thread.items.prefix(ReaderCommentsSection.firstPage) {
             guard let html = comment.renderableHTML else { continue }
-            await warmReaderBlocks(html: html, baseURL: baseURL)
+            if Task.isCancelled { return }
+            await HTMLContentText.warmReaderAttributedCache(
+                html: html, baseURL: baseURL, typography: .current(), maxBlocks: nil)
         }
     }
 
     /// Publishes a freshly-resolved body: flips the reader to `.ready`, records
     /// which parser produced it, and keeps it for an instant switch back.
     private func note(html: String, engine: ReaderParserEngine, for article: Article) {
+        #if DEBUG && os(macOS)
+        GeometryLog.note("store.content.ready", extra: "bytes=\(html.utf8.count) engine=\(engine.rawValue)")
+        #endif
         noteReaderContentByEngine(html, engine: engine, for: article.id)
         reparsingArticles[article.id] = nil
         readerContentEngines[article.id] = engine
@@ -3412,12 +3499,41 @@ public final class ReaderStore {
     /// frame — the transition carries no parse and no importer burst.
     private func warmReaderContent(html: String, baseURL: URL?) async {
         await warmReaderBlocks(html: html, baseURL: baseURL)
-        // Only the first blocks matter for a burst-free open; the rest import
-        // lazily as they scroll into view (off the entry frame).
+        // Only the first blocks are warmed before `.ready`, because a very long
+        // article must not hold the content back importing all of it: measured on the
+        // fourteen longest articles in a real library, warming the whole document up
+        // front costs +47 to +160ms before anything appears.
         await HTMLContentText.warmReaderAttributedCache(
             html: html, baseURL: baseURL, typography: .current(), maxBlocks: 14
         )
+        // The rest is warmed straight after, and this is the fix for the article
+        // moving under the reader as they scroll.
+        //
+        // A block that has not imported its styled text yet is laid out from a plain
+        // placeholder, and the placeholder is not the same height as the real thing.
+        // So every block past the fourteenth changed height the moment it scrolled
+        // into view: measured across those same fourteen articles, twelve of them
+        // moved, 125 blocks in total, 10,650pt of accumulated shift — one block alone
+        // was 1,590pt out where WebKit's importer turns an inline chart into a
+        // paragraph per axis label. That is what makes scrolling down and back up the
+        // way to see it: the heights above the reader settle after they have been
+        // passed, and the document they are in has already moved.
+        //
+        // With the whole document warm, none of the fourteen changes height at all
+        // (+0.0pt). It runs after `.ready` rather than before, so the article appears
+        // exactly as promptly as it did; `warmReaderAttributedCache` yields between
+        // blocks, and switching articles cancels it.
+        warmRemainderTask?.cancel()
+        warmRemainderTask = Task { @MainActor in
+            await HTMLContentText.warmReaderAttributedCache(
+                html: html, baseURL: baseURL, typography: .current(), maxBlocks: nil)
+        }
     }
+
+    /// The whole-document styled-text warm that follows `.ready`. One at a time:
+    /// opening another article makes the previous one's remainder work nobody is
+    /// going to look at.
+    private var warmRemainderTask: Task<Void, Never>?
 
     /// Parses reader HTML into native blocks off the main actor and stores them in
     /// the shared block cache, so `HTMLContentView` renders from a synchronous

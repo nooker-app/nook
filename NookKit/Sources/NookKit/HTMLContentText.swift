@@ -645,7 +645,12 @@ private final class CacheBox<T: Sendable>: Sendable {
 final class HTMLBlockCache: @unchecked Sendable {
     static let shared = HTMLBlockCache()
     private let cache = NSCache<NSString, CacheBox<HTMLParsedContent>>()
-    private init() { cache.countLimit = 64 }
+    // One article with a comment thread occupies 31 entries — the body plus thirty
+    // comment bodies — so at 64 a second commented article evicted the first, and
+    // going back to it re-parsed all thirty on the main actor. That is what made
+    // returning to an article you had already read slower than opening it. Eight
+    // commented articles now fit; `NSCache` still evicts under real memory pressure.
+    private init() { cache.countLimit = 256 }
 
     private static func key(html: String, baseURL: URL?) -> NSString {
         ((baseURL?.absoluteString ?? "") + "\n" + html) as NSString
@@ -812,7 +817,10 @@ enum HTMLTextFlow {
 private final class HTMLAttributedCache {
     static let shared = HTMLAttributedCache()
     private let cache = NSCache<NSString, CacheBox<AttributedString>>()
-    private init() { cache.countLimit = 600 }
+    // Keyed per text fragment, so a long article alone can approach the old 600 and
+    // evict the blocks a reader is still scrolling through — every eviction is a
+    // styled-text import redone on the main actor.
+    private init() { cache.countLimit = 1500 }
 
     func value(forKey key: String) -> AttributedString? { cache.object(forKey: key as NSString)?.value }
     func store(_ value: AttributedString, forKey key: String) { cache.setObject(CacheBox(value), forKey: key as NSString) }

@@ -68,6 +68,9 @@ public final class RelativeTimeTicker {
     /// relative timestamp. Internal so tests can drive it without a timer.
     func resnap() {
         now = Date()
+        #if DEBUG && os(macOS)
+        GeometryLog.note("ticker.resnap")
+        #endif
     }
 }
 

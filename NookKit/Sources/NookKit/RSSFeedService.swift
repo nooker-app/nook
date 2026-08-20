@@ -696,9 +696,7 @@ enum FeedDateParser {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        for options in isoOptionSets {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = options
+        for formatter in isoFormatters {
             if let date = formatter.date(from: trimmed) { return date }
         }
 
@@ -715,6 +713,24 @@ enum FeedDateParser {
         [.withInternetDateTime],
         [.withInternetDateTime, .withFractionalSeconds],
     ]
+
+    /// Built once, like `patternFormatters` below, and never mutated afterwards —
+    /// which is what makes a shared formatter safe to parse with from any thread.
+    ///
+    /// They used to be allocated per call, two of them, which is fine at feed-parse
+    /// rates and was not fine once a comment's timestamp went through here: the
+    /// reader resolves one per comment body, so a thirty-comment thread paid sixty
+    /// formatter allocations every time the section was re-evaluated.
+    // `nonisolated(unsafe)` rather than a lock: these are configured here and never
+    // written again, and Apple's formatters are documented safe to *parse* with
+    // concurrently — it is mutation that is not. `patternFormatters` below has had
+    // the same shape all along and only escapes the annotation because `DateFormatter`
+    // is marked `Sendable` in the SDK and `ISO8601DateFormatter` is not.
+    nonisolated(unsafe) private static let isoFormatters: [ISO8601DateFormatter] = isoOptionSets.map { options in
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = options
+        return formatter
+    }
 
     /// `DateFormatter` fallbacks for shapes `ISO8601DateFormatter` rejects: RFC
     /// 822 variants, and ISO-like stamps missing seconds or a timezone.

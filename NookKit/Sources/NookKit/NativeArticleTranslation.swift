@@ -545,7 +545,10 @@ public final class NativeArticleTranslator {
         commentQueue = []
         commentsRequested = []
         commentLanguage = ""
-        translatedComments = [:]
+        // Guarded for the same reason as `stop()`: this is on every article open, and
+        // an empty dictionary assigned over an empty dictionary still invalidates
+        // every comment row that read it.
+        if !translatedComments.isEmpty { translatedComments = [:] }
     }
 
     /// Turns translation off and reverts to the original content.
@@ -557,15 +560,20 @@ public final class NativeArticleTranslator {
         // so stopping/switching an article can't let a stale task keep running or
         // rewrite overrides.
         generation += 1
-        isActive = false
-        isTranslating = false
-        overrides = [:]
-        markdownBlocks = nil
-        markerlessStableBlocks = []
-        markerlessLatestBlocks = []
-        markerlessSourceBlocks = []
-        translatedTitle = nil
-        translatedMarkdown = nil
+        // Guarded, because Observation publishes on every *set* and not only on a
+        // change. Every article open calls this before it starts, and on an article
+        // nobody asked to translate it was assigning six observable properties that
+        // were already at their resting value — six invalidations of the reader, and
+        // of every comment row under it, on the frame that presents the article.
+        if isActive { isActive = false }
+        if isTranslating { isTranslating = false }
+        if !overrides.isEmpty { overrides = [:] }
+        if markdownBlocks != nil { markdownBlocks = nil }
+        if !markerlessStableBlocks.isEmpty { markerlessStableBlocks = [] }
+        if !markerlessLatestBlocks.isEmpty { markerlessLatestBlocks = [] }
+        if !markerlessSourceBlocks.isEmpty { markerlessSourceBlocks = [] }
+        if translatedTitle != nil { translatedTitle = nil }
+        if translatedMarkdown != nil { translatedMarkdown = nil }
         conceptDomain = ""
         keepTerms = []
         keepTermsSeen = []

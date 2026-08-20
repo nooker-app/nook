@@ -385,10 +385,30 @@ private struct ScrollWheelOverscrollMonitor: NSViewRepresentable {
 
             // Record, at the start of each gesture, whether it began resting at an
             // edge — read live from the scroll view, so it's correct at rest.
+            //
+            // A new gesture also clears whatever the last one left behind. Once
+            // `engaged` is set this monitor consumes every scroll-wheel event in the
+            // window, and the only ways out were an `.ended`/`.cancelled` event and
+            // `raw` decaying to exactly zero. An `.ended` that arrives while the
+            // pointer is over another window fails the guard above and is never seen,
+            // so the latch could hold with a pull still reported: the top affordance
+            // stayed drawn over the title and scrolling did nothing until the pull was
+            // unwound. Neither state should be reachable, so a fresh gesture and a
+            // stale clock both dissolve it.
             if event.phase.contains(.began) {
+                reset()
+                cachedScrollView = nil
                 let atEdge = edges()
                 beganAtTop = atEdge.top
                 beganAtBottom = atEdge.bottom
+            }
+
+            // A pull is a continuous gesture; two seconds without one ending it means
+            // the end was lost rather than late.
+            if let since = engagedAt, Date().timeIntervalSince(since) > 2 {
+                reset()
+                onPull(EdgePull())
+                return false
             }
 
             if engaged == nil {
