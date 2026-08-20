@@ -217,8 +217,15 @@ private struct ReaderCommentRow: View {
                 .foregroundStyle(.tertiary)
         } else if let html = translatedHTML ?? comment.renderableHTML {
             // The reader's own typography, so a comment reads at the size they chose.
+            //
+            // `defersOffscreenBlocks: false` because thirty of these share the
+            // reader's scroll view. Lazily, each one's height was an estimate until
+            // its rows materialized, so the scroll view's content height moved on
+            // every scroll and it clamped the offset back — the thread dragged itself
+            // upward and its last comments could not be reached.
             HTMLContentView(
-                html: html, baseURL: baseURL, selectable: selectable, typography: typography)
+                html: html, baseURL: baseURL, selectable: selectable, typography: typography,
+                defersOffscreenBlocks: false)
         }
     }
 }

@@ -59,13 +59,31 @@ public struct HTMLContentView: View {
     private let selectable: Bool
     private var translator: NativeArticleTranslator?
     private let typography: ReaderTypography
+    private let defersOffscreenBlocks: Bool
 
+    /// `defersOffscreenBlocks` must be false wherever several of these share one
+    /// scroll view.
+    ///
+    /// A lazy stack's height is an estimate until its rows materialize, and nesting
+    /// one inside a scroll view it does not own means the scroll view's content
+    /// height changes every time a row comes into view. Measured with thirty comment
+    /// bodies in the reader's scroll view: twenty-nine different content heights over
+    /// forty scroll steps and thirty offset reversals, the worst 2769pt — the scroll
+    /// dragging itself back up and the bottom of the thread unreachable. Non-lazy:
+    /// one height, no reversals.
+    ///
+    /// It costs nothing to turn off. Laziness only pays when something else decides
+    /// the document is partly off screen; when the whole subtree is measured anyway —
+    /// which is what an enclosing scroll view does — a full layout was 24.8ms lazy
+    /// against 24.2ms not, inside the noise. The article keeps it because the article
+    /// *is* the scroll view's document, which is the case it was written for.
     public init(
         html: String,
         baseURL: URL? = nil,
         selectable: Bool = true,
         translator: NativeArticleTranslator? = nil,
-        typography: ReaderTypography = .platformDefault
+        typography: ReaderTypography = .platformDefault,
+        defersOffscreenBlocks: Bool = true
     ) {
         // A cache hit (warmed off-main by the store, or a revisit) skips the
         // synchronous parse entirely. On a miss we parse synchronously exactly as
@@ -83,11 +101,17 @@ public struct HTMLContentView: View {
         self.selectable = selectable
         self.translator = translator
         self.typography = typography
+        self.defersOffscreenBlocks = defersOffscreenBlocks
     }
 
     public var body: some View {
         // Lazy at the top level so off-screen blocks defer their HTML import /
-        // syntax highlight / image load instead of all firing at once on entry.
+        // syntax highlight / image load instead of all firing at once on entry —
+        // unless this document shares its scroll view, where laziness buys nothing
+        // and destabilises the height (see `defersOffscreenBlocks`).
+        //
+        // The reader stays either way: it was measured innocent of the scroll
+        // problem, and removing it would take in-document links with it.
         //
         // Wrapped in a reader so a link into this document has something to scroll.
         // The anchors come from the parse, and a document with none — which is most
@@ -100,7 +124,7 @@ public struct HTMLContentView: View {
                 highlightedBlock: flashingBlock,
                 highlightedItem: flashingItem,
                 highlightStrength: flashStrength,
-                lazy: true,
+                lazy: defersOffscreenBlocks,
                 // A completed Markdown document already contains every replacement.
                 translator: translator?.completedMarkdownBlocks() == nil ? translator : nil,
                 typography: typography
