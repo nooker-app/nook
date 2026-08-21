@@ -92,8 +92,19 @@ public struct HTMLContentView: View {
         if let cached = HTMLBlockCache.shared.parsed(html: html, baseURL: baseURL) {
             blocks = cached.blocks
             anchors = cached.anchors
+            #if DEBUG && os(macOS)
+            GeometryLog.add("parse.hit", ms: 0)
+            #endif
         } else {
+            #if DEBUG && os(macOS)
+            // A miss here is a synchronous parse on whatever thread is building the
+            // view, which for the reader is the main one.
+            let parsed = GeometryLog.measure("parse.miss") {
+                HTMLContentParser.parseWithAnchors(html, baseURL: baseURL)
+            }
+            #else
             let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: baseURL)
+            #endif
             HTMLBlockCache.shared.store(parsed, html: html, baseURL: baseURL)
             blocks = parsed.blocks
             anchors = parsed.anchors
@@ -861,9 +872,23 @@ enum HTMLContentParser {
         options: [.caseInsensitive, .dotMatchesLineSeparators]
     )
 
-    static func parse(_ html: String, baseURL: URL?) -> [HTMLContentBlock] {
-        parseWithAnchors(html, baseURL: baseURL).blocks
+    static func parse(_ html: String, baseURL: URL?, depth: Int = 0) -> [HTMLContentBlock] {
+        parseWithAnchors(html, baseURL: baseURL, depth: depth).blocks
     }
+
+    /// How deep a container may nest before the rest of it is kept as text.
+    ///
+    /// Nesting is structural, and every level of it is a level of SwiftUI layout
+    /// containers. Prose does not nest lists or quotes anything like this deep —
+    /// four is already hard to read — but machine-generated markup does, without
+    /// limit, and the recursion here had none either: a document could nest deeply
+    /// enough to make the reader's layout, and this parser's own stack, unbounded.
+    /// Past the cap the remaining HTML becomes one text block, so its words and
+    /// inline formatting survive and only the indentation is lost.
+    ///
+    /// Counted in containers kept, so twelve means a list twelve deep renders as
+    /// twelve indented levels and the thirteenth as text.
+    static let maxNestingDepth = 12
 
     /// Every `id` in a fragment, so the block it produced can be linked to.
     private static let idRegex = try! NSRegularExpression(
@@ -892,7 +917,12 @@ enum HTMLContentParser {
         }
     }
 
-    static func parseWithAnchors(_ html: String, baseURL: URL?) -> HTMLParsedContent {
+    static func parseWithAnchors(
+        _ html: String, baseURL: URL?, depth: Int = 0
+    ) -> HTMLParsedContent {
+        guard depth < maxNestingDepth else {
+            return HTMLParsedContent(blocks: [.text(html)], anchors: [:])
+        }
         let regex = blockRegex
 
         let fullRange = NSRange(html.startIndex..<html.endIndex, in: html)
@@ -922,7 +952,7 @@ enum HTMLContentParser {
             let between = String(html[cursor..<fragmentRange.lowerBound])
             appendText(between, to: &blocks, anchors: &anchors)
             let fragment = String(html[fragmentRange])
-            if let classified = classify(fragment, baseURL: baseURL) {
+            if let classified = classify(fragment, baseURL: baseURL, depth: depth) {
                 blocks.append(classified.block)
                 let index = blocks.count - 1
                 // Items first: a footnote list is one block, so an id recorded
@@ -967,17 +997,22 @@ enum HTMLContentParser {
         var itemIdentifiers: [[String]] = []
     }
 
-    private static func classify(_ fragment: String, baseURL: URL?) -> ClassifiedBlock? {
+    private static func classify(
+        _ fragment: String, baseURL: URL?, depth: Int
+    ) -> ClassifiedBlock? {
         switch tagName(of: fragment) {
         case "ul", "ol":
-            return listBlock(from: fragment, baseURL: baseURL)
+            return listBlock(from: fragment, baseURL: baseURL, depth: depth)
         default:
-            return structuralBlock(fragment, baseURL: baseURL).map { ClassifiedBlock(block: $0) }
+            return structuralBlock(fragment, baseURL: baseURL, depth: depth)
+                .map { ClassifiedBlock(block: $0) }
         }
     }
 
     /// Every block whose ids belong to it as a whole, which is all of them but lists.
-    private static func structuralBlock(_ fragment: String, baseURL: URL?) -> HTMLContentBlock? {
+    private static func structuralBlock(
+        _ fragment: String, baseURL: URL?, depth: Int
+    ) -> HTMLContentBlock? {
         switch tagName(of: fragment) {
         case "figure", "img", "video", "iframe", "audio":
             return mediaBlock(from: fragment, baseURL: baseURL)
@@ -986,7 +1021,7 @@ enum HTMLContentParser {
             return code.isEmpty ? nil : .codeBlock(code: code, language: language)
         case "blockquote":
             let inner = firstTagContent(named: "blockquote", in: fragment) ?? ""
-            let nested = parse(inner, baseURL: baseURL)
+            let nested = parse(inner, baseURL: baseURL, depth: depth + 1)
             return nested.isEmpty ? nil : .blockquote(nested)
         case "table":
             let table = tableBlock(from: fragment, baseURL: baseURL)
@@ -1070,10 +1105,12 @@ enum HTMLContentParser {
     /// Builds an ordered/unordered list block. Each `<li>` is parsed recursively
     /// so nested lists, images, and inline formatting inside items all survive as
     /// native content.
-    private static func listBlock(from fragment: String, baseURL: URL?) -> ClassifiedBlock? {
+    private static func listBlock(
+        from fragment: String, baseURL: URL?, depth: Int
+    ) -> ClassifiedBlock? {
         let ordered = tagName(of: fragment) == "ol"
         let inner = firstTagContent(named: ordered ? "ol" : "ul", in: fragment) ?? fragment
-        let items = listItems(in: inner, baseURL: baseURL)
+        let items = listItems(in: inner, baseURL: baseURL, depth: depth)
         guard !items.isEmpty else { return nil }
         return ClassifiedBlock(
             block: .list(ordered: ordered, items: items.map(\.blocks)),
@@ -1130,7 +1167,9 @@ enum HTMLContentParser {
         let identifiers: [String]
     }
 
-    private static func listItems(in inner: String, baseURL: URL?) -> [ParsedListItem] {
+    private static func listItems(
+        in inner: String, baseURL: URL?, depth: Int
+    ) -> [ParsedListItem] {
         let regex = listItemOpenRegex
         let full = NSRange(inner.startIndex..<inner.endIndex, in: inner)
         var items: [ParsedListItem] = []
@@ -1140,7 +1179,7 @@ enum HTMLContentParser {
             let end = balancedEnd(of: "li", in: inner, from: openRange.lowerBound) ?? inner.endIndex
             let liFragment = String(inner[openRange.lowerBound..<end])
             let liInner = firstTagContent(named: "li", in: liFragment) ?? ""
-            let blocks = parse(liInner, baseURL: baseURL)
+            let blocks = parse(liInner, baseURL: baseURL, depth: depth + 1)
             if !blocks.isEmpty {
                 items.append(ParsedListItem(blocks: blocks, identifiers: identifiers(in: liFragment)))
             }
@@ -2601,6 +2640,9 @@ private struct NativeArticleQuote: View {
 /// An ordered or unordered list: each item is a marker (number or bullet)
 /// beside its natively-rendered content, so nested lists, links, and media
 /// inside items all render.
+///
+/// The marker sits in an overlay rather than a stack, which is what keeps a
+/// deeply nested list from hanging the reader — see the note in `body`.
 private struct NativeArticleList: View {
     let ordered: Bool
     let items: [[HTMLContentBlock]]
@@ -2631,29 +2673,58 @@ private struct NativeArticleList: View {
     }
 
     var body: some View {
-        // A flexible marker column is what made list bodies render as an ellipsis
-        // with blank space under it: measured at one width, drawn at another, with
-        // SwiftUI keeping the reserved continuation-line height and truncating the
-        // text. `Grid` with a `minWidth` marker resolved that on macOS, but not on
-        // iOS, where a row realized inside the article's `LazyVStack` during a
-        // scroll sees a proposal that does not match its final width — reproduced
-        // in the simulator on the reported article, and only after scrolling to
-        // the section. A fixed marker leaves nothing to resolve on either
-        // platform, so the two-pass measurement cannot disagree with itself.
+        // The marker is an overlay over a padded body, not a sibling in an
+        // `HStack`, and that is a performance requirement rather than a
+        // preference. A list nests: an item's body is another `HTMLBlockList`,
+        // which may hold another list. An `HStack` holding a fixed-width marker
+        // beside a flexible body has to negotiate that body's width, and it
+        // measures the whole subtree several times to do it — so the cost
+        // multiplied at every level of nesting. Measured, laying out one nested
+        // list at increasing depth:
+        //
+        //             depth   HStack   overlay
+        //                 4     46ms      <1ms
+        //                 5    361ms       6ms
+        //                 6   3134ms       6ms
+        //                 7  30329ms       6ms
+        //                 8 101428ms       7ms
+        //                12      (h)       9ms
+        //
+        // A factor of about 8.7 per level, on 153pt of text. A page nesting lists
+        // a dozen deep — ordinary in rendered forum and documentation markup —
+        // therefore hung the reader outright: the app was caught at 99% CPU with
+        // its main thread 165 frames deep inside `StackLayout.placeChildren`, and
+        // the article never appeared. Padding resolves the body width by
+        // subtraction instead of negotiation, one pass per level, so the cost is
+        // linear in depth; an overlay never takes part in its parent's
+        // measurement at all. The blockquote below has always had this shape,
+        // which is why it was flat in the same run (5-8ms at every depth) and
+        // served as the control.
+        //
+        // The layout is unchanged, not merely close: the same run measured
+        // identical heights at every depth for both shapes.
+        //
+        // Keep the marker column an exact width. A flexible one is what made list
+        // bodies render as an ellipsis with blank space under it: measured at one
+        // width, drawn at another, with SwiftUI keeping the reserved
+        // continuation-line height and truncating the text. `Grid` with a
+        // `minWidth` marker resolved that on macOS, but not on iOS, where a row
+        // realized inside the article's `LazyVStack` during a scroll sees a
+        // proposal that does not match its final width. A fixed marker leaves
+        // nothing to resolve on either platform, so the two-pass measurement
+        // cannot disagree with itself.
         VStack(alignment: .leading, spacing: HTMLBlockSpacing.listItemGap(typography)) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, blocks in
-                HStack(
-                    alignment: .firstTextBaseline,
-                    spacing: HTMLBlockSpacing.markerGutter(typography)
-                ) {
-                    Text(marker(index))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .frame(width: markerWidth, alignment: .trailing)
-                    HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .background(highlight(for: index))
+                HTMLBlockList(blocks: blocks, selectable: selectable, typography: typography, compactSpacing: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, markerWidth + HTMLBlockSpacing.markerGutter(typography))
+                    .overlay(alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)) {
+                        Text(marker(index))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(width: markerWidth, alignment: .trailing)
+                    }
+                    .background(highlight(for: index))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3140,8 +3211,26 @@ public struct HTMLContentText: View {
         // Bound the pre-`.ready` warm to the above-the-fold blocks so a very long
         // article doesn't hold the content back importing everything up front.
         let blocks = maxBlocks.map { Array(all.prefix($0)) } ?? all
+        #if DEBUG && os(macOS)
+        let warmStarted = ProcessInfo.processInfo.systemUptime
+        GeometryLog.note(
+            "warm.begin", extra: "blocks=\(blocks.count)/\(all.count) bounded=\(maxBlocks != nil)")
+        defer {
+            GeometryLog.activity("-")
+            GeometryLog.note(
+                "warm.end",
+                extra: String(
+                    format: "blocks=%d took=%.0fms", blocks.count,
+                    (ProcessInfo.processInfo.systemUptime - warmStarted) * 1000))
+        }
+        var warmIndex = 0
+        #endif
         for block in blocks {
             if Task.isCancelled { return }
+            #if DEBUG && os(macOS)
+            warmIndex += 1
+            GeometryLog.activity("warm[\(warmIndex)/\(blocks.count)]")
+            #endif
             switch block {
             case .text(let fragment):
                 warmAttributed(fragment, baseSize: typography.bodySize, bold: false, typography: typography)
@@ -3183,11 +3272,25 @@ public struct HTMLContentText: View {
         // WebKit machinery). Anything the native path can't reproduce exactly
         // returns nil and takes the WebKit importer below, byte-for-byte as
         // before — exotic HTML can never regress.
-        if !NativeInlineHTMLRenderer.isDisabled,
-           let native = NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold, typography: typography) {
-            return native
+        if !NativeInlineHTMLRenderer.isDisabled {
+            #if DEBUG && os(macOS)
+            let native = GeometryLog.measure("import.native.try") {
+                NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold, typography: typography)
+            }
+            #else
+            let native = NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold, typography: typography)
+            #endif
+            if let native { return native }
         }
+        #if DEBUG && os(macOS)
+        // The expensive one, and the reason this file is instrumented: a WebKit HTML
+        // import runs on the main thread and cannot be moved off it.
+        return GeometryLog.measure("import.webkit") {
+            webKitImport(prepared, baseSize: baseSize, bold: bold, typography: typography)
+        }
+        #else
         return webKitImport(prepared, baseSize: baseSize, bold: bold, typography: typography)
+        #endif
     }
 
     /// The classic WebKit importer pipeline (main-thread-only). `prepared` is

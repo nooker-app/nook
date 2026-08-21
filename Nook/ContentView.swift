@@ -510,7 +510,10 @@ private struct ReaderWorkspaceView: View {
         #if DEBUG
         // Installed here because nothing above this carries an `.id`, so the one
         // registration outlives every article change. Debug only; see `GeometryLog`.
-        .onAppear { GeometryLog.observeAllClips() }
+        .onAppear {
+            GeometryLog.observeAllClips()
+            GeometryLog.startWatchdog()
+        }
         #endif
     }
 }
@@ -2402,7 +2405,12 @@ private struct ReaderDetailView: View {
     }
 
     private func articleReader(_ article: Article) -> some View {
-        ScrollView {
+        #if DEBUG
+        // Counted rather than logged: a burst of these is symptom 1's other half, and
+        // a line per evaluation would bury the burst in itself.
+        GeometryLog.add("reader.body", ms: 0)
+        #endif
+        return ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 articleHeader(article)
 

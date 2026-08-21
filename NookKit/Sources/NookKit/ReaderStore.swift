@@ -3432,6 +3432,16 @@ public final class ReaderStore {
     /// import each body runs after it mounts, which also changes its height. Warming
     /// that is what the rows need.
     private func warmComments(_ thread: ReaderCommentThread, baseURL: URL) async {
+        #if DEBUG && os(macOS)
+        let started = ProcessInfo.processInfo.systemUptime
+        GeometryLog.activity("warmComments")
+        defer {
+            GeometryLog.activity("-")
+            GeometryLog.note(
+                "warm.comments",
+                extra: String(format: "took=%.0fms", (ProcessInfo.processInfo.systemUptime - started) * 1000))
+        }
+        #endif
         for comment in thread.items.prefix(ReaderCommentsSection.firstPage) {
             guard let html = comment.renderableHTML else { continue }
             if Task.isCancelled { return }
@@ -3525,8 +3535,14 @@ public final class ReaderStore {
         // blocks, and switching articles cancels it.
         warmRemainderTask?.cancel()
         warmRemainderTask = Task { @MainActor in
+            #if DEBUG && os(macOS)
+            GeometryLog.note("warm.remainder.begin", extra: "bytes=\(html.utf8.count)")
+            #endif
             await HTMLContentText.warmReaderAttributedCache(
                 html: html, baseURL: baseURL, typography: .current(), maxBlocks: nil)
+            #if DEBUG && os(macOS)
+            GeometryLog.note("warm.remainder.end")
+            #endif
         }
     }
 

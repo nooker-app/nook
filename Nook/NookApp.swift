@@ -151,6 +151,7 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
         // Land any shard write still inside its trailing-save window.
         ReaderStore.shared.flushPendingShardSave()
         #if DEBUG
+        GeometryLog.summary()
         GeometryLog.flush()
         #endif
     }
@@ -158,6 +159,7 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
     func applicationWillTerminate(_ notification: Notification) {
         ReaderStore.shared.flushPendingShardSave()
         #if DEBUG
+        GeometryLog.summary()
         GeometryLog.flush()
         #endif
     }
