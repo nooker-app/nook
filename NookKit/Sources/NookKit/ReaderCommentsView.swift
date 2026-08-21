@@ -30,15 +30,14 @@ public struct ReaderCommentsSection: View {
     /// How many to draw before the "show the rest" button.
     ///
     /// Not politeness — measured. Comment rows are drawn eagerly (see
-    /// `defersOffscreenBlocks` below), and mounting one costs about 5.7ms, so thirty
-    /// of them put 227ms of synchronous layout on the frame that presents the
-    /// article, of which at most one row is on screen. Article length is nearly free
-    /// by comparison: 600 blocks with no comments mount in 19–22ms.
+    /// `defersOffscreenBlocks` below), and mounting one costs a few milliseconds, so
+    /// thirty of them put a synchronous layout on the frame that presents the
+    /// article of which at most one row is on screen.
     ///
-    /// Eight costs 95ms, which is 130ms off every open of a commented article, and the
-    /// rest is deferred rather than dropped — "Show N more" pays 154ms when it is
-    /// actually asked for. Internal so `ReaderStore` warms exactly the rows that will
-    /// be drawn.
+    /// Eight long comments cost 47ms now that a row is measured once (see
+    /// `ReaderCommentRow.body`), and the rest is deferred rather than dropped —
+    /// "Show N more" pays for it when it is actually asked for. Internal so
+    /// `ReaderStore` warms exactly the rows that will be drawn.
     static let firstPage = 8
 
     @State private var showsAll = false
@@ -162,21 +161,34 @@ private struct ReaderCommentRow: View {
     private var indent: CGFloat { CGFloat(min(depth, Self.maxIndentedDepth)) * Self.indentStep }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
+        // The reply rule is an overlay over a padded row, not a sibling in an
+        // `HStack`, for the same reason a list marker is: an `HStack` holding a
+        // fixed-width child beside a flexible one measures the flexible child's whole
+        // subtree several times to resolve its width, and here that subtree is a
+        // comment body. Measured, laying out the thread the reader draws:
+        //
+        //                        HStack   overlay
+        //     4 comments          35.0ms   17.6ms
+        //     8 comments          68.8ms   33.5ms
+        //     8 long comments    127.5ms   47.0ms
+        //
+        // Less than half, at pixel-identical output. Worth having because this cost
+        // lands on the frame that presents the article, where the reader is already
+        // scrolling.
+        VStack(alignment: .leading, spacing: 4) {
+            byline
+            body(for: comment)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, depth > 0 ? indent : 0)
+        .overlay(alignment: .leading) {
             if depth > 0 {
                 Rectangle()
                     .fill(Color.primary.opacity(0.12))
                     .frame(width: 2)
                     .padding(.leading, indent - Self.indentStep)
-                    .padding(.trailing, Self.indentStep - 2)
                     .accessibilityHidden(true)
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                byline
-                body(for: comment)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 9)
         .accessibilityElement(children: .combine)

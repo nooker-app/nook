@@ -61,29 +61,44 @@ public struct HTMLContentView: View {
     private let typography: ReaderTypography
     private let defersOffscreenBlocks: Bool
 
-    /// `defersOffscreenBlocks` must be false wherever several of these share one
-    /// scroll view.
+    /// Whether the top-level block list is a `LazyVStack`. Off by default, because
+    /// laziness lost on every axis it was measured on.
     ///
-    /// A lazy stack's height is an estimate until its rows materialize, and nesting
-    /// one inside a scroll view it does not own means the scroll view's content
-    /// height changes every time a row comes into view. Measured with thirty comment
-    /// bodies in the reader's scroll view: twenty-nine different content heights over
-    /// forty scroll steps and thirty offset reversals, the worst 2769pt — the scroll
-    /// dragging itself back up and the bottom of the thread unreachable. Non-lazy:
-    /// one height, no reversals.
+    /// A lazy stack's height is an estimate until its rows materialize. That was
+    /// first found with thirty comment bodies sharing the reader's scroll view —
+    /// twenty-nine different content heights over forty scroll steps and thirty
+    /// offset reversals, the worst 2769pt, the scroll dragging itself back up and the
+    /// bottom of the thread unreachable — and the article was left lazy on the
+    /// argument that the article *is* the scroll view's document, so nothing else
+    /// could disagree about its height.
     ///
-    /// It costs nothing to turn off. Laziness only pays when something else decides
-    /// the document is partly off screen; when the whole subtree is measured anyway —
-    /// which is what an enclosing scroll view does — a full layout was 24.8ms lazy
-    /// against 24.2ms not, inside the noise. The article keeps it because the article
-    /// *is* the scroll view's document, which is the case it was written for.
+    /// The argument was wrong. The estimate is short of the truth even when the lazy
+    /// stack owns the whole document, so the height still moves as rows come into
+    /// view, and the reader's log showed exactly that: `docH` walking 7010 → 7917 →
+    /// 7184 → 7334 → 8095 during one scroll, and 5991 → 5836 during another, with
+    /// the article sliding under a stationary scrollbar. Measured, laying out one
+    /// article at four sizes:
+    ///
+    ///        HTML       lazy            not lazy
+    ///      9.6 KB    78.0ms  h 1626    27.2ms  h 2186
+    ///       40 KB   212.2ms  h 6677   112.3ms  h 9052
+    ///      120 KB   694.0ms  h 19855  377.5ms  h 26954
+    ///      300 KB  2382.7ms  h 49548  931.7ms  h 67312
+    ///
+    /// Slower at every size, and the height it reports is 22-26% short. The same
+    /// holds for the blocks laziness exists to defer: twenty-four code blocks and
+    /// twenty-four images cost 89.5ms lazy against 61.8ms not.
+    ///
+    /// So the cost of a long article is paid once, on open, instead of being paid
+    /// again on every scroll that realizes another row — which is what the reader
+    /// actually felt like.
     public init(
         html: String,
         baseURL: URL? = nil,
         selectable: Bool = true,
         translator: NativeArticleTranslator? = nil,
         typography: ReaderTypography = .platformDefault,
-        defersOffscreenBlocks: Bool = true
+        defersOffscreenBlocks: Bool = false
     ) {
         // A cache hit (warmed off-main by the store, or a revisit) skips the
         // synchronous parse entirely. On a miss we parse synchronously exactly as
@@ -116,15 +131,13 @@ public struct HTMLContentView: View {
     }
 
     public var body: some View {
-        // Lazy at the top level so off-screen blocks defer their HTML import /
-        // syntax highlight / image load instead of all firing at once on entry —
-        // unless this document shares its scroll view, where laziness buys nothing
-        // and destabilises the height (see `defersOffscreenBlocks`).
-        //
-        // The reader stays either way: it was measured innocent of the scroll
-        // problem, and removing it would take in-document links with it.
+        // Not lazy, which is the whole point — a lazy stack's estimated height is
+        // what made the article slide under its own scrollbar (see
+        // `defersOffscreenBlocks`). The flag stays so a call site can opt back in.
         //
         // Wrapped in a reader so a link into this document has something to scroll.
+        // A plain stack is the better host for that too: every child exists, so an
+        // anchor is always something `scrollTo` can reach.
         // The anchors come from the parse, and a document with none — which is most
         // of them — pays for an identity per block and nothing else.
         ScrollViewReader { proxy in
