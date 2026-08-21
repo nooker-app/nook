@@ -1521,6 +1521,13 @@ private struct ArticleListView: View {
                             .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
                             .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
                             .contextMenu {
+                                #if DEBUG
+                                // Whether a row's menu is built when the row is drawn
+                                // or when it is opened. A count near the row count
+                                // means every row in the list pays for a menu nobody
+                                // asked for.
+                                let _ = GeometryLog.add("list.row.menu", ms: 0)
+                                #endif
                                 Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
                                     store.setRead(articleID: article.id, isRead: !article.isRead)
                                 }
@@ -1541,6 +1548,9 @@ private struct ArticleListView: View {
                                 Link("Open in Browser", destination: article.url)
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                #if DEBUG
+                                let _ = GeometryLog.add("list.row.swipe", ms: 0)
+                                #endif
                                 Button {
                                     store.setRead(articleID: article.id, isRead: !article.isRead)
                                 } label: {
@@ -1661,6 +1671,12 @@ private struct ArticleRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
+            #if DEBUG
+            // Counted, not logged: the article list is a thousand rows, and the
+            // question a stall raises is how many of them were re-evaluated, which a
+            // line each would answer unreadably.
+            let _ = GeometryLog.add("list.row", ms: 0)
+            #endif
             Circle()
                 .fill(article.isRead ? Color.clear : Color.accentColor)
                 .frame(width: 8, height: 8)

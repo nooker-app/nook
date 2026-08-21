@@ -190,6 +190,22 @@ enum NativeInlineHTMLRenderer {
     /// `role="doc-noteref"`, which is meaning for a screen reader and nothing for
     /// this renderer to act on.
     private static let ignorableSupAttributes: Set<String> = ["class", "id", "role"]
+    /// `datetime` is the whole point of a `<time>` and renders as nothing: the element
+    /// is inline with no default style, so its content draws exactly as the text
+    /// around it. Confirmed against the importer rather than assumed — see the
+    /// differential corpus.
+    private static let ignorableTimeAttributes: Set<String> = ["class", "id", "datetime", "title"]
+
+    /// Block elements the importer treats as if they were not there.
+    ///
+    /// `<div><p>a</p><p>b</p></div>` imports identically to `<p>a</p><p>b</p>`, and so
+    /// does the same wrapped in `<article>` or `<section>`. They are here because a
+    /// comment body arrives wrapped in them — the reader's log caught two fragments,
+    /// of 320 and 2,484 bytes, falling through to the WebKit importer over `article`,
+    /// `div`, `section` and `time` alone, and one of those imports froze the main
+    /// thread for 284ms. Nothing else about them is modelled: a wrapper holding loose
+    /// text, which the importer turns into a paragraph of its own, still bails.
+    private static let transparentWrappers: Set<String> = ["div", "article", "section"]
 
     /// One pass: parses, validates against the whitelist, and produces
     /// whitespace-collapsed styled runs grouped into paragraphs. Any deviation
@@ -205,6 +221,9 @@ enum NativeInlineHTMLRenderer {
         var usedParagraphTags = false
         var inParagraph = false
         var sawLooseContent = false
+        /// Open transparent block wrappers. Kept apart from `stack` so a `<p>` inside
+        /// one still sees no inline tag open.
+        var wrappers: [String] = []
 
         let scalars = Array(input.unicodeScalars)
         var i = 0
@@ -220,6 +239,14 @@ enum NativeInlineHTMLRenderer {
                 guard let tag = parseTag(scalars, at: &i) else { return nil }
                 let name = tag.name
                 if tag.isClose {
+                    if Self.transparentWrappers.contains(name) {
+                        // Closes only where it opened: outside every inline tag, and
+                        // outside a paragraph.
+                        guard wrappers.last == name, stack.isEmpty, !inParagraph
+                        else { return nil }
+                        wrappers.removeLast()
+                        continue
+                    }
                     guard let top = stack.last, top.name == name else { return nil }
                     stack.removeLast()
                     style = top.styleBefore
@@ -263,6 +290,19 @@ enum NativeInlineHTMLRenderer {
                     else { return nil }
                     stack.append((name, style))
                     style.script = name == "sup" ? .superscript : .subscript_
+                case "div", "article", "section":
+                    // Transparent, and only around paragraphs: opening one where inline
+                    // content is already flowing would mean modelling the importer's
+                    // implied-paragraph recovery, which nothing here does.
+                    guard stack.isEmpty, !inParagraph, !sawLooseContent,
+                          wrappers.count < maxTagDepth,
+                          attributesAreIgnorable(tag.attributes, allowed: ignorableAttributes)
+                    else { return nil }
+                    wrappers.append(name)
+                case "time":
+                    guard attributesAreIgnorable(tag.attributes, allowed: ignorableTimeAttributes)
+                    else { return nil }
+                    stack.append((name, style))
                 case "a":
                     // Nested anchors are well-formed to the stack but WebKit
                     // auto-closes the outer one — semantics we don't replicate.
@@ -292,6 +332,11 @@ enum NativeInlineHTMLRenderer {
             }
 
             // Content placement rules for the paragraph model.
+            // A wrapper holding text of its own is a paragraph to the importer, and
+            // two of them in a row are two paragraphs. Not modelled — bail.
+            if !wrappers.isEmpty, !inParagraph, !isCollapsibleWhitespace(character) {
+                return nil
+            }
             if usedParagraphTags && !inParagraph {
                 // Between/after <p> blocks only whitespace is tolerated.
                 if isCollapsibleWhitespace(character) { continue }
@@ -303,7 +348,7 @@ enum NativeInlineHTMLRenderer {
             builder.append(character, style: style)
         }
 
-        guard stack.isEmpty else { return nil }
+        guard stack.isEmpty, wrappers.isEmpty else { return nil }
         if !usedParagraphTags {
             finishParagraph()
         } else if inParagraph {

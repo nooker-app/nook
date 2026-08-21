@@ -310,6 +310,17 @@ struct NativeInlineHTMLRendererTests {
         "emoji 🦉 and combining e\u{0301}",
         #"<span class="x">span content</span>"#,
         "tab\tand\nnewline collapse",
+        // Block wrappers the importer treats as absent, and the inline `<time>` that
+        // comes with them. A comment body arrives inside these, and falling through to
+        // the WebKit importer over them cost 284ms of main thread for 320 bytes.
+        "<div><p>a</p><p>b</p></div>",
+        "<article><p>only one</p></article>",
+        "<article><div><p>a</p><p><b>b</b> c</p></div></article>",
+        #"<section class="comment-body"><p>a</p><p>b</p></section>"#,
+        #"<div data-testid="x"><p>a</p></div>"#,
+        #"<p>posted <time datetime="2026-01-01">yesterday</time> here</p>"#,
+        #"inline <time datetime="2026-01-01T00:00:00Z">stamp</time> text"#,
+        #"<article><div><p><a href="https://example.com">link</a> then <time datetime="2026-01-01">then</time></p></div></article>"#,
     ])
     @MainActor
     func differentialParity(_ html: String) throws {
