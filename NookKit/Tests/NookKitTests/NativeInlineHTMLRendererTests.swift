@@ -321,6 +321,14 @@ struct NativeInlineHTMLRendererTests {
         #"<p>posted <time datetime="2026-01-01">yesterday</time> here</p>"#,
         #"inline <time datetime="2026-01-01T00:00:00Z">stamp</time> text"#,
         #"<article><div><p><a href="https://example.com">link</a> then <time datetime="2026-01-01">then</time></p></div></article>"#,
+        // Wrappers the reader's own block parser split in half. Both shapes came out
+        // of the log, and each cost a ~124ms import for a few hundred bytes.
+        "<section><p>a</p><p>b</p>",
+        "<p>a</p></section><p>b</p>",
+        "<div><p>a</p>",
+        "<p>a</p></div>",
+        "</section><p>a</p>",
+        "<section><div><p>a</p>",
     ])
     @MainActor
     func differentialParity(_ html: String) throws {

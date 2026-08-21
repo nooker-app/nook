@@ -241,10 +241,14 @@ enum NativeInlineHTMLRenderer {
                 if tag.isClose {
                     if Self.transparentWrappers.contains(name) {
                         // Closes only where it opened: outside every inline tag, and
-                        // outside a paragraph.
-                        guard wrappers.last == name, stack.isEmpty, !inParagraph
-                        else { return nil }
-                        wrappers.removeLast()
+                        // outside a paragraph. A close with nothing to close is
+                        // ignored rather than refused — the reader's parser splits a
+                        // document into blocks and can hand this renderer a fragment
+                        // that begins inside a `<section>`, so a stray `</section>`
+                        // is ordinary rather than malformed, and the importer ignores
+                        // it too. Both of the fallbacks the log caught were this.
+                        guard stack.isEmpty, !inParagraph else { return nil }
+                        if wrappers.last == name { wrappers.removeLast() }
                         continue
                     }
                     guard let top = stack.last, top.name == name else { return nil }
@@ -348,7 +352,10 @@ enum NativeInlineHTMLRenderer {
             builder.append(character, style: style)
         }
 
-        guard stack.isEmpty, wrappers.isEmpty else { return nil }
+        // An unclosed wrapper is not an error either, for the same reason: a fragment
+        // can end inside the `<section>` it began in. The importer closes it silently
+        // and, since the element renders as nothing, so does this.
+        guard stack.isEmpty else { return nil }
         if !usedParagraphTags {
             finishParagraph()
         } else if inParagraph {

@@ -1487,6 +1487,13 @@ private struct ArticleListView: View {
 
     var body: some View {
         Group {
+            #if DEBUG
+            // Passes over the list, so the per-row counters below can be read as a
+            // rate rather than a total: rows-per-pass is the list's real cost, and a
+            // pass nobody asked for is a different defect from a pass that is too
+            // expensive.
+            let _ = MainThreadLog.add("list.body", ms: 0)
+            #endif
             if !store.isStorageConfigured {
                 ContentUnavailableView {
                     Label("Choose a Sync Folder", systemImage: "icloud")
@@ -1513,60 +1520,28 @@ private struct ArticleListView: View {
             } else {
                 List(selection: $store.selectedArticleID) {
                     ForEach(store.visibleArticles) { article in
+                        #if DEBUG
+                        // The closure itself, which runs per row per pass whatever
+                        // SwiftUI decides about the row's body — the two feed and
+                        // translation lookups below are paid here, not there.
+                        let _ = MainThreadLog.add("list.rowcontent", ms: 0)
+                        #endif
                         ArticleRow(article: article, feed: store.feed(for: article.feedID), translationBox: titleTranslator.box(for: article.id))
                             .tag(article.id)
                             .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
                             .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
-                            .contextMenu {
-                                #if DEBUG
-                                // Whether a row's menu is built when the row is drawn
-                                // or when it is opened. A count near the row count
-                                // means every row in the list pays for a menu nobody
-                                // asked for.
-                                let _ = MainThreadLog.add("list.row.menu", ms: 0)
-                                #endif
-                                Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
-                                    store.setRead(articleID: article.id, isRead: !article.isRead)
-                                }
-                                Button(article.isStarred ? "Remove Star" : "Star") {
-                                    store.toggleStarred(articleID: article.id)
-                                }
-                                Button(store.isOfflineSaved(article.id) ? "Remove Download" : "Save for Offline") {
-                                    if store.isOfflineSaved(article.id) {
-                                        store.removeOffline(article.id)
-                                    } else {
-                                        store.saveOffline(article)
-                                    }
-                                }
-                                Menu("Categories") {
-                                    CategoryMenuItems(store: store, article: article)
-                                }
-                                Divider()
-                                Link("Open in Browser", destination: article.url)
-                            }
+                            // One view value each, not a tree each. Both closures are
+                            // re-run whenever this row's content is re-evaluated —
+                            // measured at 8,865 times in half a minute of scrolling,
+                            // against 650 evaluations of the row's own body — and
+                            // spelling the items out inline meant building ten views,
+                            // a nested category menu among them, every one of those
+                            // times, for a menu nobody had opened. A child view's
+                            // `body` is SwiftUI's to call when it actually needs the
+                            // items; the counters inside them say whether it does.
+                            .contextMenu { ArticleRowMenu(store: store, article: article) }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                #if DEBUG
-                                let _ = MainThreadLog.add("list.row.swipe", ms: 0)
-                                #endif
-                                Button {
-                                    store.setRead(articleID: article.id, isRead: !article.isRead)
-                                } label: {
-                                    Label(
-                                        article.isRead ? "Mark as Unread" : "Mark as Read",
-                                        systemImage: article.isRead ? "circle" : "checkmark.circle.fill"
-                                    )
-                                }
-                                .tint(.accentColor)
-
-                                Button {
-                                    store.toggleStarred(articleID: article.id)
-                                } label: {
-                                    Label(
-                                        article.isStarred ? "Remove Star" : "Star",
-                                        systemImage: article.isStarred ? "star.slash.fill" : "star.fill"
-                                    )
-                                }
-                                .tint(.yellow)
+                                ArticleRowSwipeActions(store: store, article: article)
                             }
                     }
                 }
@@ -1653,6 +1628,70 @@ private struct ArticleListView: View {
 
     private var titleTargetLanguageCode: String {
         titleTargetLocale.language.languageCode?.identifier ?? "en"
+    }
+}
+
+/// The row's context menu, as a view rather than a closure body.
+///
+/// See the note at the call site: this exists so the list's per-row content stays a
+/// value, not ten views built on every pass over a thousand rows.
+private struct ArticleRowMenu: View {
+    let store: ReaderStore
+    let article: Article
+
+    var body: some View {
+        #if DEBUG
+        let _ = MainThreadLog.add("list.row.menu", ms: 0)
+        #endif
+        Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
+            store.setRead(articleID: article.id, isRead: !article.isRead)
+        }
+        Button(article.isStarred ? "Remove Star" : "Star") {
+            store.toggleStarred(articleID: article.id)
+        }
+        Button(store.isOfflineSaved(article.id) ? "Remove Download" : "Save for Offline") {
+            if store.isOfflineSaved(article.id) {
+                store.removeOffline(article.id)
+            } else {
+                store.saveOffline(article)
+            }
+        }
+        Menu("Categories") {
+            CategoryMenuItems(store: store, article: article)
+        }
+        Divider()
+        Link("Open in Browser", destination: article.url)
+    }
+}
+
+/// The row's leading swipe actions, for the same reason as `ArticleRowMenu`.
+private struct ArticleRowSwipeActions: View {
+    let store: ReaderStore
+    let article: Article
+
+    var body: some View {
+        #if DEBUG
+        let _ = MainThreadLog.add("list.row.swipe", ms: 0)
+        #endif
+        Button {
+            store.setRead(articleID: article.id, isRead: !article.isRead)
+        } label: {
+            Label(
+                article.isRead ? "Mark as Unread" : "Mark as Read",
+                systemImage: article.isRead ? "circle" : "checkmark.circle.fill"
+            )
+        }
+        .tint(.accentColor)
+
+        Button {
+            store.toggleStarred(articleID: article.id)
+        } label: {
+            Label(
+                article.isStarred ? "Remove Star" : "Star",
+                systemImage: article.isStarred ? "star.slash.fill" : "star.fill"
+            )
+        }
+        .tint(.yellow)
     }
 }
 
