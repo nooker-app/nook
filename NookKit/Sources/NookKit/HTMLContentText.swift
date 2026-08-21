@@ -621,6 +621,26 @@ struct HTMLMedia: Equatable, Sendable {
     let caption: String?
     let posterURL: URL?
     let aspectRatio: CGFloat?
+    /// The width the page declared, in CSS pixels, when it declared a numeric one.
+    ///
+    /// Only a ceiling, never a size to grow to: the point of knowing it is that the
+    /// space reserved while an image loads matches the space the image will take, so a
+    /// small image does not reserve the whole column and then visibly shrink into a
+    /// corner of it. What is actually drawn is bounded by the image's own size as
+    /// well — see `FittedArticleImage`.
+    let declaredWidth: CGFloat?
+
+    init(
+        url: URL, title: String?, caption: String?, posterURL: URL?, aspectRatio: CGFloat?,
+        declaredWidth: CGFloat? = nil
+    ) {
+        self.url = url
+        self.title = title
+        self.caption = caption
+        self.posterURL = posterURL
+        self.aspectRatio = aspectRatio
+        self.declaredWidth = declaredWidth
+    }
 }
 
 struct HTMLTable: Equatable, Sendable {
@@ -1050,7 +1070,8 @@ enum HTMLContentParser {
                 title: title,
                 caption: caption,
                 posterURL: nil,
-                aspectRatio: aspectRatio(in: tag)
+                aspectRatio: aspectRatio(in: tag),
+                declaredWidth: declaredWidth(in: tag)
             ))
         }
 
@@ -1450,6 +1471,16 @@ enum HTMLContentParser {
         return nil
     }
 
+    /// The `width` attribute, when it is a plain number of pixels.
+    ///
+    /// `width="100%"` and the like are not sizes and are ignored. Zero and negative
+    /// values are markup errors, not instructions to draw nothing.
+    private static func declaredWidth(in tag: String) -> CGFloat? {
+        guard let raw = attribute("width", in: tag), let value = Double(raw), value > 0
+        else { return nil }
+        return CGFloat(value)
+    }
+
     private static func aspectRatio(in tag: String) -> CGFloat? {
         guard let widthString = attribute("width", in: tag),
               let heightString = attribute("height", in: tag),
@@ -1510,6 +1541,47 @@ enum HTMLContentParser {
 
 // MARK: - Media views
 
+/// An article image at its own size when the column can hold it, scaled down when
+/// it cannot, and never scaled up.
+///
+/// `resizable()` means "fill whatever you are given", and the article column gives an
+/// image the full width — so a 64pt icon or a small diagram was drawn six hundred
+/// points wide, blurred and out of proportion with the text around it. What is wanted
+/// is a ceiling, not a target: `min(the image's own width, the column, whatever the
+/// page declared)`.
+///
+/// `ViewThatFits` expresses that without anyone having to know the pixel size. The
+/// unmodified `Image` reports its natural size and is preferred whenever it fits; the
+/// resizable one is reached only when it does not, so the only scaling that can
+/// happen is downward. Split out from the view below so the rule can be measured
+/// directly against images of known size.
+struct FittedArticleImage: View {
+    let image: SwiftUI.Image
+    let aspectRatio: CGFloat?
+    let declaredWidth: CGFloat?
+
+    var body: some View {
+        // No frame at all when the page declared no width: `maxWidth: .infinity` would
+        // hand back the full column and centre a narrow image in it, which is the
+        // half of the original problem that survives scaling correctly.
+        if let declaredWidth {
+            fitted.frame(maxWidth: declaredWidth, alignment: .leading)
+        } else {
+            fitted
+        }
+    }
+
+    private var fitted: some View {
+        ViewThatFits(in: .horizontal) {
+            image
+            // Reached only when the natural size does not fit, which is what makes
+            // the declared aspect ratio safe to apply here: it lands the image at the
+            // height the placeholder reserved (nil ⇒ intrinsic, same as scaledToFit).
+            image.resizable().aspectRatio(aspectRatio, contentMode: .fit)
+        }
+    }
+}
+
 private struct NativeArticleImage: View {
     let media: HTMLMedia
     @Environment(\.articleImagePresenter) private var presenter
@@ -1519,30 +1591,37 @@ private struct NativeArticleImage: View {
             AsyncImage(url: media.url) { phase in
                 switch phase {
                 case .success(let image):
-                    image
-                        .resizable()
-                        // Use the declared aspect ratio when the source gave one
-                        // (nil ⇒ intrinsic, same as scaledToFit), so the loaded
-                        // image lands at the height the placeholder already reserved.
-                        .aspectRatio(media.aspectRatio, contentMode: .fit)
-                        .contentShape(Rectangle())
-                        .onTapGesture { presenter?.present(url: media.url, caption: media.caption) }
-                        .help(String(localized: "Click to zoom", bundle: .module))
-                        #if canImport(AppKit)
-                        .pointerStyle(.zoomIn)
-                        #endif
+                    FittedArticleImage(
+                        image: image,
+                        aspectRatio: media.aspectRatio,
+                        declaredWidth: media.declaredWidth
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { presenter?.present(url: media.url, caption: media.caption) }
+                    .help(String(localized: "Click to zoom", bundle: .module))
+                    #if canImport(AppKit)
+                    .pointerStyle(.zoomIn)
+                    #endif
                 case .failure:
                     NativeMediaLink(media: media, systemImage: "photo", label: String(localized: "Open Image", bundle: .module))
                 default:
                     // Reserve the image's height up front from its aspect ratio so
                     // it doesn't jump content down under the finger when it loads;
                     // fall back to a fixed min height only when no ratio is known.
+                    // Bounded by the declared width for the same reason: reserving the
+                    // whole column for an image that will be drawn narrow is a visible
+                    // shrink at load rather than no jump at all.
                     ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: media.aspectRatio == nil ? 160 : nil)
+                        .frame(
+                            maxWidth: media.declaredWidth ?? .infinity,
+                            minHeight: media.aspectRatio == nil ? 160 : nil)
                         .aspectRatio(media.aspectRatio, contentMode: .fit)
                 }
             }
-            .frame(maxWidth: .infinity)
+            // No `maxWidth: .infinity` here: it would hand the image the whole column
+            // again, and round the corners of a full-width box around a narrow image.
+            // Leading, so an image that is narrower than the text sits with the text
+            // and its own caption rather than floating in the middle of the column.
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             if let caption = media.caption {
