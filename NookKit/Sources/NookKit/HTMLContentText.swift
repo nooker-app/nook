@@ -107,19 +107,8 @@ public struct HTMLContentView: View {
         if let cached = HTMLBlockCache.shared.parsed(html: html, baseURL: baseURL) {
             blocks = cached.blocks
             anchors = cached.anchors
-            #if DEBUG && os(macOS)
-            GeometryLog.add("parse.hit", ms: 0)
-            #endif
         } else {
-            #if DEBUG && os(macOS)
-            // A miss here is a synchronous parse on whatever thread is building the
-            // view, which for the reader is the main one.
-            let parsed = GeometryLog.measure("parse.miss") {
-                HTMLContentParser.parseWithAnchors(html, baseURL: baseURL)
-            }
-            #else
             let parsed = HTMLContentParser.parseWithAnchors(html, baseURL: baseURL)
-            #endif
             HTMLBlockCache.shared.store(parsed, html: html, baseURL: baseURL)
             blocks = parsed.blocks
             anchors = parsed.anchors
@@ -3224,26 +3213,8 @@ public struct HTMLContentText: View {
         // Bound the pre-`.ready` warm to the above-the-fold blocks so a very long
         // article doesn't hold the content back importing everything up front.
         let blocks = maxBlocks.map { Array(all.prefix($0)) } ?? all
-        #if DEBUG && os(macOS)
-        let warmStarted = ProcessInfo.processInfo.systemUptime
-        GeometryLog.note(
-            "warm.begin", extra: "blocks=\(blocks.count)/\(all.count) bounded=\(maxBlocks != nil)")
-        defer {
-            GeometryLog.activity("-")
-            GeometryLog.note(
-                "warm.end",
-                extra: String(
-                    format: "blocks=%d took=%.0fms", blocks.count,
-                    (ProcessInfo.processInfo.systemUptime - warmStarted) * 1000))
-        }
-        var warmIndex = 0
-        #endif
         for block in blocks {
             if Task.isCancelled { return }
-            #if DEBUG && os(macOS)
-            warmIndex += 1
-            GeometryLog.activity("warm[\(warmIndex)/\(blocks.count)]")
-            #endif
             switch block {
             case .text(let fragment):
                 warmAttributed(fragment, baseSize: typography.bodySize, bold: false, typography: typography)
@@ -3285,25 +3256,21 @@ public struct HTMLContentText: View {
         // WebKit machinery). Anything the native path can't reproduce exactly
         // returns nil and takes the WebKit importer below, byte-for-byte as
         // before — exotic HTML can never regress.
-        if !NativeInlineHTMLRenderer.isDisabled {
-            #if DEBUG && os(macOS)
-            let native = GeometryLog.measure("import.native.try") {
-                NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold, typography: typography)
-            }
-            #else
-            let native = NativeInlineHTMLRenderer.importPrepared(prepared, baseSize: baseSize, bold: bold, typography: typography)
-            #endif
-            if let native { return native }
+        if !NativeInlineHTMLRenderer.isDisabled,
+           let native = NativeInlineHTMLRenderer.importPrepared(
+               prepared, baseSize: baseSize, bold: bold, typography: typography) {
+            return native
         }
         #if DEBUG && os(macOS)
-        // The expensive one, and the reason this file is instrumented: a WebKit HTML
-        // import runs on the main thread and cannot be moved off it. Measured at
-        // 177ms a call against 0.18ms for the native path, which is enough on its own
-        // to break the elastic return of a scroll gesture — so the markup that lands
-        // here is recorded (element names and lengths, never text) to say what the
-        // native renderer would have to learn in order for nothing to.
-        GeometryLog.noteFallbackTags(in: prepared)
-        return GeometryLog.measure("import.webkit") {
+        // The one path here worth still measuring after the rest of the reader's
+        // instrumentation came out: a WebKit HTML import runs on the main thread, in a
+        // nested run loop, and cannot be moved off it. Measured at ~200ms a call
+        // against 0.17ms for the native path, which is enough on its own to break the
+        // elastic return of a scroll gesture. The markup that lands here is recorded —
+        // element names and lengths, never text — because one unknown element name
+        // sends a whole fragment down this path and the fragment never says which.
+        MainThreadLog.noteFallbackTags(in: prepared)
+        return MainThreadLog.measure("import.webkit") {
             webKitImport(prepared, baseSize: baseSize, bold: bold, typography: typography)
         }
         #else

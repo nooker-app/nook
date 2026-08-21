@@ -1,6 +1,6 @@
 ---
 name: ui-behavior-forensics
-description: Find the cause of UI misbehaviour that happens over time or in response to input — the scroll moves on its own, the caret or focus jumps, something flickers, "it only happens when I press space", "only on the last line", "only while syncing". Instrument the running app to a log, then read the numbers and reconstruct the arithmetic. Use when a standalone repro does not reproduce, when the symptom depends on input kind or position, and to measure the cost of a fix before shipping it. For static "it looks wrong / clipped / misaligned" use `swiftui-visual-harness` instead.
+description: Find the cause of UI misbehaviour that happens over time or in response to input — the scroll moves on its own, the caret or focus jumps, something flickers, the app freezes or "lags", "it only happens when I press space", "only on the last line", "only while syncing". Instrument the running app to a log, then read the numbers and reconstruct the arithmetic. Use when a standalone repro does not reproduce, when the symptom depends on input kind or position, when the complaint is that something is slow and you need the stall measured and attributed, and to measure the cost of a fix before shipping it. For static "it looks wrong / clipped / misaligned" use `swiftui-visual-harness` instead.
 ---
 
 # UI behaviour forensics
@@ -31,8 +31,9 @@ guessed — you can only model what you already suspect.
 
 ## Instrument the running app
 
-Copy `GeometryLog.swift` into the module, add call sites, ask the user for one
-reproduction, read the file yourself.
+Copy `GeometryLog.swift` (geometry: offsets, heights, insets, per-move) or
+`MainThreadLog.swift` (cost: measured stalls, attributed) into the module, add call
+sites, ask the user for one reproduction, read the file yourself.
 
 ```sh
 find ~/Library/Containers -name 'ui-forensics.log'   # sandboxed app → container tmp
@@ -60,6 +61,45 @@ log by what the user pressed. Log lengths and offsets, not what somebody wrote.
 
 Buffer in memory and flush at ~200 lines and on teardown. Writing per event
 perturbs the timing you are measuring. `#if DEBUG` so it cannot ship.
+
+## When the complaint is "it's slow", measure the stall and attribute it
+
+Geometry answers *what moved*. A freeze needs a different instrument, and guessing
+at it cost two rounds before this existed.
+
+**Measure the stall, don't infer it.** The main thread stamps a clock every 50ms
+from a run-loop timer; a background thread notices when the stamp goes stale. A
+timer cannot fire while the main thread is blocked, so its silence *is* the
+measurement. Report the stall when it ends, so its real duration is known.
+
+**Then attribute it, or the number is useless.** The first log this produced blamed
+6.5 of 7.9 stalled seconds on nothing at all — the only labelled scope was one cache
+warm. Three things fixed that, and all three earned their place:
+
+- **The run loop's own phase**, from a `CFRunLoopObserver` on all activities.
+  `beforeWaiting` is where AppKit commits a CoreAnimation transaction, so it means
+  SwiftUI layout; `afterWaiting`/`beforeSources` mean an input event; `exit` means a
+  nested loop (event tracking, or a WebKit HTML import) just ended.
+- **A diff of the work counters across the stall.** Counters you already keep
+  (`add(label, ms:)`) become an attribution for free: `ran list.rowx847,
+  import.webkitx1 284ms` names the freeze without a new call site per suspect.
+- **Counters, not lines, for anything per-row or per-block.** A thousand list rows
+  logged individually bury the answer in the logging. `let _ = Log.add(...)` works
+  inside a `@ViewBuilder`.
+
+**Nesting must restore, not clear.** An `activity(_:)` that resets to `"-"` on exit
+erases its caller's label; have it return the previous one and put it back.
+
+**Check the writer before trusting the log.** `String(format:)` mixing `%@` with
+`%f` printed every float as `nan` on this ABI. Write ten lines through it, read the
+file, and look — before asking anyone for a reproduction.
+
+**And check that you are watching the right view.** The heuristic "the widest clip
+taller than 200pt" picked the *article list* in the log meant to explain the
+*reader*: a thousand rows make a document 134,399pt tall in a column wider than a
+narrow reader pane, so every line reported the wrong geometry under the right name.
+A zero-sized `NSViewRepresentable` inside the view you mean, handing over
+`enclosingScrollView?.contentView`, cannot be wrong.
 
 ## Read it with arithmetic, not adjectives
 

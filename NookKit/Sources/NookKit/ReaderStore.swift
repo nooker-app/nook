@@ -738,9 +738,6 @@ public final class ReaderStore {
         let refreshing = !refreshingFeedIDs.isEmpty
         if isRefreshing != refreshing {
             isRefreshing = refreshing
-            #if DEBUG && os(macOS)
-            GeometryLog.note("store.refreshing", extra: "on=\(refreshing)")
-            #endif
         }
     }
 
@@ -812,6 +809,18 @@ public final class ReaderStore {
         // text query does an O(n·paragraphs) locale scan, so route it off the main
         // actor even under the threshold, so search never hitches the main thread.
         if query.isEmpty && snapshot.count < Self.backgroundFilterThreshold {
+            #if DEBUG && os(macOS)
+            // The synchronous path, so its cost is main-thread cost. The background
+            // one is not counted here: it is not on this thread.
+            let outerActivity = MainThreadLog.activity("list.filter")
+            defer { MainThreadLog.activity(outerActivity) }
+            let filterStarted = ProcessInfo.processInfo.systemUptime
+            defer {
+                MainThreadLog.add(
+                    "list.filter",
+                    ms: (ProcessInfo.processInfo.systemUptime - filterStarted) * 1000)
+            }
+            #endif
             applyDisplayed(Self.computeVisibleArticles(
                 snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
                 smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order
@@ -873,12 +882,34 @@ public final class ReaderStore {
         // recomputes are common: selection retention, no-op merges, re-sorts).
         if oldIDs == newIDs,
            zip(displayedArticles, result).allSatisfy({ RowProjection($0) == RowProjection($1) }) {
+            #if DEBUG && os(macOS)
+            // Counted because it is the good case, and its ratio to `list.publish` is
+            // what says whether the guard is earning its keep.
+            MainThreadLog.add("list.publish.skipped", ms: 0)
+            #endif
             pruneSelectionIfHidden()
             markVisibleArticlesSeen()
             return
         }
         let oldSet = Set(oldIDs)
-        if animated, oldIDs != newIDs, !oldSet.isEmpty, !oldSet.isDisjoint(with: newIDs) {
+        let willAnimate = animated && oldIDs != newIDs && !oldSet.isEmpty
+            && !oldSet.isDisjoint(with: newIDs)
+        #if DEBUG && os(macOS)
+        // Every republish invalidates every row, and the list is a thousand of them.
+        // Three separate questions, so three counters: how often the list is handed a
+        // new array at all, how many rows it holds when that happens, and whether the
+        // swap was animated — SwiftUI has to interpolate a thousand row identities
+        // when it is. The row-body counter on the other side (`list.row`) says how
+        // many rows each of these actually cost.
+        let outerActivity = MainThreadLog.activity(
+            willAnimate ? "list.publish.animated" : "list.publish")
+        defer { MainThreadLog.activity(outerActivity) }
+        MainThreadLog.add(willAnimate ? "list.publish.animated" : "list.publish", ms: 0)
+        MainThreadLog.note(
+            "list.publish",
+            extra: "rows=\(oldIDs.count)->\(newIDs.count) animated=\(willAnimate)")
+        #endif
+        if willAnimate {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                 displayedArticles = result
             }
@@ -3416,9 +3447,6 @@ public final class ReaderStore {
             return try? JSONDecoder().decode(ReaderCommentThread.self, from: payload)
         }.value
         guard let thread, !thread.isEmpty else { return }
-        #if DEBUG && os(macOS)
-        GeometryLog.note("store.comments.land", extra: "n=\(thread.items.count)")
-        #endif
         readerCommentThreads[id] = thread
         await warmComments(thread, baseURL: article.url)
     }
@@ -3432,16 +3460,6 @@ public final class ReaderStore {
     /// import each body runs after it mounts, which also changes its height. Warming
     /// that is what the rows need.
     private func warmComments(_ thread: ReaderCommentThread, baseURL: URL) async {
-        #if DEBUG && os(macOS)
-        let started = ProcessInfo.processInfo.systemUptime
-        GeometryLog.activity("warmComments")
-        defer {
-            GeometryLog.activity("-")
-            GeometryLog.note(
-                "warm.comments",
-                extra: String(format: "took=%.0fms", (ProcessInfo.processInfo.systemUptime - started) * 1000))
-        }
-        #endif
         for comment in thread.items.prefix(ReaderCommentsSection.firstPage) {
             guard let html = comment.renderableHTML else { continue }
             if Task.isCancelled { return }
@@ -3453,9 +3471,6 @@ public final class ReaderStore {
     /// Publishes a freshly-resolved body: flips the reader to `.ready`, records
     /// which parser produced it, and keeps it for an instant switch back.
     private func note(html: String, engine: ReaderParserEngine, for article: Article) {
-        #if DEBUG && os(macOS)
-        GeometryLog.note("store.content.ready", extra: "bytes=\(html.utf8.count) engine=\(engine.rawValue)")
-        #endif
         noteReaderContentByEngine(html, engine: engine, for: article.id)
         reparsingArticles[article.id] = nil
         readerContentEngines[article.id] = engine
@@ -3535,14 +3550,8 @@ public final class ReaderStore {
         // blocks, and switching articles cancels it.
         warmRemainderTask?.cancel()
         warmRemainderTask = Task { @MainActor in
-            #if DEBUG && os(macOS)
-            GeometryLog.note("warm.remainder.begin", extra: "bytes=\(html.utf8.count)")
-            #endif
             await HTMLContentText.warmReaderAttributedCache(
                 html: html, baseURL: baseURL, typography: .current(), maxBlocks: nil)
-            #if DEBUG && os(macOS)
-            GeometryLog.note("warm.remainder.end")
-            #endif
         }
     }
 

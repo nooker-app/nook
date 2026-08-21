@@ -509,11 +509,8 @@ private struct ReaderWorkspaceView: View {
         }
         #if DEBUG
         // Installed here because nothing above this carries an `.id`, so the one
-        // registration outlives every article change. Debug only; see `GeometryLog`.
-        .onAppear {
-            GeometryLog.observeAllClips()
-            GeometryLog.startWatchdog()
-        }
+        // registration outlives every article change. Debug only; see `MainThreadLog`.
+        .onAppear { MainThreadLog.startWatchdog() }
         #endif
     }
 }
@@ -1526,7 +1523,7 @@ private struct ArticleListView: View {
                                 // or when it is opened. A count near the row count
                                 // means every row in the list pays for a menu nobody
                                 // asked for.
-                                let _ = GeometryLog.add("list.row.menu", ms: 0)
+                                let _ = MainThreadLog.add("list.row.menu", ms: 0)
                                 #endif
                                 Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
                                     store.setRead(articleID: article.id, isRead: !article.isRead)
@@ -1549,7 +1546,7 @@ private struct ArticleListView: View {
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                                 #if DEBUG
-                                let _ = GeometryLog.add("list.row.swipe", ms: 0)
+                                let _ = MainThreadLog.add("list.row.swipe", ms: 0)
                                 #endif
                                 Button {
                                     store.setRead(articleID: article.id, isRead: !article.isRead)
@@ -1675,7 +1672,7 @@ private struct ArticleRow: View {
             // Counted, not logged: the article list is a thousand rows, and the
             // question a stall raises is how many of them were re-evaluated, which a
             // line each would answer unreadably.
-            let _ = GeometryLog.add("list.row", ms: 0)
+            let _ = MainThreadLog.add("list.row", ms: 0)
             #endif
             Circle()
                 .fill(article.isRead ? Color.clear : Color.accentColor)
@@ -2421,18 +2418,8 @@ private struct ReaderDetailView: View {
     }
 
     private func articleReader(_ article: Article) -> some View {
-        #if DEBUG
-        // Counted rather than logged: a burst of these is symptom 1's other half, and
-        // a line per evaluation would bury the burst in itself.
-        GeometryLog.add("reader.body", ms: 0)
-        #endif
-        return ScrollView {
+        ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                #if DEBUG
-                // Inside the reader's own scroll view, so the log records the reader's
-                // geometry rather than whichever clip happened to be widest.
-                GeometryLog.readerProbe().frame(width: 0, height: 0)
-                #endif
                 articleHeader(article)
 
                 if summariesEnabled {
@@ -2570,9 +2557,6 @@ private struct ReaderDetailView: View {
         // on, restart the translator against the now-rendered extracted HTML so
         // its per-block overrides line up with what's shown.
         .onChange(of: store.readerContentState(for: article)) { _, newValue in
-            #if DEBUG
-            GeometryLog.note("change.content", extra: "state=\(String(describing: newValue))".prefix(40).description)
-            #endif
             guard nativeTranslator.isActive, case .ready(let extracted) = newValue else { return }
             nativeTranslator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
         }
@@ -2600,24 +2584,6 @@ private struct ReaderDetailView: View {
         .animation(.easeInOut(duration: 0.2), value: store.isReparsing(article))
         .id(article.id)
         .transition(.push(from: readerNavForward ? .bottom : .top))
-        #if DEBUG
-        .onAppear {
-            GeometryLog.note(
-                "reader.appear",
-                extra: "comments=\(store.readerComments(for: article)?.items.count ?? 0) "
-                    + "inspector=\(UserDefaults.standard.bool(forKey: "inspectorPresented"))")
-        }
-        .background {
-            // The gap above the title, recorded as a number rather than described: the
-            // header's own height, which the byline is the only variable term in.
-            GeometryReader { proxy in
-                Color.clear.onAppear {
-                    GeometryLog.note(
-                        "reader.width", extra: "paneW=\(Int(proxy.size.width))")
-                }
-            }
-        }
-        #endif
     }
 
     /// Summaries consume exactly the Markdown represented by the visible native
