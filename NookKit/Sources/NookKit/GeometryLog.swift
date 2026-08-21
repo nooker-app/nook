@@ -1,5 +1,6 @@
 #if DEBUG && os(macOS)
 import AppKit
+import SwiftUI
 
 /// A phase-tagged record of the reader's geometry, for the misbehaviour that only
 /// happens in the running app.
@@ -106,14 +107,31 @@ public enum GeometryLog {
 
     private static var observer: ClipSink?
 
+    /// A zero-sized view that hands `GeometryLog` the clip view it is inside.
+    ///
+    /// The heuristic this replaces — the widest clip taller than 200pt — picked the
+    /// **article list** in the log it was supposed to explain: a thousand rows make a
+    /// document 134,399pt tall and a column wider than a narrow reader pane, so every
+    /// `note` line reported the list's geometry while claiming to be the reader's.
+    /// Placed inside the reader's own `ScrollView`, this cannot be wrong.
+    public static func readerProbe() -> some View { ReaderClipProbe() }
+
+    private struct ReaderClipProbe: NSViewRepresentable {
+        func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+        func updateNSView(_ view: NSView, context: Context) {
+            // Deferred: the view is not in a window yet on the first update, so it has
+            // no enclosing scroll view to find.
+            DispatchQueue.main.async {
+                if let clip = view.enclosingScrollView?.contentView { GeometryLog.reader = clip }
+            }
+        }
+    }
+
     @MainActor
     private final class ClipSink: NSObject {
         @objc func boundsChanged(_ notification: Notification) {
             guard let clip = notification.object as? NSClipView, clip.frame.height > 200
             else { return }
-            if clip.frame.width > (GeometryLog.reader?.frame.width ?? 0) {
-                GeometryLog.reader = clip
-            }
             GeometryLog.note(
                 "bounds", clip: clip,
                 extra: "clip=\(UInt(bitPattern: ObjectIdentifier(clip).hashValue) % 1000) "
@@ -162,6 +180,16 @@ private final class MainThreadProbe: @unchecked Sendable {
         lock.lock(); activity = label; lock.unlock()
     }
 
+    /// Which part of the main run loop last ran, so a stall outside any labelled
+    /// activity still says something. `beforeWaiting` is where AppKit commits a
+    /// CoreAnimation transaction, which is where SwiftUI lays out; `afterWaiting`
+    /// and `beforeSources` are handling an input event; `beforeTimers` is a timer.
+    func setPhase(_ phase: String) {
+        lock.lock(); self.phase = phase; lock.unlock()
+    }
+
+    private var phase = "-"
+
     func add(_ label: String, ms: Double) {
         lock.lock()
         var entry = totals[label] ?? (0, 0)
@@ -176,19 +204,47 @@ private final class MainThreadProbe: @unchecked Sendable {
         lock.lock()
         let late = now - heartbeat
         let current = activity
+        let currentPhase = phase
+        let snapshot = totals
         lock.unlock()
         if late > threshold {
-            if inStall == nil { inStall = (now - late, current) }
+            if inStall == nil {
+                inStall = (now - late, current, currentPhase, snapshot)
+            }
             return nil
         }
         guard let stall = inStall else { return nil }
         inStall = nil
-        let seconds = now - stall.0
-        lock.lock(); stalls.append((stall.0, seconds, stall.1)); lock.unlock()
-        return (seconds, stall.1)
+        let seconds = now - stall.started
+
+        // What actually ran while the main thread was gone. This exists because the
+        // first log this watchdog produced attributed 6.5 of 7.9 stalled seconds to
+        // nothing at all: the labelled activities covered the cache warm and no other
+        // main-thread work, so the majority of the freeze had no name. Diffing the
+        // work counters across the stall names it without needing a new call site.
+        lock.lock()
+        let after = totals
+        lock.unlock()
+        let ran = after.compactMap { label, entry -> (String, Int, Double)? in
+            let before = stall.work[label] ?? (calls: 0, ms: 0)
+            let calls = entry.calls - before.calls
+            guard calls > 0 else { return nil }
+            return (label, calls, entry.ms - before.ms)
+        }
+        .sorted { $0.2 > $1.2 }
+        .prefix(3)
+        .map { $0.2 >= 1 ? "\($0.0)x\($0.1) \($0.2.rounded(toPlaces: 0))ms" : "\($0.0)x\($0.1)" }
+        .joined(separator: ", ")
+
+        let during = (stall.activity == "-" ? "runloop:\(stall.phase)" : stall.activity)
+            + (ran.isEmpty ? "  ran nothing counted" : "  ran \(ran)")
+        lock.lock(); stalls.append((stall.started, seconds, during)); lock.unlock()
+        return (seconds, during)
     }
 
-    private var inStall: (Double, String)?
+    private var inStall:
+        (started: Double, activity: String, phase: String,
+         work: [String: (calls: Int, ms: Double)])?
 
     func drainTotals() -> [(label: String, calls: Int, ms: Double)] {
         lock.lock()
@@ -228,6 +284,22 @@ extension GeometryLog {
         RunLoop.main.add(writer, forMode: .common)
         flushTimer = writer
 
+        // Names the run loop's own phases, which is what gives an unlabelled stall an
+        // attribution. All activities, one lock write each, no allocation.
+        let names: [(CFRunLoopActivity, String)] = [
+            (.entry, "entry"), (.beforeTimers, "beforeTimers"),
+            (.beforeSources, "beforeSources"), (.beforeWaiting, "beforeWaiting"),
+            (.afterWaiting, "afterWaiting"), (.exit, "exit"),
+        ]
+        let phases = CFRunLoopObserverCreateWithHandler(
+            nil, CFRunLoopActivity.allActivities.rawValue, true, 0
+        ) { _, activity in
+            let name = names.first { $0.0 == activity }?.1 ?? "?"
+            MainThreadProbe.shared.setPhase(name)
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), phases, .commonModes)
+        phaseObserver = phases
+
         let watchdog = Thread {
             while true {
                 let now = ProcessInfo.processInfo.systemUptime
@@ -252,6 +324,31 @@ extension GeometryLog {
 
     private static var heartbeatTimer: Timer?
     private static var flushTimer: Timer?
+    private static var phaseObserver: CFRunLoopObserver?
+
+    /// Records which elements sent a fragment down the WebKit importer, so the
+    /// native path can be taught them. Element names and a length — never text.
+    ///
+    /// Capped, because one article can fall back on every paragraph and the answer is
+    /// in the first handful either way.
+    public static func noteFallbackTags(in html: String) {
+        guard fallbacksLogged < 24 else { return }
+        fallbacksLogged += 1
+        var tags: Set<String> = []
+        var index = html.startIndex
+        while let open = html[index...].firstIndex(of: "<") {
+            let rest = html[html.index(after: open)...]
+            let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "/" || $0 == "!" }
+            if !name.isEmpty { tags.insert(name.lowercased()) }
+            guard let next = html[html.index(after: open)...].firstIndex(of: "<") else { break }
+            index = next
+        }
+        note(
+            "import.fallback",
+            extra: "len=\(html.utf8.count) tags=\(tags.sorted().joined(separator: ","))")
+    }
+
+    private static var fallbacksLogged = 0
 
     /// Names what the main thread is doing, so a stall can be attributed to it.
     public static func activity(_ label: String) {

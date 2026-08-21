@@ -3284,7 +3284,12 @@ public struct HTMLContentText: View {
         }
         #if DEBUG && os(macOS)
         // The expensive one, and the reason this file is instrumented: a WebKit HTML
-        // import runs on the main thread and cannot be moved off it.
+        // import runs on the main thread and cannot be moved off it. Measured at
+        // 177ms a call against 0.18ms for the native path, which is enough on its own
+        // to break the elastic return of a scroll gesture — so the markup that lands
+        // here is recorded (element names and lengths, never text) to say what the
+        // native renderer would have to learn in order for nothing to.
+        GeometryLog.noteFallbackTags(in: prepared)
         return GeometryLog.measure("import.webkit") {
             webKitImport(prepared, baseSize: baseSize, bold: bold, typography: typography)
         }

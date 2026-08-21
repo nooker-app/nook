@@ -2412,6 +2412,11 @@ private struct ReaderDetailView: View {
         #endif
         return ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                #if DEBUG
+                // Inside the reader's own scroll view, so the log records the reader's
+                // geometry rather than whichever clip happened to be widest.
+                GeometryLog.readerProbe().frame(width: 0, height: 0)
+                #endif
                 articleHeader(article)
 
                 if summariesEnabled {
