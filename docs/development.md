@@ -93,4 +93,4 @@ git tag v0.1.8
 git push origin v0.1.8
 ```
 
-The macOS runner archives a universal ad-hoc build, packages a DMG, publishes a GitHub Release, signs the update, and updates the Sparkle appcast on the `gh-pages` branch.
+The macOS runner archives a universal build signed with a Developer ID, packages a DMG, notarizes and staples it, publishes a GitHub Release, updates the Homebrew cask in the tap, signs the update, and updates the Sparkle appcast on the `gh-pages` branch. A tag release fails rather than falling back to ad-hoc signing; see [the App Store notes](app-store-submission.md#signing-and-notarizing-the-mac-app).

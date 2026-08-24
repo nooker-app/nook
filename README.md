@@ -102,18 +102,13 @@ Whether to use a server, who owns what you write, whether AI is involved at all 
 brew install --cask nooker-app/tap/nook
 ```
 
-Nook is ad-hoc signed rather than notarized. On first launch, right-click **Nook** in Applications and choose **Open**, or install without quarantine:
-
-```sh
-HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask nooker-app/tap/nook
-```
+Nook is signed with a Developer ID and notarized, so a cask install opens without a Gatekeeper prompt. It updates itself through Sparkle afterwards, which is why `brew upgrade` has nothing to do.
 
 ### macOS (DMG)
 
 1. Download the latest [Nook DMG](https://github.com/nooker-app/nook/releases/latest).
 2. Drag **Nook** into **Applications**.
-3. Right-click `Nook.app` and choose **Open**, or run `xattr -dr com.apple.quarantine /Applications/Nook.app` once.
-4. Choose the folder where Nook should keep and sync your library.
+3. Choose the folder where Nook should keep and sync your library.
 
 Requires **macOS 26 (Tahoe)** or later. The universal build supports Apple Silicon and Intel. Apple Intelligence translation requires a supported Apple Silicon Mac; Gemini is optional and requires your own API key and a network connection.
 

@@ -46,14 +46,22 @@ setup**; after it's in place, releases keep the cask up to date automatically.
 
 ## Notes
 
-- **Not notarized.** The build is ad-hoc signed, so a cask-installed copy is
-  still quarantined by default. The cask's `caveats` explain the right-click /
-  `xattr` unlock, and `HOMEBREW_CASK_OPTS="--no-quarantine" brew install …`
-  skips it. Notarizing (an Apple Developer
-  account) would remove that friction and is the prerequisite for submitting to
-  the official `homebrew/cask` tap.
+- **Signed and notarized since 0.1.51.** Quarantine no longer needs explaining,
+  so the cask carries no `caveats`: a cask install opens like any other app. Do
+  not reinstate the `--no-quarantine` advice that the ad-hoc builds needed. It
+  would teach people to disable a check that now passes. Notarization is also the
+  prerequisite for submitting to the official `homebrew/cask` tap.
 - **Updates.** The cask sets `auto_updates true` because the app updates itself
-  via Sparkle; `brew upgrade` still re-installs the latest cask version.
+  via Sparkle, so `brew upgrade` deliberately leaves an installed copy alone.
+  `brew upgrade --cask --greedy nook` overrides that, which is only worth doing
+  if Sparkle is broken.
+- **Minimum macOS.** The cask declares `depends_on macos: :tahoe` (`macos:`
+  compares with `>=`, so that reads as Tahoe or newer). Without it Homebrew
+  installs onto an older macOS and the mismatch surfaces as an app that will not
+  open, which is a worse error than a refused install.
+- **Style.** `brew style Casks/nook.rb`, run from a clone of the tap, checks the
+  generated cask. The template in `release.yml` is kept at zero offences, so a
+  new offence means the template changed and not that the tool got stricter.
 - **Uninstall.** `brew uninstall --cask nook`; `brew uninstall --zap --cask nook`
   also removes preferences/caches. Zap never touches your chosen sync folder —
   that's your data.

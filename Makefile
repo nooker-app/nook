@@ -46,7 +46,7 @@ app-store-check-faces:
 	xcrun swift marketing/app-store/check-faces.swift $$(find marketing/app-store/captures marketing/app-store/output -name '*.png' | sort)
 
 # One-time setup for a signed, notarized Mac build in CI. Prompts for a
-# certificate and an App Store Connect key and stores five repository secrets;
-# until they exist the release workflow builds ad-hoc on purpose.
+# certificate and an App Store Connect key and stores five repository secrets.
+# Without them a tag release fails; only a manual run falls back to ad-hoc.
 macos-signing-secrets:
 	tools/macos-signing-secrets.sh
