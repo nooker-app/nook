@@ -279,11 +279,30 @@ jobs:
           path: ${{ steps.dmg.outputs.path }}
           if-no-files-found: error
 
+      # A second copy of the same file under a name that never changes. GitHub's
+      # /releases/latest/download/<name> redirect needs a fixed asset name, and
+      # the versioned one moves every release, so without this the website can
+      # only link to the release page and let people find the file. Copied after
+      # notarization, so it carries the stapled ticket rather than a fresh
+      # unstapled image.
+      - name: Add a version-less copy of the DMG
+        id: stable_dmg
+        if: github.event_name == 'push'
+        run: |
+          cp "${{ steps.dmg.outputs.path }}" Nook.dmg
+          # Byte-identical or the stable URL would serve a different build than
+          # the versioned one, which is the whole thing this must not do.
+          shasum -a 256 "${{ steps.dmg.outputs.path }}" Nook.dmg
+          cmp "${{ steps.dmg.outputs.path }}" Nook.dmg
+          echo "path=Nook.dmg" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.dmg.outputs.path }}
+          files: |
+            ${{ steps.dmg.outputs.path }}
+            ${{ steps.stable_dmg.outputs.path }}
           generate_release_notes: true
           body: |
             ## Install
@@ -293,6 +312,10 @@ jobs:
             ${{ steps.signing.outputs.mode == 'ad-hoc' && '3. This build is ad-hoc signed, not notarized, so the first launch is blocked: right-click `Nook.app`, choose **Open**, then **Open** again.' || '' }}
 
             Requires macOS 26 or later.
+
+            `Nook.dmg` is the same file under a name that does not change, so
+            <https://github.com/nooker-app/nook/releases/latest/download/Nook.dmg>
+            always reaches the current build. That is what the download page links to.
 
       # --- Homebrew cask: publish/update a cask in the custom tap ---
       # Requires repo secret HOMEBREW_TAP_DEPLOY_KEY: the PRIVATE half of an SSH
