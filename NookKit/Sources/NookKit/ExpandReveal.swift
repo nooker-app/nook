@@ -121,6 +121,14 @@ private struct MacListRowHeightInvalidator: NSViewRepresentable {
         }
 
         private func invalidateEnclosingRow() {
+            #if DEBUG
+            // `noteHeightOfRows` makes AppKit re-query a row's height, and re-querying
+            // one row of a table this long is not free. Counted because the field log
+            // attributed 720 of 1,167 stalled seconds to nothing this file knew about,
+            // all of it beginning while an input event was being handled — which is
+            // what scrolling is.
+            MainThreadLog.add("list.row.height", ms: 0)
+            #endif
             invalidateHostingHierarchy()
 
             if let tableView = enclosingView(of: NSTableView.self) {

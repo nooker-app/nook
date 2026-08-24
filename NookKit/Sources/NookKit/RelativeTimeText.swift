@@ -95,6 +95,12 @@ public struct RelativeTimeText: View {
     }
 
     public var body: some View {
+        #if DEBUG && os(macOS)
+        // Counted because the article list draws one of these per row and they follow
+        // a shared ticker, so they re-render without their row's body doing so —
+        // which makes them invisible to every other counter here.
+        let _ = MainThreadLog.add("relativetime.body", ms: 0)
+        #endif
         Text(
             Self.string(
                 for: date,
