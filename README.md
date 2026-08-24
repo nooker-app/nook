@@ -114,7 +114,9 @@ Requires **macOS 26 (Tahoe)** or later. The universal build supports Apple Silic
 
 ### iOS / iPadOS
 
-There is no App Store build yet. To install it on your own device:
+[Nook on the App Store](https://apps.apple.com/us/app/nook-read-write-own/id6797773158). On first launch, pick the same synced folder your Mac uses through the Files picker.
+
+To run your own build on a device instead:
 
 1. Open `Nook.xcodeproj` and select the **NookiOS** scheme and your device.
 2. Choose your team under **Signing & Capabilities**, then press **⌘R**.
