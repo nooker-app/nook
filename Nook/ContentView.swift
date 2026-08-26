@@ -80,30 +80,6 @@ struct ContentView: View {
         showTranslatePromo = true
     }
 
-    /// A thin determinate banner shown only while an OPML import is fetching feed
-    /// content. Bound to `store.importProgress`; renders nothing (zero height)
-    /// when idle.
-    @ViewBuilder private var importProgressBanner: some View {
-        if let progress = store.importProgress {
-            VStack(spacing: 4) {
-                HStack {
-                    Text("Importing feeds…")
-                    Spacer()
-                    Text("\(progress.completed) of \(progress.total)")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .font(.footnote)
-                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
-                    .progressViewStyle(.linear)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(.bar)
-        }
-    }
-
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             FeedSidebar(
@@ -127,7 +103,7 @@ struct ContentView: View {
         .frame(minWidth: 920, minHeight: 640)
         // OPML import progress: feeds and folders land at once (Phase 1); this
         // thin banner tracks the content fetch and reserves zero height when idle.
-        .safeAreaInset(edge: .top, spacing: 0) { importProgressBanner }
+        .safeAreaInset(edge: .top, spacing: 0) { ImportProgressBanner(store: store) }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 // Add Feed, New Folder, and OPML import/export live in the
@@ -3186,6 +3162,85 @@ private struct OPMLImportRequest: Identifiable {
 /// A native import preview: pick which OPML feeds to bring in before merging.
 /// Styled to match the main window (inset list + sections) rather than the
 /// grouped Settings form.
+/// The OPML-import progress banner as its own leaf view. Reads
+/// `store.importProgress` HERE and nowhere else, so a per-feed progress tick
+/// invalidates only this banner, not the split view. When idle the observable is
+/// `nil`, the `ZStack` has no child and lays out at 0×0, so the top
+/// `.safeAreaInset` adds no inset. A content-hugging Liquid Glass pill (macOS
+/// deploys to 26, so no availability gate is needed) matching the iOS banner's
+/// look: a determinate accent ring around a tray glyph, a label, and a
+/// monospaced "N/M" count.
+private struct ImportProgressBanner: View {
+    let store: ReaderStore
+
+    private static let accent = PlusTheme.accent
+
+    var body: some View {
+        let progress = store.importProgress
+        let isActive = progress != nil
+
+        ZStack {
+            if let progress {
+                pill(completed: progress.completed, total: progress.total)
+                    .transition(
+                        .move(edge: .top)
+                            .combined(with: .scale(scale: 0.9, anchor: .top))
+                            .combined(with: .opacity)
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: isActive)
+    }
+
+    private func pill(completed: Int, total: Int) -> some View {
+        let fraction = total > 0 ? Double(completed) / Double(total) : 0
+        return GlassEffectContainer {
+            HStack(spacing: 10) {
+                ImportRing(fraction: fraction, tint: Self.accent)
+                Text("Importing feeds")
+                    .font(.subheadline.weight(.medium))
+                Text("\(completed)/\(total)")
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .glassEffect(.regular.tint(Self.accent.opacity(0.14)), in: .capsule)
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Importing feeds"))
+        .accessibilityValue(Text("\(completed) of \(total)"))
+    }
+}
+
+/// A determinate accent ring around a small tray glyph — the progress readout and
+/// the app's import mark in one compact element. Hand-drawn because the built-in
+/// circular `ProgressView` style is indeterminate.
+private struct ImportRing: View {
+    var fraction: Double
+    var tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.14), lineWidth: 2.5)
+            Circle()
+                .trim(from: 0, to: max(0.03, min(1, fraction)))
+                .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.easeInOut(duration: 0.25), value: fraction)
+            Image(systemName: "tray.and.arrow.down.fill")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 22, height: 22)
+    }
+}
+
 private struct OPMLImportView: View {
     let feeds: [OPMLFeed]
     let existingKeys: Set<String>

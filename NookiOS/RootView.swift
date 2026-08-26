@@ -45,7 +45,7 @@ struct RootView: View {
                 // fetch. A top safe-area inset reaches both the iPhone tab shell
                 // and the iPad split view from one place, and reserves zero height
                 // when idle.
-                .safeAreaInset(edge: .top, spacing: 0) { importProgressBanner }
+                .safeAreaInset(edge: .top, spacing: 0) { ImportProgressBanner(store: store) }
                 // First-run tutorial, mounted here so one cover reaches both the
                 // iPhone tab shell and the iPad split view. Swipe-to-dismiss also
                 // completes it (onDismiss), so it won't re-appear next launch.
@@ -274,31 +274,6 @@ struct RootView: View {
         }
     }
 
-    /// A thin determinate banner shown only while an OPML import is fetching feed
-    /// content. Bound to `store.importProgress`; renders nothing (zero height)
-    /// when idle. Every import entry point on iOS (sidebar, Settings, the tutorial)
-    /// routes through the same store, so one banner here covers them all.
-    @ViewBuilder private var importProgressBanner: some View {
-        if let progress = store.importProgress {
-            VStack(spacing: 4) {
-                HStack {
-                    Text("Importing feeds…")
-                    Spacer()
-                    Text("\(progress.completed) of \(progress.total)")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .font(.footnote)
-                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
-                    .progressViewStyle(.linear)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(.bar)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-    }
 
     /// Requests notification authorization, called only from a setting being
     /// switched on — never at launch.
@@ -517,6 +492,118 @@ private struct RegularShell: View {
                 if !name.isEmpty { store.createFolder(name) }
                 newFolderName = ""
             }
+        }
+    }
+}
+
+/// The OPML-import progress banner as its own leaf view. It reads
+/// `store.importProgress` HERE and nowhere else, so a per-feed progress tick
+/// invalidates only this banner, never the shell. When idle the observable is
+/// `nil`, the `ZStack` has no child and lays out at 0x0, so the
+/// `.safeAreaInset(edge: .top)` it is mounted in adds no inset. All padding is
+/// on the pill child (never on the always-present ZStack) to keep that true.
+/// Every import entry point on iOS (sidebar, Settings, the tutorial) routes
+/// through the same store, so one banner covers them all.
+///
+/// A compact, content-hugging Liquid Glass pill that floats just under the top
+/// safe area, mirroring the floating glass tab bar rather than a full-width
+/// `.background(.bar)` strip: a determinate accent ring around a tray glyph, a
+/// label, and a monospaced "N/M" count. Springs in and out from the top edge as
+/// the import starts and finishes.
+private struct ImportProgressBanner: View {
+    let store: ReaderStore
+
+    /// Nook's brown, shared with the tab bar via `PlusTheme.accent` so the tint
+    /// cannot drift from the rest of the app's glass.
+    private static let accent = PlusTheme.accent
+
+    var body: some View {
+        // Observe the store ONLY here, in the leaf.
+        let progress = store.importProgress
+        let isActive = progress != nil
+
+        ZStack {
+            if let progress {
+                pill(completed: progress.completed, total: progress.total)
+                    .transition(
+                        .move(edge: .top)
+                            .combined(with: .scale(scale: 0.85, anchor: .top))
+                            .combined(with: .opacity)
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity)
+        // The store mutates `importProgress` with no animation of its own, so the
+        // leaf supplies one. Keyed on presence only: the count updates re-render
+        // in place without re-triggering the slide.
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: isActive)
+        // A single light tap as the banner arrives (and departs), matching the
+        // tab bar's non-selection impact feedback.
+        .sensoryFeedback(.impact(weight: .light), trigger: isActive)
+    }
+
+    private func pill(completed: Int, total: Int) -> some View {
+        let fraction = total > 0 ? Double(completed) / Double(total) : 0
+        return GlassBarContainer {
+            HStack(spacing: 10) {
+                ImportRing(fraction: fraction, tint: Self.accent)
+                Text("Importing feeds")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                Text("\(completed)/\(total)")
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .importPillGlass()
+        }
+        .padding(.top, 6)
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Importing feeds"))
+        .accessibilityValue(Text("\(completed) of \(total)"))
+    }
+}
+
+/// A determinate accent ring around a small tray glyph — the progress readout
+/// and the app's import mark in one compact 22pt element. Hand-drawn from a
+/// trimmed `Circle` because iOS's built-in circular `ProgressView` style is
+/// indeterminate and ignores `value:`/`total:`.
+private struct ImportRing: View {
+    var fraction: Double
+    var tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.primary.opacity(0.14), lineWidth: 2.5)
+            Circle()
+                .trim(from: 0, to: max(0.03, min(1, fraction)))
+                .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.easeInOut(duration: 0.25), value: fraction)
+            Image(systemName: "tray.and.arrow.down.fill")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 22, height: 22)
+    }
+}
+
+private extension View {
+    /// A non-interactive, faintly Nook-tinted Liquid Glass capsule for a status
+    /// pill on iOS 26; before 26 the same regular-material + hairline-stroke
+    /// capsule that the app's `glassCapsule()` falls back to. Non-interactive on
+    /// purpose: this is a readout, not a control, so it omits `.interactive()`.
+    @ViewBuilder
+    func importPillGlass() -> some View {
+        if #available(iOS 26, *) {
+            glassEffect(.regular.tint(PlusTheme.accent.opacity(0.14)), in: .capsule)
+        } else {
+            background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
         }
     }
 }
