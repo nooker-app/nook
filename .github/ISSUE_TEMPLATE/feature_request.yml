@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an idea or improvement for Nook
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which app should this land in?
+      multiple: true
+      options:
+        - macOS
+        - iOS / iPadOS
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation you run into today, not only the solution you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Nook to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds you have tried

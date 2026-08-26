@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in Nook is broken or behaves unexpectedly
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. Please fill in the platform
+        fields so the issue lands in the right bucket.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which app are you using? Pick both if you see it on macOS and iOS.
+      multiple: true
+      options:
+        - macOS
+        - iOS / iPadOS
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Nook version
+      description: Found in Settings, or in the About window on macOS.
+      placeholder: "0.1.0 (2)"
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "macOS 26.1 / iOS 18.5"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the problem, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: feed-url
+    attributes:
+      label: Feed URL (if the issue involves a specific feed)
+      description: A public feed URL helps enormously for parsing or rendering bugs.
+      placeholder: "https://example.com/feed.xml"
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
+      description: Drag images in directly. Optional, but usually the fastest path to a fix.

@@ -1,0 +1,58 @@
+name: Feed or article rendering issue
+description: A feed will not subscribe, or an article renders wrong
+title: "[Feed] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when a specific site is the problem: the feed will not add, items
+        are missing, or the article body comes out empty, truncated, or scrambled.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - macOS
+        - iOS / iPadOS
+    validations:
+      required: true
+
+  - type: input
+    id: feed-url
+    attributes:
+      label: Feed or site URL
+      placeholder: "https://www.reddit.com/r/rss/.rss"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What goes wrong
+      options:
+        - The feed cannot be added at all
+        - The feed adds, but no articles appear
+        - Articles appear, but the body is empty or truncated
+        - Article body renders, but images or layout are broken
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Nook version
+      placeholder: "0.1.0 (2)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you see versus what you expected. Screenshots welcome.
+    validations:
+      required: true
