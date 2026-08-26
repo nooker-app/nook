@@ -2531,7 +2531,14 @@ public final class ReaderStore {
             return BackgroundRefreshResult(newArticleCount: 0, sampleTitles: [])
         }
         // Already synced above; skip the redundant reload inside refreshAllFeeds.
-        await refreshAllFeeds(syncFirst: false, mode: mode)
+        // Runs through the shared batch slot so a background/periodic refresh never
+        // reenters a foreground one; forward OS cancellation into the batch.
+        let refreshTask = startBatchedFetch { await $0.refreshAllFeeds(syncFirst: false, mode: mode) }
+        await withTaskCancellationHandler {
+            _ = await refreshTask.value
+        } onCancel: {
+            refreshTask.cancel()
+        }
         guard !isPreparingLocalReset else {
             return BackgroundRefreshResult(newArticleCount: 0, sampleTitles: [])
         }
@@ -3581,13 +3588,36 @@ public final class ReaderStore {
         }.value
     }
 
+    /// Serializes every batched fetch through the single `allFeedsRefreshTask`
+    /// slot so no two ever mutate the shared batch state (`isBatchRefreshing`, the
+    /// merge-flush task, `refreshingFeedIDs`) at once. A new request cancels the
+    /// in-flight batch and waits for it to fully unwind before running `work`, so
+    /// batches replace each other (no pile-up) and never overlap (no reentry).
+    /// Every batched entry point — Refresh All, activation/periodic sync,
+    /// pull-to-refresh, background refresh, and OPML import's content fetch —
+    /// starts here. Callers that need to propagate their own cancellation into the
+    /// batch (pull-to-refresh, background) wrap the returned task's `.value` in a
+    /// `withTaskCancellationHandler` that calls `.cancel()`.
+    @discardableResult
+    private func startBatchedFetch(_ work: @escaping (ReaderStore) async -> Void) -> Task<Void, Never> {
+        let predecessor = allFeedsRefreshTask
+        predecessor?.cancel()
+        let task = Task { [weak self] in
+            // Let the cancelled batch drain its in-flight fetches and run its defer
+            // (which clears isBatchRefreshing and flushes the merge buffer) before
+            // we enter the critical section, so the two never overlap.
+            _ = await predecessor?.value
+            guard let self, !Task.isCancelled, !self.isPreparingLocalReset else { return }
+            await work(self)
+        }
+        allFeedsRefreshTask = task
+        return task
+    }
+
     /// Starts (or restarts) a full refresh, replacing any in-flight one.
     private func startAllFeedsRefresh() {
         guard !isPreparingLocalReset else { return }
-        allFeedsRefreshTask?.cancel()
-        allFeedsRefreshTask = Task { [weak self] in
-            await self?.refreshAllFeeds()
-        }
+        startBatchedFetch { await $0.refreshAllFeeds() }
     }
 
     /// Shortest gap between activation-triggered syncs. Prevents rapidly
@@ -3615,17 +3645,21 @@ public final class ReaderStore {
         }
 
         activationRefreshInFlight = true
-        allFeedsRefreshTask?.cancel()
-        allFeedsRefreshTask = Task { [weak self] in
-            // Automatic focus-driven sync: stay quiet and light so returning to
-            // Nook doesn't jolt the UI while content trickles in.
-            await self?.refreshAllFeeds(mode: .ambient)
-            self?.activationRefreshInFlight = false
+        // Automatic focus-driven sync: stay quiet and light so returning to Nook
+        // doesn't jolt the UI while content trickles in.
+        let task = startBatchedFetch { store in
+            await store.refreshAllFeeds(mode: .ambient)
             // Re-opening after a long background can hit a network that isn't
             // ready yet, failing some feeds transiently. Retry just those once,
             // quietly, after a short delay — so a long-suspended launch still ends
             // up refreshed without any user action or alert.
-            await self?.retryFailedFeedsOnce()
+            await store.retryFailedFeedsOnce()
+        }
+        // Clear the coalescing flag once this activation batch settles — whether it
+        // ran or was replaced by a later refresh — so activation syncs never wedge.
+        Task { [weak self] in
+            _ = await task.value
+            self?.activationRefreshInFlight = false
         }
     }
 
@@ -3675,7 +3709,14 @@ public final class ReaderStore {
     /// until the fetch actually finishes).
     public func refreshAllAndWait() async {
         guard !feeds.isEmpty else { return }
-        await refreshAllFeeds()
+        let task = startBatchedFetch { await $0.refreshAllFeeds() }
+        // Forward this call's cancellation (e.g. the pull-to-refresh view going
+        // away) into the serialized batch, so it stops rather than fetching on.
+        await withTaskCancellationHandler {
+            _ = await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     /// Awaitable refresh of specific feeds, for pull-to-refresh in a single
@@ -4284,11 +4325,17 @@ public final class ReaderStore {
         guard !targets.isEmpty, !isPreparingLocalReset else { return }
 
         // ── Phase 2: fetch content, bounded + batched, with progress. ──
+        // Runs through the shared batch slot so it serializes with Refresh All /
+        // activation sync instead of reentering the shared batch state. A refresh
+        // (or an Add Feed) started meanwhile cancels this task and fetches the
+        // imported feeds itself, so their content still arrives.
         importProgress = (0, targets.count)
         defer { importProgress = nil }
-        await runBatchedFetch(targets: targets, mode: .interactive) { [weak self] completed, total in
-            self?.importProgress = (completed, total)
-        }
+        await startBatchedFetch { store in
+            await store.runBatchedFetch(targets: targets, mode: .interactive) { completed, total in
+                store.importProgress = (completed, total)
+            }
+        }.value
     }
 
     private func refreshAllFeeds(syncFirst: Bool = true, mode: RefreshMode = .interactive) async {
