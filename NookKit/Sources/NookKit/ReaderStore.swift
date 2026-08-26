@@ -341,6 +341,19 @@ public final class ReaderStore {
     // library isn't re-encoded and rewritten once per feed; one write flushes
     // the final state when the refresh finishes.
     private var isBatchRefreshing = false
+    /// Nesting depth of in-flight bulk OPML imports. A counter, not a Bool, so two
+    /// overlapping imports can't have the first's completion re-enable animation
+    /// (and the favicon skip / wider flush window) while the second is still
+    /// running.
+    private var bulkImportDepth = 0
+    /// True while any bulk OPML import runs. Suppresses the per-flush list spring
+    /// animation: an import brings in every feed at once, so animating each flush
+    /// would start a fresh spring over an ever-larger row set before the last
+    /// settled — the iOS list then never reaches a painted, stable frame and the
+    /// whole import reads as a freeze. It also widens the merge-flush window and
+    /// skips the synchronous favicon disk read. Rows appear without slide-in
+    /// during a bulk import, which is the expected feel for a bulk operation.
+    private var isBulkImporting: Bool { bulkImportDepth > 0 }
     private var isAccessingSecurityScopedResource = false
     // Every feed with a network fetch in flight, in any mode. Drives the global
     // `isRefreshing` (concurrency guards, disabled buttons) so an automatic
@@ -622,6 +635,7 @@ public final class ReaderStore {
         spinningFeedIDs.removeAll()
         isRefreshing = false
         isBatchRefreshing = false
+        bulkImportDepth = 0
         isDrainingSaves = false
         isDrainingShardSaves = false
 
@@ -899,7 +913,11 @@ public final class ReaderStore {
             return
         }
         let oldSet = Set(oldIDs)
-        let willAnimate = animated && oldIDs != newIDs && !oldSet.isEmpty
+        // `isBulkImporting` forces a non-animated batch update: during a bulk OPML
+        // import the displayed list is republished every ~400ms flush, and a spring
+        // per flush over a growing row set is the dominant cause of the import
+        // freeze (overlapping animations never let the list settle).
+        let willAnimate = animated && !isBulkImporting && oldIDs != newIDs && !oldSet.isEmpty
             && !oldSet.isDisjoint(with: newIDs)
         #if DEBUG && os(macOS)
         // Every republish invalidates every row, and the list is a thousand of them.
@@ -4245,6 +4263,12 @@ public final class ReaderStore {
     private func importSelectedFeeds(_ opmlFeeds: [OPMLFeed]) async {
         guard !opmlFeeds.isEmpty, !isPreparingLocalReset else { return }
 
+        // Suppress per-flush list animation for the whole import (see
+        // `isBulkImporting`); the final settle after the import can animate once.
+        // A counter so overlapping imports don't clear each other's suppression.
+        bulkImportDepth += 1
+        defer { bulkImportDepth -= 1 }
+
         // ── Phase 1: structure now, no network. ──
         var updatedFeeds = feeds
         var pendingFolders: [String] = []
@@ -4761,7 +4785,7 @@ public final class ReaderStore {
             // stories, so rows slide/fade in like Apple Mail. Automatic (ambient/
             // background) refreshes pass `animated: false` so new rows appear quietly
             // instead of sliding under the user mid-scroll.
-            if animated && hasNewArticles && !knownIDs.isEmpty {
+            if animated && !isBulkImporting && hasNewArticles && !knownIDs.isEmpty {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                     articles = merged
                 }
@@ -4814,6 +4838,14 @@ public final class ReaderStore {
     /// later arrivals just join the bucket, and one merge lands when it closes.
     private var batchMergeFlushTask: Task<Void, Never>?
     private static let batchMergeFlushInterval: Duration = .milliseconds(400)
+    /// A wider flush window while a bulk import runs. Each flush's merge is an
+    /// O(total-accumulated-articles) main-actor pass that grows as the import
+    /// fills the library, so flushing every 400ms turns a large import into many
+    /// increasingly-expensive passes. A bulk import already shows every feed row
+    /// up front (Phase 1) and a progress banner, so its articles can settle in a
+    /// few larger buckets instead — far fewer whole-library passes, and the run
+    /// loop gets long idle stretches to stay responsive.
+    private static let bulkImportFlushInterval: Duration = .milliseconds(1500)
 
     /// Buffers a fetched feed for the next merge flush. Bounds the didSet chain
     /// and the observable republish to once per window instead of once per feed,
@@ -4823,8 +4855,9 @@ public final class ReaderStore {
         guard !isPreparingLocalReset else { return }
         pendingBatchMerges.append((parsed, animated))
         guard batchMergeFlushTask == nil else { return }
+        let interval = isBulkImporting ? Self.bulkImportFlushInterval : Self.batchMergeFlushInterval
         batchMergeFlushTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.batchMergeFlushInterval)
+            try? await Task.sleep(for: interval)
             guard let self, !Task.isCancelled else { return }
             self.batchMergeFlushTask = nil
             self.flushBatchMerges()
@@ -5020,7 +5053,12 @@ public final class ReaderStore {
         guard let storage else { return }
         let key = faviconKey(for: feed)
 
-        if feedIcons[feed.id] == nil,
+        // During a bulk import this runs per feed inside the fetch loop; the
+        // synchronous disk read + decode (which on an iCloud folder can block on
+        // file materialization) would sprinkle main-thread stalls across the
+        // import. Skip it there and let the async refresh below populate the icon.
+        if !isBulkImporting,
+           feedIcons[feed.id] == nil,
            let data = storage.cachedFaviconData(forKey: key),
            let image = makePlatformImage(data: data) {
             feedIcons[feed.id] = image
@@ -5052,16 +5090,25 @@ public final class ReaderStore {
 
     private func refreshFavicon(for feed: Feed) async {
         let key = faviconKey(for: feed)
-        guard let data = await faviconService.fetchFavicon(for: feed.siteURL),
-              let image = makePlatformImage(data: data) else {
+        guard let data = await faviconService.fetchFavicon(for: feed.siteURL) else {
             // Remember the failure so we don't re-hammer this host next launch.
             storage?.recordFaviconMiss(forKey: key)
             return
         }
 
-        let pngData = image.pngData() ?? data
+        // Decode + re-encode off the main actor — image codecs are CPU work and a
+        // bulk import resolves dozens of icons; doing it here would sprinkle
+        // main-thread stalls across the whole import. Only `Data` crosses the
+        // boundary (PlatformImage isn't Sendable); the final image is decoded once
+        // back on the main actor to hand SwiftUI.
+        let pngData = await Task.detached(priority: .utility) {
+            makePlatformImage(data: data)?.pngData() ?? data
+        }.value
+        guard let finalImage = makePlatformImage(data: pngData) else {
+            storage?.recordFaviconMiss(forKey: key)
+            return
+        }
         try? storage?.writeFaviconData(pngData, forKey: key)
-        let finalImage = makePlatformImage(data: pngData) ?? image
         // Apply to every feed that shares this host, so we fetch each icon once.
         for sibling in feeds where faviconKey(for: sibling) == key {
             feedIcons[sibling.id] = finalImage
