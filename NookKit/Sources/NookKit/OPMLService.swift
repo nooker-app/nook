@@ -29,14 +29,31 @@ public struct OPMLService: Sendable {
     }
 
     public func exportData(for feeds: [Feed]) -> Data {
-        let outlines = feeds
-            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-            .map { feed in
-                """
-                    <outline text="\(feed.title.xmlEscaped)" title="\(feed.title.xmlEscaped)" type="rss" xmlUrl="\(feed.feedURL.absoluteString.xmlEscaped)" htmlUrl="\(feed.siteURL.absoluteString.xmlEscaped)" />
-                """
-            }
-            .joined(separator: "\n")
+        // Group by folder so the export round-trips: the import parser reads a
+        // feed's folder from its enclosing container <outline>, so a flat list
+        // (what this used to emit) dropped every folder on re-import. Ungrouped
+        // feeds stay at the top level; each folder becomes a container outline
+        // wrapping its feeds. "Feeds" is the reserved top-level sentinel, so
+        // `folderName` maps it to "" (no folder).
+        let sorted = feeds.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+
+        func feedOutline(_ feed: Feed, indent: String) -> String {
+            "\(indent)<outline text=\"\(feed.title.xmlEscaped)\" title=\"\(feed.title.xmlEscaped)\" type=\"rss\" xmlUrl=\"\(feed.feedURL.absoluteString.xmlEscaped)\" htmlUrl=\"\(feed.siteURL.absoluteString.xmlEscaped)\" />"
+        }
+
+        var byFolder: [String: [Feed]] = [:]
+        for feed in sorted where !feed.folderName.isEmpty {
+            byFolder[feed.folderName, default: []].append(feed)
+        }
+        let folders = byFolder.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+
+        var lines = sorted.filter { $0.folderName.isEmpty }.map { feedOutline($0, indent: "    ") }
+        for folder in folders {
+            lines.append("    <outline text=\"\(folder.xmlEscaped)\" title=\"\(folder.xmlEscaped)\">")
+            lines.append(contentsOf: (byFolder[folder] ?? []).map { feedOutline($0, indent: "      ") })
+            lines.append("    </outline>")
+        }
+        let outlines = lines.joined(separator: "\n")
 
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>
