@@ -40,6 +40,12 @@ struct RootView: View {
     var body: some View {
         ZStack {
             shell
+                // OPML import progress: the feeds and folders themselves land at
+                // once (Phase 1), so this thin banner just tracks the content
+                // fetch. A top safe-area inset reaches both the iPhone tab shell
+                // and the iPad split view from one place, and reserves zero height
+                // when idle.
+                .safeAreaInset(edge: .top, spacing: 0) { importProgressBanner }
                 // First-run tutorial, mounted here so one cover reaches both the
                 // iPhone tab shell and the iPad split view. Swipe-to-dismiss also
                 // completes it (onDismiss), so it won't re-appear next launch.
@@ -265,6 +271,32 @@ struct RootView: View {
             CompactShell(store: store)
         } else {
             RegularShell(store: store)
+        }
+    }
+
+    /// A thin determinate banner shown only while an OPML import is fetching feed
+    /// content. Bound to `store.importProgress`; renders nothing (zero height)
+    /// when idle. Every import entry point on iOS (sidebar, Settings, the tutorial)
+    /// routes through the same store, so one banner here covers them all.
+    @ViewBuilder private var importProgressBanner: some View {
+        if let progress = store.importProgress {
+            VStack(spacing: 4) {
+                HStack {
+                    Text("Importing feeds…")
+                    Spacer()
+                    Text("\(progress.completed) of \(progress.total)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .font(.footnote)
+                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
+                    .progressViewStyle(.linear)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(.bar)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 

@@ -203,6 +203,12 @@ public final class ReaderStore {
     /// Progress of an in-flight "classify existing articles" migration (completed,
     /// total), or nil when idle. Observed for the settings progress indicator.
     public private(set) var categorizeAllProgress: (completed: Int, total: Int)?
+    /// Progress of an in-flight OPML import's content fetch (completed, total), or
+    /// nil when no import is running. The feeds and their folders appear at once
+    /// the moment the import starts (Phase 1); this counter tracks Phase 2, where
+    /// each feed's articles stream in over the network. Observed so both platforms
+    /// can show a determinate native progress indicator during the import.
+    public private(set) var importProgress: (completed: Int, total: Int)?
     /// True while a bulk pass is applying categories in batches. Article rows read
     /// it to skip the badge reveal animation: a batch can tag many on-screen rows
     /// at once, and animating them together makes each row invalidate the native
@@ -687,6 +693,7 @@ public final class ReaderStore {
         datelessArticleIDs = []
         offlineDownloadProgress = nil
         categorizeAllProgress = nil
+        importProgress = nil
         aiCategorizeRunning = false
         lastRefreshedAt = nil
         errorMessage = nil
@@ -4179,33 +4186,109 @@ public final class ReaderStore {
         isAccessingSecurityScopedResource = directoryURL.startAccessingSecurityScopedResource()
     }
 
+    /// Imports OPML feeds in two phases so a large import (issue #3: ~92 feeds)
+    /// never stalls the UI and never loses its folders.
+    ///
+    /// Phase 1 (synchronous, no network): every feed and its folder is added to
+    /// the in-memory model in ONE assignment and recorded into this device's shard
+    /// right away — the same durable path `moveFeed` uses. So the whole library,
+    /// folders included, appears at once, and the folder membership is CRDT state
+    /// before any refresh runs. The old path set the folder in memory only, so the
+    /// next materialize dropped every folder (the reported bug).
+    ///
+    /// Phase 2 (bounded concurrency, batched merge): the placeholder feeds' real
+    /// titles and articles stream in through the same engine a full refresh uses —
+    /// up to `maxConcurrentFetches` at a time, merged once per ~400ms — so the rows
+    /// fill in smoothly instead of trickling one blocking fetch at a time. `merge`
+    /// preserves the category set in Phase 1, so folders survive the refresh.
     private func importSelectedFeeds(_ opmlFeeds: [OPMLFeed]) async {
-        var failures: [String] = []
+        guard !opmlFeeds.isEmpty, !isPreparingLocalReset else { return }
 
-        for opmlFeed in opmlFeeds {
-            do {
-                let existingFeedID = feeds.first { existing in
-                    existing.feedURL.feedIdentityKey == opmlFeed.feedURL.feedIdentityKey
-                        || existing.id == opmlFeed.feedURL.absoluteString
-                        || (opmlFeed.siteURL.map { existing.siteURL.feedIdentityKey == $0.feedIdentityKey } ?? false)
-                }?.id
-                let parsed = try await fetch(url: opmlFeed.feedURL, existingFeedID: existingFeedID)
+        // ── Phase 1: structure now, no network. ──
+        var updatedFeeds = feeds
+        var pendingFolders: [String] = []
+        var targets: [(id: Feed.ID, url: URL)] = []
 
-                // Carry the OPML folder over as the feed's category/folder.
-                if let category = opmlFeed.category, !category.isEmpty,
-                   let index = feeds.firstIndex(where: { $0.id == parsed.feed.id }) {
-                    feeds[index].category = category
-                    if !folders.contains(category) {
-                        folders.append(category)
-                    }
-                }
-            } catch {
-                failures.append(error.localizedDescription)
-            }
+        func noteFolder(_ name: String) {
+            guard !name.isEmpty, !folders.contains(name), !pendingFolders.contains(name) else { return }
+            pendingFolders.append(name)
         }
 
-        errorMessage = failures.isEmpty ? nil : String(localized: "Couldn't add \(failures.count) feeds", bundle: Bundle.module)
+        for opmlFeed in opmlFeeds {
+            var category = (opmlFeed.category ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            // "Feeds" is the reserved top-level sentinel (Feed.folderName maps it to
+            // ""), so an OPML folder literally named "Feeds" cannot be represented
+            // as a folder. Treat it as top-level instead of recording a phantom
+            // empty "Feeds" folder row that no feed can appear inside.
+            if category == "Feeds" { category = "" }
+            let existingIndex = updatedFeeds.firstIndex { existing in
+                existing.feedURL.feedIdentityKey == opmlFeed.feedURL.feedIdentityKey
+                    || existing.id == opmlFeed.feedURL.absoluteString
+                    || (opmlFeed.siteURL.map { existing.siteURL.feedIdentityKey == $0.feedIdentityKey } ?? false)
+            }
+            if let index = existingIndex {
+                // Already present (in the library, or earlier in this same OPML):
+                // don't duplicate the row. Adopt the OPML folder only when the feed
+                // has none yet, so an import can't yank a feed out of a folder the
+                // user already chose.
+                let feedID = updatedFeeds[index].id
+                if !category.isEmpty, updatedFeeds[index].folderName.isEmpty {
+                    updatedFeeds[index].category = category
+                    recordCategory(feedID, category)
+                    noteFolder(category)
+                }
+                if !targets.contains(where: { $0.id == feedID }) {
+                    targets.append((id: feedID, url: updatedFeeds[index].feedURL))
+                }
+                continue
+            }
+
+            // A brand-new feed: create a placeholder row so it shows immediately.
+            // Its id is the feed URL (the app's convention, matching OPMLFeed.id);
+            // Phase 2 re-keys the fetched feed onto this id, so article ids stay
+            // stable.
+            let feedID = opmlFeed.feedURL.absoluteString
+            let title = opmlFeed.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let placeholder = Feed(
+                id: feedID,
+                title: title.isEmpty ? (opmlFeed.siteURL?.host ?? opmlFeed.feedURL.host ?? feedID) : title,
+                siteDescription: "",
+                category: category.isEmpty ? "Feeds" : category,
+                systemImage: "dot.radiowaves.left.and.right",
+                feedURL: opmlFeed.feedURL,
+                siteURL: opmlFeed.siteURL ?? opmlFeed.feedURL,
+                healthScore: 1
+            )
+            updatedFeeds.append(placeholder)
+            // Durable identity + folder, recorded BEFORE any fetch (mirrors both
+            // `merge`'s new-feed recording and `moveFeed`'s folder recording), so a
+            // materialize racing the import cannot drop either.
+            recordFeedRestored(feedID)
+            recordFeedSeed(placeholder)
+            if !category.isEmpty {
+                recordCategory(feedID, category)
+                noteFolder(category)
+            }
+            targets.append((id: feedID, url: opmlFeed.feedURL))
+        }
+
+        // One assignment → one observable republish for the whole import, not 92.
+        if updatedFeeds != feeds { feeds = updatedFeeds }
+        for folder in pendingFolders where !folders.contains(folder) {
+            folders.append(folder)
+            recordFolder(folder, present: true)
+        }
+        scheduleShardSave()
         scheduleSave()
+
+        guard !targets.isEmpty, !isPreparingLocalReset else { return }
+
+        // ── Phase 2: fetch content, bounded + batched, with progress. ──
+        importProgress = (0, targets.count)
+        defer { importProgress = nil }
+        await runBatchedFetch(targets: targets, mode: .interactive) { [weak self] completed, total in
+            self?.importProgress = (completed, total)
+        }
     }
 
     private func refreshAllFeeds(syncFirst: Bool = true, mode: RefreshMode = .interactive) async {
@@ -4216,15 +4299,37 @@ public final class ReaderStore {
         // — e.g. the background reporter — pass false to avoid a redundant read.)
         if syncFirst { await reloadMerged() }
         guard !isPreparingLocalReset else { return }
-        // Hold per-feed writes and flush once at the end, so a refresh of many
-        // feeds doesn't rewrite the whole library repeatedly. `defer` guarantees
-        // the flag clears and the final state is saved even on early exit.
+        // Managed pseudo-feeds have no fetchable URL — refreshing one would just
+        // flag it unhealthy.
+        let targets = feeds.filter { !Self.isManagedFeed($0.id) }.map { (id: $0.id, url: $0.feedURL) }
+        await runBatchedFetch(targets: targets, mode: mode)
+    }
+
+    /// Fetches a set of feeds concurrently (bounded) and merges the results in
+    /// batches, holding per-feed saves until the end. This is the shared engine
+    /// behind both "Refresh All" and OPML import: the network is the slow part and
+    /// `RSSFeedService` is a `Sendable` value, so fetches run off the main actor in
+    /// parallel while each result is merged back here serially and buffered, which
+    /// bounds the whole-library didSet chain and the row-invalidating republish to
+    /// once per flush window instead of once per feed. A sequential fetch would
+    /// serialize every feed's up-to-15s timeout (the old OPML import did exactly
+    /// that). `onProgress` (completed, total) is called on the main actor as each
+    /// fetch finishes, for the import's determinate progress indicator.
+    private func runBatchedFetch(
+        targets: [(id: Feed.ID, url: URL)],
+        mode: RefreshMode,
+        onProgress: ((Int, Int) -> Void)? = nil
+    ) async {
+        guard !targets.isEmpty, !isPreparingLocalReset else { return }
+        // Hold per-feed writes and flush once at the end, so a fetch of many feeds
+        // doesn't rewrite the whole library repeatedly. `defer` guarantees the flag
+        // clears and the final state is saved even on early exit.
         isBatchRefreshing = true
         defer {
-            // Safety net: no bucket may outlive the refresh, whatever the exit
-            // path (idempotent — the explicit end-of-refresh flush below already
-            // handled the normal path). Must run before scheduleSave so the last
-            // bucket is included in the persisted snapshot.
+            // Safety net: no bucket may outlive the fetch, whatever the exit path
+            // (idempotent — the explicit end flush below already handled the normal
+            // path). Must run before scheduleSave so the last bucket is included in
+            // the persisted snapshot.
             flushBatchMerges()
             batchMergeFlushTask?.cancel()
             batchMergeFlushTask = nil
@@ -4236,19 +4341,12 @@ public final class ReaderStore {
             scheduleSave()
         }
 
-        // Fetch feeds concurrently (bounded) — the network is the slow part and
-        // `RSSFeedService` is a `Sendable` value, so fetches run off the main
-        // actor in parallel while each result is merged back here serially. This
-        // keeps a many-feed refresh inside iOS's background budget; a sequential
-        // fetch serialized every feed's up-to-15s timeout and timed out first.
-        // Managed pseudo-feeds have no fetchable URL — refreshing one would
-        // just flag it unhealthy.
-        let targets = feeds.filter { !Self.isManagedFeed($0.id) }.map { (id: $0.id, url: $0.feedURL) }
-        guard !targets.isEmpty else { return }
         let service = feedService
         // Stamp `lastRefreshedAt` (an observable property) once per batch, not
         // once per completed feed.
         var anyFeedMerged = false
+        let total = targets.count
+        var completed = 0
         // `Error` isn't `Sendable`, so a child task returns the parsed feed or an
         // error message string across the actor boundary, never the error itself.
         await withTaskGroup(of: (Feed.ID, ParsedFeed?, String?).self) { group in
@@ -4258,7 +4356,26 @@ public final class ReaderStore {
                 group.addTask(priority: mode.fetchPriority) {
                     do {
                         var parsed = try await service.fetch(url: target.url)
-                        parsed.feed.id = target.id
+                        // Re-key the parsed feed AND its articles onto the caller's
+                        // id. For a full refresh this is a no-op — the feed's id
+                        // already equals the parsed id. For OPML import the target
+                        // id is the OPML feed URL, which differs from the parsed id
+                        // whenever the feed had to be discovered from an HTML page;
+                        // re-keying only the feed would leave every article pointing
+                        // at the discovered id (article ids are "\(feed.id)#\(seed)")
+                        // — an orphaned, empty-looking feed. Mirrors the re-key in
+                        // `fetch(url:existingFeedID:)`.
+                        if parsed.feed.id != target.id {
+                            let oldPrefix = parsed.feed.id + "#"
+                            parsed.feed.id = target.id
+                            parsed.articles = parsed.articles.map { article in
+                                var article = article
+                                let seed = article.id.hasPrefix(oldPrefix) ? String(article.id.dropFirst(oldPrefix.count)) : article.id
+                                article.feedID = target.id
+                                article.id = "\(target.id)#\(seed)"
+                                return article
+                            }
+                        }
                         return (target.id, parsed, nil)
                     } catch {
                         return (target.id, nil, error.localizedDescription)
@@ -4276,10 +4393,12 @@ public final class ReaderStore {
             }
             while let (feedID, parsed, _) = await group.next() {
                 endFeedFetch(feedID)
+                completed += 1
+                onProgress?(completed, total)
                 // Cancelled (e.g. the user tapped "Add Feed"): stop launching more
                 // fetches and drain the in-flight ones without touching state, so
                 // a cancel yields promptly and doesn't mark feeds unhealthy on the
-                // way out. The interrupted refresh re-runs on the next turn.
+                // way out. The interrupted fetch re-runs on the next turn.
                 // Results that arrived before the cancel still merge (they did
                 // before batching too) — flush them now, then drain untouched.
                 if Task.isCancelled || isPreparingLocalReset {
@@ -4294,7 +4413,7 @@ public final class ReaderStore {
                     ensureFavicon(for: parsed.feed)
                     anyFeedMerged = true
                 } else {
-                    // A refresh failure (offline, HTTP host down, parse error) must
+                    // A fetch failure (offline, HTTP host down, parse error) must
                     // never interrupt the user: don't surface a global alert. Just
                     // flag the feed unhealthy so the list can show a quiet
                     // sync-failed indicator; the flag clears on the next successful
@@ -4309,10 +4428,10 @@ public final class ReaderStore {
             }
         }
 
-        // Explicit end-of-refresh flush — deliberately here and not only in the
-        // defer: everything below (and callers resuming after this await, like
-        // the background notifier reading articles/unread counts) must see the
-        // fully merged state, and the defer runs after them.
+        // Explicit end flush — deliberately here and not only in the defer:
+        // everything below (and callers resuming after this await, like the
+        // background notifier reading articles/unread counts) must see the fully
+        // merged state, and the defer runs after them.
         flushBatchMerges()
 
         if anyFeedMerged { lastRefreshedAt = Date.now }

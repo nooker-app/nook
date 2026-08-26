@@ -80,6 +80,30 @@ struct ContentView: View {
         showTranslatePromo = true
     }
 
+    /// A thin determinate banner shown only while an OPML import is fetching feed
+    /// content. Bound to `store.importProgress`; renders nothing (zero height)
+    /// when idle.
+    @ViewBuilder private var importProgressBanner: some View {
+        if let progress = store.importProgress {
+            VStack(spacing: 4) {
+                HStack {
+                    Text("Importing feeds…")
+                    Spacer()
+                    Text("\(progress.completed) of \(progress.total)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .font(.footnote)
+                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
+                    .progressViewStyle(.linear)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(.bar)
+        }
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             FeedSidebar(
@@ -101,6 +125,9 @@ struct ContentView: View {
         }
         .articleImageOverlay(imagePresenter)
         .frame(minWidth: 920, minHeight: 640)
+        // OPML import progress: feeds and folders land at once (Phase 1); this
+        // thin banner tracks the content fetch and reserves zero height when idle.
+        .safeAreaInset(edge: .top, spacing: 0) { importProgressBanner }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 // Add Feed, New Folder, and OPML import/export live in the
