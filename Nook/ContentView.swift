@@ -532,6 +532,7 @@ private struct FeedSidebar: View {
     @State private var isCreatingFolder = false
     @State private var newFolderName = ""
     @State private var folderPendingDeletion: String?
+    @State private var isManagingFolders = false
     @State private var folderPendingRename: String?
     @State private var renameFolderName = ""
     @State private var feedPendingRename: Feed.ID?
@@ -647,6 +648,9 @@ private struct FeedSidebar: View {
             // without a background the rows scroll through it verbatim. Glass
             // keeps it legible while staying native to the translucent sidebar.
             .glassEffect(.regular, in: Rectangle())
+        }
+        .sheet(isPresented: $isManagingFolders) {
+            FolderManagementView(store: store)
         }
         .alert("New Folder", isPresented: $isCreatingFolder) {
             TextField("Folder Name", text: $newFolderName)
@@ -941,6 +945,14 @@ private struct FeedSidebar: View {
                 folderPendingDeletion = folder
             } label: {
                 Text("Remove Folder")
+            }
+            if store.feedFolders.count > 1 {
+                Divider()
+                Button {
+                    isManagingFolders = true
+                } label: {
+                    Text("Delete Multiple Folders…")
+                }
             }
         }
     }
@@ -3238,6 +3250,59 @@ private struct ImportRing: View {
                 .foregroundStyle(tint)
         }
         .frame(width: 22, height: 22)
+    }
+}
+
+/// A multi-select sheet for deleting several folders at once. The sidebar's
+/// folder headers aren't List-selectable rows (the sidebar `List` selects feeds),
+/// so bulk folder deletion lives here: a native multi-select list of folders with
+/// their feed counts, and one confirmed delete for the whole selection.
+private struct FolderManagementView: View {
+    let store: ReaderStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection: Set<String> = []
+    @State private var isConfirming = false
+
+    var body: some View {
+        NavigationStack {
+            List(selection: $selection) {
+                ForEach(store.feedFolders, id: \.self) { folder in
+                    HStack {
+                        Label(folder, systemImage: "folder")
+                        Spacer()
+                        Text(store.feeds(inFolder: folder).count, format: .number)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .tag(folder)
+                }
+            }
+            .navigationTitle("Delete Folders")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Delete", role: .destructive) { isConfirming = true }
+                        .disabled(selection.isEmpty)
+                }
+            }
+            .confirmationDialog(
+                selection.count == 1 ? "Delete 1 folder?" : "Delete \(selection.count) folders?",
+                isPresented: $isConfirming,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Selected Folders", role: .destructive) {
+                    store.removeFolders(Array(selection))
+                    selection = []
+                    if store.feedFolders.isEmpty { dismiss() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The selected folders and every feed inside them will be removed.")
+            }
+        }
+        .frame(minWidth: 380, minHeight: 360)
     }
 }
 

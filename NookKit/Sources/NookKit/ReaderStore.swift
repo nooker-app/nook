@@ -74,9 +74,21 @@ public final class ReaderStore {
     // Library, Feeds, and Categories are independent selection scopes: a single
     // smart source acts as navigation, feeds support multiple selection, and a
     // category browses everything tagged with it.
-    public var smartSelection: SmartSource? = .all { didSet { scheduleArticleFilter() } }
+    public var smartSelection: SmartSource? = .all {
+        didSet {
+            // Swift fires didSet on every assignment; `selectSmartSource` reassigns
+            // all three selection scopes back-to-back, so guard equal writes to
+            // avoid redundant whole-list recomputes.
+            guard smartSelection != oldValue else { return }
+            scheduleArticleFilter()
+        }
+    }
     public var feedSelection: Set<Feed.ID> = [] {
         didSet {
+            // A macOS `List(selection:)` multi-select re-emits the selection set
+            // repeatedly during a gesture; skip identical writes so a drag- or
+            // select-all doesn't re-run the filter for a set that didn't change.
+            guard feedSelection != oldValue else { return }
             // Selecting a feed leaves the Categories scope (they're exclusive).
             if !feedSelection.isEmpty { categorySelection = nil }
             scheduleArticleFilter()
@@ -84,7 +96,12 @@ public final class ReaderStore {
     }
     /// The category id currently being browsed, or nil. Mutually exclusive with
     /// feed/smart selection (set via `selectCategory`).
-    public var categorySelection: String? = nil { didSet { scheduleArticleFilter() } }
+    public var categorySelection: String? = nil {
+        didSet {
+            guard categorySelection != oldValue else { return }
+            scheduleArticleFilter()
+        }
+    }
     /// Whether the window-wide in-app browser bottom sheet is showing.
     public var isBrowserPresented = false
     /// The in-app browser's current view mode (reader vs original). Toggled
@@ -135,6 +152,10 @@ public final class ReaderStore {
     private static let filterDebounceInterval: Duration = .milliseconds(300)
     /// Above this many articles, filtering runs on a background executor.
     private static let backgroundFilterThreshold = 600
+    /// Largest add+remove delta the list will still animate. Beyond it the change
+    /// is a source/selection switch, not a few new stories, so it snaps instead of
+    /// springing hundreds of row identities on the main thread.
+    private static let maxAnimatedRowDelta = 40
     var lastRefreshedAt: Date?
     public var errorMessage: String?
     /// What the launch pipeline is doing right now, for the splash screen's
@@ -913,12 +934,21 @@ public final class ReaderStore {
             return
         }
         let oldSet = Set(oldIDs)
+        let newSet = Set(newIDs)
+        // How many rows this update adds or removes. A handful (a refresh bringing
+        // a few new stories) animates so they slide in like Mail; a large change —
+        // switching source, or selecting many feeds at once, which republishes a
+        // list hundreds of rows different — does NOT. Springing that many row
+        // identities is the dominant cost behind "selecting all feeds is far slower
+        // than All", and a wholesale change reads as a reshuffle, not new stories.
+        let changedRowCount = oldSet.symmetricDifference(newSet).count
         // `isBulkImporting` forces a non-animated batch update: during a bulk OPML
         // import the displayed list is republished every ~400ms flush, and a spring
         // per flush over a growing row set is the dominant cause of the import
         // freeze (overlapping animations never let the list settle).
         let willAnimate = animated && !isBulkImporting && oldIDs != newIDs && !oldSet.isEmpty
             && !oldSet.isDisjoint(with: newIDs)
+            && changedRowCount <= Self.maxAnimatedRowDelta
         #if DEBUG && os(macOS)
         // Every republish invalidates every row, and the list is a thousand of them.
         // Three separate questions, so three counters: how often the list is handed a
@@ -1486,6 +1516,33 @@ public final class ReaderStore {
         folders.removeAll { $0 == name }
         for id in removedIDs { recordFeedDeleted(id) }
         recordFolder(name, present: false)
+        scheduleShardSave()
+        pruneSelectionIfHidden()
+        saveAfterMutation()
+    }
+
+    /// Removes several folders and every feed inside them in one pass, so a
+    /// multi-folder delete rewrites the library, reassigns the arrays, and writes
+    /// the shard once instead of once per folder.
+    public func removeFolders(_ names: [String]) {
+        let targets = Set(names).filter { folders.contains($0) }
+        guard !targets.isEmpty else { return }
+        let removedIDs = Set(feeds.filter { targets.contains($0.folderName) }.map(\.id))
+        // Same resurrection guard as removeFeed: buffered fetch results for these
+        // feeds must not be applied after the delete.
+        for id in removedIDs { discardPendingBatchMerges(forFeedID: id) }
+        if !removedIDs.isEmpty {
+            feeds.removeAll { removedIDs.contains($0.id) }
+            articles.removeAll { removedIDs.contains($0.feedID) }
+            for id in removedIDs { feedIcons[id] = nil }
+            // Subtract in one assignment so feedSelection's didSet (and its filter
+            // recompute) fires at most once, not once per removed feed.
+            let remaining = feedSelection.subtracting(removedIDs)
+            if remaining != feedSelection { feedSelection = remaining }
+        }
+        folders.removeAll { targets.contains($0) }
+        for id in removedIDs { recordFeedDeleted(id) }
+        for name in targets { recordFolder(name, present: false) }
         scheduleShardSave()
         pruneSelectionIfHidden()
         saveAfterMutation()
