@@ -1,6 +1,19 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%lld/%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "%lld条" : {
+
+    },
     "Nook" : {
       "comment" : "The app's name, shown as the widget's title. A proper noun in every language.",
       "shouldTranslate" : false
@@ -33,6 +46,15 @@
           }
         }
       }
+    },
+    "一览今天收到的文章标题。" : {
+
+    },
+    "今天暂无新文章。" : {
+
+    },
+    "今日新闻" : {
+
     }
   },
   "version" : "1.0"

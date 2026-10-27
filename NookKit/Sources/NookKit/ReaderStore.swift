@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import SwiftUI
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 @MainActor
 @Observable
@@ -4543,6 +4546,8 @@ public final class ReaderStore {
             // Counts/badge already stayed live via the `articles` didSet.
             scheduleArticleFilter()
             scheduleSave()
+            // Refresh the Today News widget cache so it reflects what just landed.
+            updateWidgetCache()
         }
 
         let service = feedService
@@ -5146,6 +5151,8 @@ public final class ReaderStore {
         // Articles that arrived through this merge (fetched by another device)
         // may still be untagged — pick them up now that they're in the library.
         scheduleClassificationSweep()
+        // Keep the Today News widget in sync with the newly merged library.
+        updateWidgetCache()
     }
 
     private func loadCachedFavicons() {
@@ -5500,6 +5507,71 @@ public final class ReaderStore {
         isDrainingShardSaves = false
         shardSaveDrainTask = nil
     }
+
+    // MARK: - Widget cache
+
+    /// The maximum number of articles written to the widget cache. The Today
+    /// News widget shows at most this many headlines; capping the list keeps the
+    /// UserDefaults write cheap even on large libraries.
+    private static let widgetCacheMaxItems = 50
+
+    /// Filters today's articles, maps them to `TodayNewsItem`, and writes the
+    /// result to the shared App Group defaults so the Today News widget can read
+    /// it. Also asks WidgetKit to reload the Today News timeline immediately.
+    /// Silently no-ops when the App Group entitlement isn't active (unsigned
+    /// debug builds, simulator) — the write helpers in WidgetShared are
+    /// designed to tolerate that.
+    ///
+    /// Called at the end of every successful batched-fetch run and after each
+    /// iCloud shard merge, so the widget always reflects the latest state.
+    func updateWidgetCache() {
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        guard let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) else { return }
+
+        let items = articles
+            .filter { $0.publishedAt >= startOfToday && $0.publishedAt < startOfTomorrow }
+            .sorted { $0.publishedAt > $1.publishedAt }
+            .prefix(Self.widgetCacheMaxItems)
+            .map { article -> WidgetCacheItem in
+                let feedTitle = feedsByID[article.feedID]?.displayTitle ?? ""
+                return WidgetCacheItem(
+                    id: article.id,
+                    title: article.title,
+                    url: article.url,
+                    feedTitle: feedTitle,
+                    publishedAt: article.publishedAt
+                )
+            }
+
+        let payload = Array(items)
+        // Encode and write via a detached task so the JSON work stays off the
+        // main actor; WidgetCenter.reloadTimelines is then called back on main.
+        Task.detached(priority: .utility) {
+            let appGroupID = "group.com.tim.nook"
+            let todayNewsKey = "widgetTodayNews"
+            let todayNewsWidgetKind = "NookTodayNewsWidget"
+            guard let defaults = UserDefaults(suiteName: appGroupID),
+                  let data = try? JSONEncoder().encode(payload) else { return }
+            defaults.set(data, forKey: todayNewsKey)
+            #if canImport(WidgetKit)
+            await MainActor.run {
+                WidgetCenter.shared.reloadTimelines(ofKind: todayNewsWidgetKind)
+            }
+            #endif
+        }
+    }
+}
+
+/// Lightweight mirror of the article data kept in the widget cache. Mirrors the
+/// fields of `TodayNewsItem` in `WidgetShared.swift` (same JSON keys) so the
+/// widget extension can decode what the store wrote.
+private struct WidgetCacheItem: Codable, Sendable {
+    var id: String
+    var title: String
+    var url: URL
+    var feedTitle: String
+    var publishedAt: Date
 }
 
 #if DEBUG

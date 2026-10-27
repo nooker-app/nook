@@ -12,5 +12,6 @@ import SwiftUI
 struct NookWidgetBundle: WidgetBundle {
     var body: some Widget {
         NookWidget()
+        TodayNewsWidget()
     }
 }

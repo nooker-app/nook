@@ -1,11 +1,70 @@
 import Foundation
 
+// MARK: - Shared article model
+
+/// A lightweight article snapshot written by the app into the shared App Group
+/// and read by the widget extension. Defined here so both the Nook target and
+/// the NookWidget extension target can use it without depending on NookKit.
+public struct TodayNewsItem: Codable, Sendable, Identifiable {
+    public var id: String
+    public var title: String
+    public var url: URL
+    public var feedTitle: String
+    public var publishedAt: Date
+
+    public init(id: String, title: String, url: URL, feedTitle: String, publishedAt: Date) {
+        self.id = id
+        self.title = title
+        self.url = url
+        self.feedTitle = feedTitle
+        self.publishedAt = publishedAt
+    }
+}
+
+// MARK: - Shared constants and helpers
+
 /// Shared between the app and the widget extension (add this file to both
-/// targets' membership). This build shares no data — it only defines the
-/// `nook://` deep links the widget uses to open the app. No App Group needed.
+/// targets' membership).
 enum WidgetShared {
     static let urlScheme = "nook"
     static let widgetKind = "NookWidget"
+
+    // MARK: App Group
+
+    /// The App Group container shared between the Nook app and NookWidget extension.
+    /// Must match the `com.apple.security.application-groups` entitlement in both targets.
+    static let appGroupID = "group.com.tim.nook"
+
+    /// UserDefaults key for the cached today-news article list.
+    static let todayNewsKey = "widgetTodayNews"
+
+    /// The WidgetKit kind string for the Today News widget.
+    static let todayNewsWidgetKind = "NookTodayNewsWidget"
+
+    /// The shared App Group `UserDefaults` suite, or `nil` when the entitlement
+    /// isn't active (e.g., unsigned debug builds — reads return an empty list
+    /// and writes are silently dropped).
+    static var appGroupDefaults: UserDefaults? {
+        UserDefaults(suiteName: appGroupID)
+    }
+
+    /// Encodes `items` and stores them in the shared App Group defaults so the
+    /// widget extension can read them. A no-op when the App Group isn't available.
+    static func writeTodayNews(_ items: [TodayNewsItem]) {
+        guard let defaults = appGroupDefaults,
+              let data = try? JSONEncoder().encode(items) else { return }
+        defaults.set(data, forKey: todayNewsKey)
+    }
+
+    /// 读取缓存的今日新闻列表。App Group 不可用或尚未写入时返回空数组。
+    static func readTodayNews() -> [TodayNewsItem] {
+        guard let defaults = appGroupDefaults,
+              let data = defaults.data(forKey: todayNewsKey),
+              let items = try? JSONDecoder().decode([TodayNewsItem].self, from: data) else {
+            return []
+        }
+        return items
+    }
 
     /// Opens the app without changing the view.
     static var openAppURL: URL {

@@ -2431,7 +2431,7 @@ enum StreamingMarkdownFormatter {
         var design: Font.Design = .default
         var output = NSMutableAttributedString()
 
-        mutating func render(document: Document) {
+        mutating func render(document: Markdown.Document) {
             for (index, block) in Array(document.children).enumerated() {
                 if index > 0 { append(blockSeparator, style: Style()) }
                 renderBlock(block)
@@ -2669,7 +2669,7 @@ enum StreamingMarkdownFormatter {
             blockSeparator: blockSeparator,
             design: design
         )
-        renderer.render(document: Document(parsing: markdown))
+        renderer.render(document: Markdown.Document(parsing: markdown))
         #if canImport(AppKit)
         return (try? AttributedString(renderer.output, including: \.appKit))
             ?? AttributedString(renderer.output.string)

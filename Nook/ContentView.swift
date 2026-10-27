@@ -287,6 +287,11 @@ struct ContentView: View {
             // because it is the only route that must not be mistaken for a
             // widget deep link.
             if PlusInviteInbox.shared.accept(url) { return }
+            // http/https URLs from the Today News widget: open directly in browser
+            if url.scheme == "http" || url.scheme == "https" {
+                NSWorkspace.shared.open(url)
+                return
+            }
             if let raw = WidgetShared.smartSourceRaw(from: url), let source = SmartSource(rawValue: raw) {
                 store.selectSmartSource(source)
             }
