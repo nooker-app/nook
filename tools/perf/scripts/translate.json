@@ -1,0 +1,56 @@
+{
+  "repetitions": 1,
+  "coldFirst": false,
+  "launchArgs": [
+    "-translateListTitles",
+    "YES",
+    "-appLanguage",
+    "ja",
+    "-NookFakeTranslator",
+    "20"
+  ],
+  "steps": [
+    {
+      "id": "T1",
+      "setup": [
+        {
+          "type": "selectFeed",
+          "target": "feed-small"
+        }
+      ],
+      "action": {
+        "type": "selectSmart",
+        "target": "all"
+      }
+    },
+    {
+      "id": "T2",
+      "action": {
+        "type": "fling",
+        "count": 8
+      }
+    },
+    {
+      "id": "T3",
+      "setup": [
+        {
+          "type": "selectIndex",
+          "index": 0
+        }
+      ],
+      "action": {
+        "type": "keyRepeat",
+        "rate": 30,
+        "duration": 5
+      }
+    },
+    {
+      "id": "T4",
+      "action": {
+        "type": "constantScroll",
+        "rate": 1500,
+        "duration": 12
+      }
+    }
+  ]
+}

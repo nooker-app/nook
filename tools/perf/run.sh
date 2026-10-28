@@ -181,6 +181,11 @@ launch_args=(
   -geminiKeyConfigured NO
 )
 [[ -z "$only" ]] || launch_args+=(-NookPerfOnly "$only")
+# A script may name extra argument-domain defaults (e.g. title translation on),
+# so the scenario carries its own launch state.
+while IFS= read -r -d '' extra; do launch_args+=("$extra"); done < <(
+  python3 -c 'import json, sys; sys.stdout.write("".join(a + "\0" for a in json.load(open(sys.argv[1])).get("launchArgs", [])))' "$script_arg"
+)
 
 # Give this child an explicit log path: macOS Foundation can ignore TMPDIR.
 # Never inspect or move the real app's container log.

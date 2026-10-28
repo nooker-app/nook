@@ -544,6 +544,11 @@ public final class ListTitleTranslator {
     /// Application Support/Nook/ListTitleTranslations.json — device-local, outside
     /// the sync folder, so it is never shared between devices.
     private nonisolated static func cacheURL() -> URL? {
+        #if DEBUG
+        // A perf run must neither read a real cache (every run would start warm)
+        // nor leave its fake translations behind.
+        if PerfLaunch.isActive { return nil }
+        #endif
         guard let base = try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
         ) else { return nil }

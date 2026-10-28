@@ -162,6 +162,11 @@ B 스크립트는 변형별로 나뉘고 `repetitions:1`입니다: `refresh-none
 - C4 C1 도중에 B2 시작 (새로고침 중 스크롤)
 - C5 윈도 경계: 1500pt/s 등속으로 150행에서 450행까지 내려가며 200/400 경계를 넘깁니다. 이어서 `lib-20k`에서 끝까지 내립니다(스크롤로만 윈도가 커지는 구간).
 
+**T. 목록 제목 번역 중** (`translate.json`, `lib-5k`, 실행당 1회. 대조군 `translate-off.json`은 같은 동작에서 번역만 끔)
+- 스크립트의 `launchArgs`로 `-translateListTitles YES -appLanguage ja -NookFakeTranslator 20`을 넘깁니다(argument domain만, 저장 안 함). 일본어 대상이라 픽스처의 한국어·영어 제목이 모두 번역 대상이 됩니다. 실제 Apple Intelligence로 돌리려면 `-NookFakeTranslator`를 뺀 사본을 씁니다.
+- 측정 모드에서는 번역 캐시 파일을 읽지도 쓰지도 않으므로(`ListTitleTranslator.cacheURL`), 매 실행이 번역 전 상태에서 시작합니다.
+- T1 `feed-small` → All (전환 직후 보이는 행이 번역됨) · T2 fling 8회 · T3 ↓ 키 30Hz 5초 · T4 1500pt/s 등속 12초. 판정은 C군 기준이고, 번역 켬/끔의 차이(`list.row.height` 귀속 stall, hitchRatio)를 함께 봅니다.
+
 실제 휠과 관성의 경로는 위 방식과 다릅니다. 그래서 Phase마다 한 번 `tools/perf/wheel.swift`(CGEvent scrollWheel, phase/momentumPhase 포함, Accessibility 권한 필요, Nook이 frontmost여야 함)로 C1을 검증합니다. 스킬 문서에 따르면 앱이 frontmost가 아니면 posted event가 사라지므로, 받은 이벤트 수를 로그로 확인합니다. computer-use는 화면 확인 용도로만 쓰고 타이밍 측정에는 쓰지 않습니다(스크린샷 지연 때문).
 
 **D. 글 열기와 토글** (All, `lib-10k`)
