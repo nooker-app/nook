@@ -1629,6 +1629,51 @@ private struct PerfDisplayLinkProbe: NSViewRepresentable {
 }
 #endif
 
+/// Progress and empty-state observations stay outside the list's body.
+private struct ArticleListEmptyState: View {
+    let store: ReaderStore
+
+    var body: some View {
+        if store.activeSearchQuery.isEmpty, store.feedSelection.isEmpty, store.smartSelection == .unread {
+            ContentUnavailableView {
+                Label("You're All Caught Up", systemImage: "checkmark.circle")
+            } description: {
+                Text("No unread articles right now.")
+            } actions: {
+                Button("View All Articles") { store.selectSmartSource(.all) }
+                    .buttonStyle(.borderedProminent)
+            }
+        } else {
+            ContentUnavailableView {
+                Label("No Articles", systemImage: "newspaper")
+            } description: {
+                Text(store.activeSearchQuery.isEmpty ? "Add an RSS or Atom feed, then refresh." : "No article matches the current search.")
+            }
+        }
+    }
+}
+
+private struct ArticleListDownloadButton: View {
+    let store: ReaderStore
+    @Binding var showDownloadPicker: Bool
+
+    var body: some View {
+        if let progress = store.offlineDownloadProgress {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("\(progress.completed)/\(progress.total)").monospacedDigit()
+            }
+        } else if !store.visibleArticles.isEmpty {
+            Button {
+                showDownloadPicker = true
+            } label: {
+                Label("Download for Offline", systemImage: "arrow.down.circle")
+            }
+            .help("Choose articles in this list to save for offline reading")
+        }
+    }
+}
+
 private struct ArticleListView: View {
     @Bindable var store: ReaderStore
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
@@ -1654,22 +1699,7 @@ private struct ArticleListView: View {
                     Text("Nook stores its RSS library in a folder you choose, so iCloud Drive can sync it like a vault.")
                 }
             } else if store.visibleArticles.isEmpty {
-                if store.activeSearchQuery.isEmpty, store.feedSelection.isEmpty, store.smartSelection == .unread {
-                    ContentUnavailableView {
-                        Label("You're All Caught Up", systemImage: "checkmark.circle")
-                    } description: {
-                        Text("No unread articles right now.")
-                    } actions: {
-                        Button("View All Articles") { store.selectSmartSource(.all) }
-                            .buttonStyle(.borderedProminent)
-                    }
-                } else {
-                    ContentUnavailableView {
-                        Label("No Articles", systemImage: "newspaper")
-                    } description: {
-                        Text(store.activeSearchQuery.isEmpty ? "Add an RSS or Atom feed, then refresh." : "No article matches the current search.")
-                    }
-                }
+                ArticleListEmptyState(store: store)
             } else {
                 List(selection: $store.selectedArticleID) {
                     ForEach(store.visibleArticles) { article in
@@ -1698,6 +1728,7 @@ private struct ArticleListView: View {
                             }
                     }
                 }
+                .id(store.listGeneration)
                 .listStyle(.inset)
                 #if DEBUG
                 .background { PerfDisplayLinkProbe().accessibilityHidden(true) }
@@ -1718,19 +1749,7 @@ private struct ArticleListView: View {
         .searchable(text: $store.searchText, placement: .toolbar, prompt: "Search Articles")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if let progress = store.offlineDownloadProgress {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("\(progress.completed)/\(progress.total)").monospacedDigit()
-                    }
-                } else if !store.visibleArticles.isEmpty {
-                    Button {
-                        showDownloadPicker = true
-                    } label: {
-                        Label("Download for Offline", systemImage: "arrow.down.circle")
-                    }
-                    .help("Choose articles in this list to save for offline reading")
-                }
+                ArticleListDownloadButton(store: store, showDownloadPicker: $showDownloadPicker)
             }
         }
         .sheet(isPresented: $showDownloadPicker) {
@@ -1739,14 +1758,6 @@ private struct ArticleListView: View {
         }
         .safeAreaInset(edge: .bottom) {
             ArticleListStatusBar(store: store)
-        }
-        .onChange(of: store.feedSelection) { _, _ in
-            store.clearRetainedArticles()
-            store.pruneSelectionIfHidden()
-        }
-        .onChange(of: store.smartSelection) { _, _ in
-            store.clearRetainedArticles()
-            store.pruneSelectionIfHidden()
         }
         .onChange(of: store.searchText) { _, _ in
             store.debounceSearch()
