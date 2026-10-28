@@ -34,6 +34,7 @@ public final class ReaderStore {
             // title/summary/categories, never read/star state, so the O(n)
             // reclassification here would be pure waste on the article-open path.
             guard !suppressArticlesDidSet else { return }
+            rebuildArticleIndex()
             recomputeFilteredIDs()
             recomputeCounts()
             updateUnreadBadge()
@@ -44,6 +45,30 @@ public final class ReaderStore {
     /// property stays stored + observable (views tracking `articles` still see
     /// the write); only the didSet recomputes are skipped.
     private var suppressArticlesDidSet = false
+    @ObservationIgnored private var articleIndexByID: [Article.ID: Int] = [:]
+
+    private func rebuildArticleIndex() {
+        articleIndexByID = Dictionary(articles.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    private(set) var allCount = 0
+    @ObservationIgnored private var selectionChangeDepth = 0
+
+    /// All direct bindings and compound navigation actions use the same path.
+    /// Re-selecting a source clears retention and refilters, as before.
+    private func withSelectionChange(_ change: () -> Void) {
+        selectionChangeDepth += 1
+        change()
+        selectionChangeDepth -= 1
+        guard selectionChangeDepth == 0 else { return }
+        retainedArticleIDs.removeAll()
+        scheduleArticleFilter()
+    }
+
+    private func selectionChanged() {
+        guard selectionChangeDepth == 0 else { return }
+        withSelectionChange {}
+    }
 
     /// Article ids with an active deletion tombstone, across every known shard
     /// (this device's and peers'). Deletion tombstones are applied by the CRDT
@@ -84,7 +109,7 @@ public final class ReaderStore {
             // all three selection scopes back-to-back, so guard equal writes to
             // avoid redundant whole-list recomputes.
             guard smartSelection != oldValue else { return }
-            scheduleArticleFilter()
+            selectionChanged()
         }
     }
     public var feedSelection: Set<Feed.ID> = [] {
@@ -102,8 +127,9 @@ public final class ReaderStore {
             }
             #endif
             // Selecting a feed leaves the Categories scope (they're exclusive).
-            if !feedSelection.isEmpty { categorySelection = nil }
-            scheduleArticleFilter()
+            withSelectionChange {
+                if !feedSelection.isEmpty { categorySelection = nil }
+            }
         }
     }
     /// The category id currently being browsed, or nil. Mutually exclusive with
@@ -111,7 +137,7 @@ public final class ReaderStore {
     public var categorySelection: String? = nil {
         didSet {
             guard categorySelection != oldValue else { return }
-            scheduleArticleFilter()
+            selectionChanged()
         }
     }
     /// Whether the window-wide in-app browser bottom sheet is showing.
@@ -145,7 +171,12 @@ public final class ReaderStore {
     public var searchText = ""
     /// The query actually used to filter articles. Trails `searchText` by a
     /// short debounce so filtering doesn't run on every keystroke.
-    public private(set) var activeSearchQuery = "" { didSet { scheduleArticleFilter(animated: false) } }
+    public private(set) var activeSearchQuery = "" {
+        didSet {
+            guard activeSearchQuery != oldValue else { return }
+            scheduleArticleFilter(animated: false)
+        }
+    }
     private var searchDebounceTask: Task<Void, Never>?
 
     /// Per-category sort order (SmartSource rawValue → order), persisted locally
@@ -157,6 +188,27 @@ public final class ReaderStore {
     /// thread for large libraries so typing/scrolling never blocks the UI.
     private(set) var displayedArticles: [Article] = []
     private var filterTask: Task<Void, Never>?
+    private var filterComputationTask: Task<[Article], Never>?
+    /// Changes only when a different navigation/search result is installed.
+    /// macOS List uses this to rebuild NSTableView instead of diffing thousands
+    /// of inserted/deleted rows. Incremental data publishes retain the identity.
+    public private(set) var listGeneration = 0
+    private struct ListSource: Equatable {
+        let feeds: Set<Feed.ID>
+        let smart: SmartSource?
+        let category: String?
+        let query: String
+    }
+    private var displayedSource: ListSource?
+    private var currentListSource: ListSource {
+        ListSource(feeds: feedSelection,
+                   smart: feedSelection.isEmpty && categorySelection == nil ? smartSelection : nil,
+                   category: feedSelection.isEmpty ? categorySelection : nil,
+                   query: activeSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    #if DEBUG
+    @ObservationIgnored private(set) var filterExecutionCount = 0
+    #endif
     /// Coalesces data-driven recomputes (a sync streams articles in bursts, each
     /// mutation firing `didSet`) so the expensive filter+sort runs at most once
     /// per quiet window instead of dozens of times a second.
@@ -621,6 +673,7 @@ public final class ReaderStore {
         stopObservingLibrary()
         searchDebounceTask?.cancel()
         filterTask?.cancel()
+        filterComputationTask?.cancel()
         filterDebounceTask?.cancel()
         bulkCategorizeTask?.cancel()
         externalReloadTask?.cancel()
@@ -797,7 +850,7 @@ public final class ReaderStore {
 
     public var selectedArticle: Article? {
         guard let selectedArticleID else { return nil }
-        return articles.first { $0.id == selectedArticleID }
+        return article(withID: selectedArticleID)
     }
 
     /// The list-backing articles. Backed by `displayedArticles`, which is
@@ -816,7 +869,7 @@ public final class ReaderStore {
     /// so the recompute is deferred until the burst settles, capturing the
     /// latest snapshot once instead of re-sorting on every mutation.
     private func scheduleArticleFilter(debounced: Bool = false, animated: Bool = true) {
-        guard !isPreparingLocalReset else { return }
+        guard !isPreparingLocalReset, selectionChangeDepth == 0 else { return }
         guard debounced else {
             filterDebounceTask?.cancel()
             filterDebounceTask = nil
@@ -824,10 +877,13 @@ public final class ReaderStore {
             return
         }
 
+        if isBatchRefreshing, filterDebounceTask != nil { return }
         filterDebounceTask?.cancel()
+        let interval: Duration = isBatchRefreshing ? .milliseconds(1500) : Self.filterDebounceInterval
         filterDebounceTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.filterDebounceInterval)
+            try? await Task.sleep(for: interval)
             guard !Task.isCancelled, let self else { return }
+            self.filterDebounceTask = nil
             self.performArticleFilter(animated: animated)
         }
     }
@@ -837,6 +893,10 @@ public final class ReaderStore {
     /// are filtered on a background executor so the main thread stays responsive.
     private func performArticleFilter(animated: Bool = true) {
         filterTask?.cancel()
+        filterComputationTask?.cancel()
+        #if DEBUG
+        filterExecutionCount += 1
+        #endif
 
         let snapshot = articles
         let feedTitles = Dictionary(feeds.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
@@ -882,23 +942,25 @@ public final class ReaderStore {
             return
         }
 
-        filterTask = Task { [weak self] in
-            let result = await Task.detached(priority: .userInitiated) {
-                #if DEBUG && os(macOS)
-                return MainThreadLog.measure("bg.filter") {
-                    Self.computeVisibleArticles(
-                        snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
-                        smartSelection: smartSelection, categorySelection: categorySelection, retained: retained,
-                        filteredIDs: filteredIDs, query: query, order: order
-                    )
-                }
-                #else
+        let computation = Task.detached(priority: .userInitiated) {
+            #if DEBUG && os(macOS)
+            return MainThreadLog.measure("bg.filter") {
                 Self.computeVisibleArticles(
                     snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
-                    smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order
+                    smartSelection: smartSelection, categorySelection: categorySelection, retained: retained,
+                    filteredIDs: filteredIDs, query: query, order: order
                 )
-                #endif
-            }.value
+            }
+            #else
+            Self.computeVisibleArticles(
+                snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
+                smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order
+            )
+            #endif
+        }
+        filterComputationTask = computation
+        filterTask = Task { [weak self] in
+            let result = await computation.value
             guard !Task.isCancelled, let self else { return }
             self.applyDisplayed(result, animated: animated)
         }
@@ -943,6 +1005,12 @@ public final class ReaderStore {
         // (switching source) or the very first fill isn't animated, which would
         // otherwise look like a jarring reshuffle. This runs for both the sync
         // and background filter paths, so large libraries animate too.
+        let source = currentListSource
+        let replacesList = displayedSource != source
+        displayedSource = source
+        #if os(macOS)
+        if replacesList { listGeneration &+= 1 }
+        #endif
         let oldIDs = displayedArticles.map(\.id)
         let newIDs = result.map(\.id)
         // @Observable republishes on every assignment, invalidating every row —
@@ -972,9 +1040,10 @@ public final class ReaderStore {
         // import the displayed list is republished every ~400ms flush, and a spring
         // per flush over a growing row set is the dominant cause of the import
         // freeze (overlapping animations never let the list settle).
-        let willAnimate = animated && !isBulkImporting && oldIDs != newIDs && !oldSet.isEmpty
+        let willAnimate = animated && !replacesList && !isBulkImporting && !isBatchRefreshing && oldIDs != newIDs && !oldSet.isEmpty
             && !oldSet.isDisjoint(with: newIDs)
             && changedRowCount <= Self.maxAnimatedRowDelta
+            && oldIDs.filter(newSet.contains) == newIDs.filter(oldSet.contains)
         #if DEBUG && os(macOS)
         // Every republish invalidates every row, and the list is a thousand of them.
         // Three separate questions, so three counters: how often the list is handed a
@@ -1041,29 +1110,25 @@ public final class ReaderStore {
             return article.bodyParagraphs.contains { $0.localizedStandardContains(query) }
         }
 
-        // Browsing a category: everything tagged with it, regardless of read or
-        // hidden state (you can open a category you've also chosen to hide).
-        if feedSelection.isEmpty, let categoryID = categorySelection {
-            return articles
-                .filter { $0.categories.contains(categoryID) && matchesQuery($0) }
-                .sorted { Article.isOrdered($0, $1, by: order) }
-        }
-
-        // The Filtered source shows exactly the hidden articles (regardless of
-        // read state); every other source hides them.
-        if feedSelection.isEmpty, smartSelection == .filtered {
-            return articles
-                .filter { filteredIDs.contains($0.id) && matchesQuery($0) }
-                .sorted { Article.isOrdered($0, $1, by: order) }
-        }
-
-        return articles
-            .filter {
-                !filteredIDs.contains($0.id)
-                    && (matchesSource($0) || (retained.contains($0.id) && matchesSourceIgnoringReadState($0)))
-                    && matchesQuery($0)
+        var result: [Article] = []
+        for article in articles {
+            guard !Task.isCancelled else { return [] }
+            let matches: Bool
+            if feedSelection.isEmpty, let categoryID = categorySelection {
+                // Categories include read and hidden articles.
+                matches = article.categories.contains(categoryID)
+            } else if feedSelection.isEmpty, smartSelection == .filtered {
+                matches = filteredIDs.contains(article.id)
+            } else {
+                matches = !filteredIDs.contains(article.id)
+                    && (matchesSource(article)
+                        || (retained.contains(article.id) && matchesSourceIgnoringReadState(article)))
             }
-            .sorted { Article.isOrdered($0, $1, by: order) }
+            if matches && matchesQuery(article) { result.append(article) }
+        }
+        guard !Task.isCancelled else { return [] }
+        result.sort { Article.isOrdered($0, $1, by: order) }
+        return Task.isCancelled ? [] : result
     }
 
     public var syncFolderName: String? {
@@ -1094,11 +1159,11 @@ public final class ReaderStore {
         #if DEBUG && os(macOS)
         MainThreadLog.selectionBegan(source: source.rawValue)
         #endif
-        categorySelection = nil
-        smartSelection = source
-        feedSelection = []
-        clearRetainedArticles()
-        pruneSelectionIfHidden()
+        withSelectionChange {
+            categorySelection = nil
+            smartSelection = source
+            feedSelection = []
+        }
     }
 
     /// Browses everything tagged with a category. Mutually exclusive with the
@@ -1107,11 +1172,20 @@ public final class ReaderStore {
         #if DEBUG && os(macOS)
         MainThreadLog.selectionBegan(source: "category:\(id)")
         #endif
-        smartSelection = nil
-        feedSelection = []
-        categorySelection = id
-        clearRetainedArticles()
-        pruneSelectionIfHidden()
+        withSelectionChange {
+            smartSelection = nil
+            feedSelection = []
+            categorySelection = id
+        }
+    }
+
+    /// Compound feed navigation used by iOS buttons (native macOS multi-select
+    /// still writes feedSelection directly).
+    public func selectFeed(_ id: Feed.ID) {
+        withSelectionChange {
+            feedSelection = [id]
+            smartSelection = nil
+        }
     }
 
     /// Unread count for a category (for the sidebar badge).
@@ -1538,15 +1612,12 @@ public final class ReaderStore {
         for id in removedIDs { discardPendingBatchMerges(forFeedID: id) }
         feeds.removeAll { removedIDs.contains($0.id) }
         articles.removeAll { removedIDs.contains($0.feedID) }
-        for id in removedIDs {
-            feedIcons[id] = nil
-            feedSelection.remove(id)
-        }
+        for id in removedIDs { feedIcons[id] = nil }
+        feedSelection.subtract(removedIDs)
         folders.removeAll { $0 == name }
         for id in removedIDs { recordFeedDeleted(id) }
         recordFolder(name, present: false)
         scheduleShardSave()
-        pruneSelectionIfHidden()
         saveAfterMutation()
     }
 
@@ -1573,7 +1644,6 @@ public final class ReaderStore {
         for id in removedIDs { recordFeedDeleted(id) }
         for name in targets { recordFolder(name, present: false) }
         scheduleShardSave()
-        pruneSelectionIfHidden()
         saveAfterMutation()
     }
 
@@ -1650,6 +1720,7 @@ public final class ReaderStore {
     }
 
     private func endFeedFetch(_ id: Feed.ID) {
+        guard refreshingFeedIDs.contains(id) || spinningFeedIDs.contains(id) else { return }
         refreshingFeedIDs.remove(id)
         spinningFeedIDs.remove(id)
         syncIsRefreshing()
@@ -1722,6 +1793,8 @@ public final class ReaderStore {
         if totalUnread != total { totalUnread = total }
         if todayCount != today { todayCount = today }
         if starredCount != starred { starredCount = starred }
+        let all = articles.count - filteredArticleIDs.count
+        if allCount != all { allCount = all }
     }
 
     /// Recompiles the active filters (enabled, non-empty pattern) into
@@ -2056,7 +2129,7 @@ public final class ReaderStore {
 
     /// Sets the categories assigned to one article (manual add/remove from the UI).
     public func setArticleCategories(articleID: Article.ID, _ ids: [String]) {
-        guard let index = articles.firstIndex(where: { $0.id == articleID }) else { return }
+        guard let index = articleIndexByID[articleID] else { return }
         // Keep only ids that are real categories, de-duplicated, order preserved.
         let valid = Set(categories.map(\.id))
         var seen = Set<String>()
@@ -2117,8 +2190,7 @@ public final class ReaderStore {
         func flush() {
             guard !pending.isEmpty else { return }
             var updated = articles
-            let indexByID = Dictionary(
-                updated.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let indexByID = articleIndexByID
             for (id, cats) in pending {
                 if let index = indexByID[id] {
                     let previous = updated[index].categories
@@ -2138,7 +2210,7 @@ public final class ReaderStore {
 
         while !aiCategorizeQueue.isEmpty {
             let id = aiCategorizeQueue.removeFirst()
-            guard let article = articles.first(where: { $0.id == id }) else { continue }
+            guard let article = article(withID: id) else { continue }
             if let combined = await classification(for: article, provider: provider) {
                 pending[id] = combined
             }
@@ -2166,7 +2238,7 @@ public final class ReaderStore {
         guard !names.isEmpty else { return nil }
         let idByName = Dictionary(categories.map { ($0.name.lowercased(), $0.id) }, uniquingKeysWith: { first, _ in first })
         // Re-read the current assignment (it may have changed while awaiting).
-        guard let current = articles.first(where: { $0.id == article.id })?.categories else { return nil }
+        guard let current = self.article(withID: article.id)?.categories else { return nil }
         var combined = current
         for cid in names.compactMap({ idByName[$0.lowercased()] }) where !combined.contains(cid) && combined.count < ArticleCategory.maxPerArticle {
             combined.append(cid)
@@ -2342,7 +2414,13 @@ public final class ReaderStore {
 
     /// Installed by the platform app to reflect the unread badge (macOS Dock,
     /// iOS app icon). Called with the count to show, or 0 to clear.
-    @ObservationIgnored public var onUnreadBadgeChange: ((Int) -> Void)?
+    @ObservationIgnored public var onUnreadBadgeChange: ((Int) -> Void)? {
+        didSet {
+            lastExportedUnreadBadge = nil
+            updateUnreadBadge()
+        }
+    }
+    @ObservationIgnored private var lastExportedUnreadBadge: Int?
 
     /// The single writer of the unread badge. Invoked automatically whenever the
     /// article set or the preference changes (via their `didSet`), so the badge
@@ -2351,7 +2429,11 @@ public final class ReaderStore {
     /// actual Dock/app-icon update is delegated to `onUnreadBadgeChange` so the
     /// core stays platform-agnostic.
     private func updateUnreadBadge() {
-        onUnreadBadgeChange?(showsUnreadBadge ? totalUnreadCount : 0)
+        guard let onUnreadBadgeChange else { return }
+        let value = showsUnreadBadge ? totalUnreadCount : 0
+        guard lastExportedUnreadBadge != value else { return }
+        lastExportedUnreadBadge = value
+        onUnreadBadgeChange(value)
     }
 
     // MARK: - "Seen" tracking (notification suppression)
@@ -2378,13 +2460,15 @@ public final class ReaderStore {
         defer { MainThreadLog.add("store.markSeen", ms: (ProcessInfo.processInfo.systemUptime - markStarted) * 1000) }
         #endif
         guard isForegroundActive, storage != nil else { return }
-        var wrote = false
-        for article in displayedArticles where !article.isRead {
-            if ownShard.articleState[article.id]?.seen?.value == true { continue }
-            ownShard.setArticleSeen(article.id, true, hlc: nextHLC())
-            wrote = true
+        let unseen = displayedArticles.filter {
+            !$0.isRead && ownShard.articleState[$0.id]?.seen?.value != true
         }
-        if wrote { scheduleShardSave() }
+        guard !unseen.isEmpty else { return }
+        let stamp = nextHLC()
+        var shard = ownShard
+        for article in unseen { shard.setArticleSeen(article.id, true, hlc: stamp) }
+        ownShard = shard
+        scheduleShardSave()
     }
 
     /// Article ids marked "seen" across every device's shard (peers + this
@@ -2414,10 +2498,10 @@ public final class ReaderStore {
         #endif
         // Leave the category scope even for an empty folder (feedSelection's didSet
         // only clears it when non-empty).
-        categorySelection = nil
-        feedSelection = Set(feeds.filter { $0.folderName == folder }.map(\.id))
-        clearRetainedArticles()
-        pruneSelectionIfHidden()
+        withSelectionChange {
+            categorySelection = nil
+            feedSelection = Set(feeds.filter { $0.folderName == folder }.map(\.id))
+        }
     }
 
     public func isFolderSelected(_ folder: String) -> Bool {
@@ -2431,7 +2515,7 @@ public final class ReaderStore {
         case .today: todayCount
         case .starred: starredCount
         // `.all` excludes filtered articles (they live only under `.filtered`).
-        case .all: articles.count - filteredArticleIDs.count
+        case .all: allCount
         case .filtered: filteredArticleIDs.count
         case .offline: OfflineArticleStore.shared.totalCount
         }
@@ -3915,17 +3999,20 @@ public final class ReaderStore {
     /// Opens an article by ID (used by the widget deep link): makes it visible
     /// and selects it so the reader displays it. The reader then marks it read.
     func openArticle(id: Article.ID) {
-        guard articles.contains(where: { $0.id == id }) else { return }
-        smartSelection = .all
-        feedSelection = []
-        searchText = ""
-        searchDebounceTask?.cancel()
-        activeSearchQuery = ""
+        guard articleIndexByID[id] != nil else { return }
+        withSelectionChange {
+            categorySelection = nil
+            smartSelection = .all
+            feedSelection = []
+            searchText = ""
+            searchDebounceTask?.cancel()
+            activeSearchQuery = ""
+        }
         selectedArticleID = id
     }
 
     public func setRead(articleID: Article.ID, isRead: Bool) {
-        guard let index = articles.firstIndex(where: { $0.id == articleID }),
+        guard let index = articleIndexByID[articleID],
               articles[index].isRead != isRead else { return }
 
         // Incremental path: one element changes one bit — skip the didSet's
@@ -4012,7 +4099,6 @@ public final class ReaderStore {
         recordFeedDeleted(feedID)
         // Tombstone: write through immediately (see deleteArticle).
         scheduleShardSave(urgent: true)
-        pruneSelectionIfHidden()
         saveAfterMutation()
     }
 
@@ -4048,7 +4134,7 @@ public final class ReaderStore {
     }
 
     public func setStarred(articleID: Article.ID, isStarred: Bool) {
-        guard let index = articles.firstIndex(where: { $0.id == articleID }),
+        guard let index = articleIndexByID[articleID],
               articles[index].isStarred != isStarred else { return }
 
         // Same incremental path as `setRead`: one bit, O(1) count delta, no
@@ -4099,7 +4185,8 @@ public final class ReaderStore {
     /// list), so a reader driven by a captured snapshot can re-resolve fresh
     /// read/starred state even after the article leaves the current scope.
     public func article(withID id: Article.ID) -> Article? {
-        articles.first { $0.id == id }
+        guard let index = articleIndexByID[id] else { return nil }
+        return articles[index]
     }
 
     /// The article at a page URL, searched across every feed rather than the
@@ -4528,6 +4615,9 @@ public final class ReaderStore {
         // Hold per-feed writes and flush once at the end, so a fetch of many feeds
         // doesn't rewrite the whole library repeatedly. `defer` guarantees the flag
         // clears and the final state is saved even on early exit.
+        let initialArticleIDs = Set(articles.map(\.id))
+        filterDebounceTask?.cancel()
+        filterDebounceTask = nil
         isBatchRefreshing = true
         defer {
             // Safety net: no bucket may outlive the fetch, whatever the exit path
@@ -4541,7 +4631,8 @@ public final class ReaderStore {
             // One immediate (non-debounced) filter now that the whole batch has
             // merged, so the list settles at once instead of after the debounce.
             // Counts/badge already stayed live via the `articles` didSet.
-            scheduleArticleFilter()
+            let hasNew = articles.contains { !initialArticleIDs.contains($0.id) }
+            scheduleArticleFilter(animated: mode.animatesInsertion && hasNew && !initialArticleIDs.isEmpty)
             scheduleSave()
         }
 
@@ -4764,7 +4855,18 @@ public final class ReaderStore {
 
     /// Test-only factory (the app uses `shared`): lets regression tests drive
     /// store flows on an isolated instance without touching global state.
-    static func _makeForTesting() -> ReaderStore { ReaderStore() }
+    static func _makeForTesting(storage: ReaderStorage? = nil) -> ReaderStore {
+        let store = ReaderStore()
+        store.storage = storage
+        if storage != nil {
+            store.deviceID = "test"
+            store.ownShard = DeviceStateDocument(deviceID: "test")
+        }
+        return store
+    }
+
+    var _shardForTesting: DeviceStateDocument { ownShard }
+    func _cachedBodyForTesting(_ id: Article.ID) -> ArticleBody? { bodyCache[id] }
 
     /// Test-only entry into the refresh merge path (`merge` stays private so
     /// production callers can't bypass the batching buffer by accident).
@@ -4797,6 +4899,29 @@ public final class ReaderStore {
     /// `articles` and assigning the merged result within one synchronous span
     /// makes a stale-apply clobber structurally impossible — the batch buffer
     /// only ever holds network snapshots, never store state.
+    /// Transient parser date provenance is not persisted. A missing retained
+    /// body is hydration, not an edit; when we have the old body, compare it so
+    /// real content edits still reach the reader. Normalize dateless timestamps
+    /// and user state before constructing this projection.
+    struct MergeProjection: Equatable {
+        private let article: Article
+
+        init(_ article: Article, includingBody: Bool) {
+            var comparable = article
+            comparable.hasExplicitPublishDate = true
+            if !includingBody {
+                comparable.bodyParagraphs = []
+                comparable.contentHTML = nil
+            }
+            self.article = comparable
+        }
+
+        static func changed(from existing: Article, to incoming: Article) -> Bool {
+            MergeProjection(existing, includingBody: existing.hasBody)
+                != MergeProjection(incoming, includingBody: existing.hasBody)
+        }
+    }
+
     private func merge(batch: [ParsedFeed], animated: Bool) {
         guard !batch.isEmpty else { return }
         #if DEBUG && os(macOS)
@@ -4817,7 +4942,6 @@ public final class ReaderStore {
         // Last-writer-wins on a duplicate ID rather than trapping — a dupe slipping
         // through the baseline/shard merge must degrade, not crash the next refresh.
         var existingArticlesByID = Dictionary(articles.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
-        let knownIDs = Set(existingArticlesByID.keys)
         var hasNewArticles = false
         // Whether any existing article's merged value actually differs — when a
         // refresh changes nothing, `articles` must not be reassigned (its didSet
@@ -4898,10 +5022,15 @@ public final class ReaderStore {
                 if !article.hasExplicitPublishDate {
                     datelessArticleIDs.insert(article.id)
                 }
-                if !hasChangedArticles, existingArticlesByID[article.id] != article {
-                    hasChangedArticles = true
+                if let existing = existingArticlesByID[article.id] {
+                    if MergeProjection.changed(from: existing, to: article) {
+                        hasChangedArticles = true
+                        existingArticlesByID[article.id] = article
+                    }
+                    // Body cache below is refreshed even when metadata is unchanged.
+                } else {
+                    existingArticlesByID[article.id] = article
                 }
-                existingArticlesByID[article.id] = article
             }
 
             // Flashing is the only visual signal for automatic refreshes (they
@@ -4918,17 +5047,9 @@ public final class ReaderStore {
         // refresh (the common ambient case) must stay observation-silent.
         if hasNewArticles || hasChangedArticles {
             let merged = Array(existingArticlesByID.values)
-            // Animate the list only for interactive refreshes that bring in new
-            // stories, so rows slide/fade in like Apple Mail. Automatic (ambient/
-            // background) refreshes pass `animated: false` so new rows appear quietly
-            // instead of sliding under the user mid-scroll.
-            if animated && !isBulkImporting && hasNewArticles && !knownIDs.isEmpty {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                    articles = merged
-                }
-            } else {
-                articles = merged
-            }
+            let hadArticles = !articles.isEmpty
+            articles = merged
+            scheduleArticleFilter(debounced: true, animated: animated && hasNewArticles && hadArticles)
         }
         #if DEBUG && os(macOS)
         if hasChangedArticles && !hasNewArticles { MainThreadLog.add("store.merge.changedNoNew", ms: 0) }
@@ -5122,9 +5243,12 @@ public final class ReaderStore {
             suppressArticlesDidSet = true
             articles = library.articles
             suppressArticlesDidSet = false
+            rebuildArticleIndex()
             textFilteredArticleIDs = precomputed.textFilteredIDs
             filterClassifyCache = precomputed.classifyCache
             filteredArticleIDs = precomputed.filteredIDs
+            let all = articles.count - filteredArticleIDs.count
+            if allCount != all { allCount = all }
             if unreadByFeed != precomputed.unreadByFeed { unreadByFeed = precomputed.unreadByFeed }
             if unreadByCategory != precomputed.unreadByCategory { unreadByCategory = precomputed.unreadByCategory }
             if totalUnread != precomputed.totalUnread { totalUnread = precomputed.totalUnread }

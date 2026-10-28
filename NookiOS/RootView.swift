@@ -404,8 +404,7 @@ private struct RegularShell: View {
                 _ = await OwnNook.follow(publication: publication, in: store)
             }
             guard let feed = OwnNook.followedFeed(in: store, publication: publication) else { return }
-            store.feedSelection = [feed.id]
-            store.smartSelection = nil
+            store.selectFeed(feed.id)
         }
     }
 
@@ -1194,8 +1193,7 @@ private struct CompactShell: View {
         case .folder(let name):
             store.selectFolder(name)
         case .feed(let id):
-            store.feedSelection = [id]
-            store.smartSelection = nil
+            store.selectFeed(id)
         }
     }
 }
@@ -2566,8 +2564,7 @@ private struct Sidebar: View {
             case .category(let id):
                 store.selectCategory(id)
             case .feed(let id):
-                store.feedSelection = [id]
-                store.smartSelection = nil
+                store.selectFeed(id)
             case nil:
                 break
             }

@@ -178,18 +178,9 @@ struct PerfLibraryGenerator {
         "\(feedID)#\(guid)"
     }
 
-    /// Phase 1's MergeProjection compares a body only when the stored article
-    /// has one. Until it lands, a `none` refresh reports every feed-window
-    /// article outside the 600 retained bodies as changed (stored: no body,
-    /// parsed: the description as body). Flip this to `true` with that fix so
-    /// the test below asserts zero changed articles and no republish.
-    private static let noneRefreshIsChangeFree = false
-
-    /// Guards the B1 contract on the library's steady state (bodies capped at
-    /// the app's retention): after shard state is materialized, a real `none`
-    /// parse must add zero articles. Changed articles are counted and checked
-    /// against `noneRefreshIsChangeFree`.
-    @Test("none XML merge adds zero articles; changed count tracks the body-retention merge bug")
+    /// B1 must stay observation-silent after loading a list-light baseline:
+    /// fetched bodies beyond the retained 600 are hydration, not content edits.
+    @Test("none XML merge adds zero articles and changes no existing articles")
     @MainActor
     func noneRefreshMergeIsNoop() throws {
         var rng = SplitMix64(seed: 42)
@@ -254,9 +245,7 @@ struct PerfLibraryGenerator {
                 article.isStarred = existing.isStarred
                 article.categories = existing.categories
                 if !article.hasExplicitPublishDate { article.publishedAt = existing.publishedAt }
-                if article != existing {
-                    // The only expected difference is the body retention cut.
-                    #expect(!existing.hasBody && article.hasBody, "feed \(feed.id) changed \(article.id)")
+                if ReaderStore.MergeProjection.changed(from: existing, to: article) {
                     changedArticles += 1
                 }
             }
@@ -265,14 +254,8 @@ struct PerfLibraryGenerator {
         }
         print("perf.none.merge new=\(newArticles) changed=\(changedArticles) republishedFeeds=\(republishedFeeds)")
         #expect(newArticles == 0)
-        if Self.noneRefreshIsChangeFree {
-            #expect(changedArticles == 0)
-            #expect(republishedFeeds == 0)
-        } else {
-            // Today's full-equality merge: the spurious changes B1 measures.
-            #expect(changedArticles > 0)
-            #expect(republishedFeeds > 0)
-        }
+        #expect(changedArticles == 0)
+        #expect(republishedFeeds == 0)
 
         let libraryIDs = Set(materialized.articles.map(\.id))
         for index in [0, 29, 30, Self.feedCount - 2, Self.feedCount - 1] {
