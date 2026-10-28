@@ -28,20 +28,29 @@ public final class ArticleListWindow {
         return min(total, target)
     }
 
-    func install(full: [Article], indexByID: [Article.ID: Int], rows: [Article]) {
-        install(contents: ArticleListContents(full), indexByID: indexByID, rows: rows)
+    func install(full: [Article], indexByID: [Article.ID: Int], rows: [Article], replacement: Bool = true) {
+        install(contents: ArticleListContents(full), indexByID: indexByID, rows: rows, replacement: replacement)
     }
 
-    func install(contents: ArticleListContents, indexByID: [Article.ID: Int], rows: [Article]) {
-        generation &+= 1
-        growthTask?.cancel()
-        growthTask = nil
+    /// Only a replacement invalidates pending growth. An incremental install keeps
+    /// the prefix it extends, and the sentinel row that requested growth is already
+    /// on screen, so its onAppear would not fire again to re-request it.
+    func install(contents: ArticleListContents, indexByID: [Article.ID: Int], rows: [Article],
+                 replacement: Bool) {
+        if replacement {
+            generation &+= 1
+            growthTask?.cancel()
+            growthTask = nil
+        }
         self.full = contents
         self.indexByID = indexByID
         if totalCount != contents.articles.count { totalCount = contents.articles.count }
         self.rows = rows
     }
 
+    /// Not capped: List selection needs the selected row to exist, so a deep jump
+    /// (⌘↓ past the window, openArticle, a restored selection) appends the whole gap
+    /// in one non-animated publish.
     public func ensureVisible(id: Article.ID) {
         guard let index = indexByID[id], index >= rows.count else { return }
         publishPrefix(min(full.articles.count, max(200, index + 50)))

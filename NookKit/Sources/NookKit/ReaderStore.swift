@@ -205,7 +205,8 @@ public final class ReaderStore {
     @ObservationIgnored private var filterGeneration = 0
     @ObservationIgnored private var displayedFeedTitles: [Feed.ID: String] = [:]
     @ObservationIgnored private var displayedSavedIDs: Set<Article.ID> = []
-    /// Changes only when a different navigation/search result is installed.
+    /// Changes only when a different navigation/search result or sort order is
+    /// installed; data-driven reorders (date resolution, corrected feed dates) diff.
     /// macOS List uses this to rebuild NSTableView instead of diffing thousands
     /// of inserted/deleted rows. Incremental data publishes retain the identity.
     public private(set) var listGeneration = 0
@@ -214,13 +215,15 @@ public final class ReaderStore {
         let smart: SmartSource?
         let category: String?
         let query: String
+        let order: ArticleSortOrder
     }
     private var displayedSource: ListSource?
     private var currentListSource: ListSource {
         ListSource(feeds: feedSelection,
                    smart: feedSelection.isEmpty && categorySelection == nil ? smartSelection : nil,
                    category: feedSelection.isEmpty ? categorySelection : nil,
-                   query: activeSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines))
+                   query: activeSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines),
+                   order: currentSortOrder)
     }
     #if DEBUG
     @ObservationIgnored private(set) var filterExecutionCount = 0
@@ -1000,17 +1003,23 @@ public final class ReaderStore {
         }
         filterComputationTask = computation
         filterTask = Task { [weak self] in
-            let result = await computation.value
+            var result = await computation.value
             guard !Task.isCancelled, let self, self.filterGeneration == generation else { return }
             // An in-place flag patch after capture must never be overwritten by a stale result.
             guard self.displayRevision == revision,
-                  self.isBatchRefreshing == batch, self.isBulkImporting == bulk,
-                  self.listWindow.rows.count <= previousLength || replacesList else {
+                  self.isBatchRefreshing == batch, self.isBulkImporting == bulk else {
                 self.scheduleArticleFilter(animated: animated)
                 return
             }
             self.filterComputationTask = nil
             self.filterTask = nil
+            #if os(macOS)
+            // Growth or ensureVisible lengthened the window meanwhile. The full result
+            // is still current, so only its prefix is re-cut instead of refiltering.
+            if !result.replacesList, self.listWindow.rows.count > result.rows.count {
+                result.rows = Array(result.full.prefix(self.listWindow.rows.count))
+            }
+            #endif
             self.applyDisplayed(result, source: source)
         }
     }
@@ -1043,10 +1052,10 @@ public final class ReaderStore {
         }
     }
 
-    private struct DisplayResult: Sendable {
+    struct DisplayResult: Sendable {
         let full: [Article]
         let indexByID: [Article.ID: Int]
-        let rows: [Article]
+        var rows: [Article]
         let feedTitles: [Feed.ID: String]
         let savedIDs: Set<Article.ID>
         let identical: Bool
@@ -1055,7 +1064,7 @@ public final class ReaderStore {
     }
 
     /// Diff, membership index and window prefix are all prepared on the filter executor.
-    nonisolated private static func computeDisplayDiff(old: [Article], result: [Article],
+    nonisolated static func computeDisplayDiff(old: [Article], result: [Article],
         feedTitles: [Feed.ID: String], oldFeedTitles: [Feed.ID: String],
         savedIDs: Set<Article.ID>, oldSavedIDs: Set<Article.ID>, replacesList: Bool,
         previousLength: Int, selectedID: Article.ID?, animated: Bool, bulk: Bool, batch: Bool
@@ -1075,7 +1084,9 @@ public final class ReaderStore {
         let oldSet = Set(oldIDs)
         let newSet = Set(newIDs)
         let reordered = oldIDs.filter(newSet.contains) != newIDs.filter(oldSet.contains)
-        let replacement = !sameIDs && (replacesList || reordered)
+        // A sort toggle is part of the source. A data reorder keeps the grown window,
+        // which is still a prefix of the new full result, and only suppresses animation.
+        let replacement = !sameIDs && replacesList
         let length = ArticleListWindow.length(total: result.count, previousTotal: old.count,
             previousLength: previousLength, replacement: replacement,
             selectedIndex: selectedID.flatMap { indexByID[$0] })
@@ -1114,7 +1125,8 @@ public final class ReaderStore {
             self.displayedFeedTitles = result.feedTitles
             self.displayedSavedIDs = result.savedIDs
             #if os(macOS)
-            self.listWindow.install(contents: self.displayContents, indexByID: result.indexByID, rows: result.rows)
+            self.listWindow.install(contents: self.displayContents, indexByID: result.indexByID,
+                rows: result.rows, replacement: result.replacesList)
             if let id = self.selectedArticleID { self.listWindow.ensureVisible(id: id) }
             #endif
         }
@@ -1127,6 +1139,14 @@ public final class ReaderStore {
         }
         pruneSelectionIfHidden()
         markVisibleArticlesSeen()
+    }
+
+    /// The batch-end publish slides rows in only for an interactive refresh that
+    /// brought new articles into an already populated library (not the first fill).
+    nonisolated static func batchEndAnimates(animatesInsertion: Bool, initialArticleIDs: Set<Article.ID>,
+                                             articles: [Article]) -> Bool {
+        animatesInsertion && !initialArticleIDs.isEmpty
+            && articles.contains { !initialArticleIDs.contains($0.id) }
     }
 
     nonisolated static func shouldAnimateDisplay(oldIDs: [Article.ID], newIDs: [Article.ID],
@@ -3309,8 +3329,15 @@ public final class ReaderStore {
     /// read/starred/feed), else a lightweight stand-in from the saved metadata so
     /// it still lists, opens (served from the offline copy), and can be removed.
     private func offlineDisplayArticles(query: String, filteredIDs: Set<Article.ID>) -> [Article] {
+        Self.offlineDisplayArticles(infos: OfflineArticleStore.shared.infos(), articles: articles,
+                                    query: query, filteredIDs: filteredIDs)
+    }
+
+    /// Saved entries no longer in the library list as read stand-ins with an empty feed.
+    nonisolated static func offlineDisplayArticles(infos: [OfflineArticleInfo], articles: [Article],
+                                                   query: String, filteredIDs: Set<Article.ID>) -> [Article] {
         let byID = Dictionary(articles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return OfflineArticleStore.shared.infos().compactMap { info in
+        return infos.compactMap { info in
             if filteredIDs.contains(info.id) { return nil }
             let article = byID[info.id] ?? Article(
                 id: info.id, feedID: "", title: info.title, summary: "", bodyParagraphs: [],
@@ -4722,8 +4749,8 @@ public final class ReaderStore {
             // One immediate (non-debounced) filter now that the whole batch has
             // merged, so the list settles at once instead of after the debounce.
             // Counts/badge already stayed live via the `articles` didSet.
-            let hasNew = articles.contains { !initialArticleIDs.contains($0.id) }
-            scheduleArticleFilter(animated: mode.animatesInsertion && hasNew && !initialArticleIDs.isEmpty)
+            scheduleArticleFilter(animated: Self.batchEndAnimates(
+                animatesInsertion: mode.animatesInsertion, initialArticleIDs: initialArticleIDs, articles: articles))
             scheduleSave()
         }
 
