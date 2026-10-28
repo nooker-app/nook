@@ -168,11 +168,16 @@ public final class ReaderStore {
     private var retainedArticleIDs: Set<Article.ID> = []
     public var selectedArticleID: Article.ID? {
         didSet {
+            let hasSelection = selectedArticleID != nil
+            if hasSelectedArticle != hasSelection { hasSelectedArticle = hasSelection }
             #if os(macOS)
             if let selectedArticleID { listWindow.ensureVisible(id: selectedArticleID) }
             #endif
         }
     }
+    /// Changes only on nil ↔ non-nil, so chrome that merely enables selection
+    /// actions is not re-evaluated on every keyboard move through the list.
+    public private(set) var hasSelectedArticle = false
     /// The raw text bound to the search field; updates instantly as the user types.
     public var searchText = ""
     /// The query actually used to filter articles. Trails `searchText` by a

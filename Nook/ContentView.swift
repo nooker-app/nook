@@ -84,6 +84,13 @@ struct ContentView: View {
         #if DEBUG
         let _ = MainThreadLog.add("root.body", ms: 0)
         #endif
+        // Applied outside `workspace`: one more modifier on that chain is past
+        // what the type checker resolves in reasonable time.
+        workspace
+            .background { ReaderCommandActionsPublisher(store: store, isEnabled: composeSession == nil) }
+    }
+
+    private var workspace: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             FeedSidebar(
                 store: store,
@@ -145,34 +152,23 @@ struct ContentView: View {
                     .accessibilityIdentifier("plus-compose-button")
                 }
 
-                Button {
-                    store.toggleSelectedStarred()
-                } label: {
-                    Label(
-                        store.selectedArticle?.isStarred == true ? "Unstar" : "Star",
-                        systemImage: store.selectedArticle?.isStarred == true ? "star.fill" : "star"
-                    )
-                }
-                .disabled(store.selectedArticle == nil)
-                .help("Star Article")
+                // The root body must not read the selected article: every keyboard
+                // move would re-run it, and with it the sidebar and list columns.
+                // Leaf views own those reads; the root sees only nil ↔ non-nil.
+                SelectedStarToolbarButton(store: store)
+                    .help("Star Article")
 
                 Button {
                     store.markSelectedRead()
                 } label: {
                     Label("Mark Read", systemImage: "checkmark.circle")
                 }
-                .disabled(store.selectedArticle == nil)
+                .disabled(!store.hasSelectedArticle)
                 .help("Mark Selected Article as Read")
 
-                if let article = store.selectedArticle {
-                    ArticleShareMenu(
-                        articleURL: article.url,
-                        title: article.title,
-                        markdown: { store.nativeReaderMarkdown(for: article) }
-                    ) { copied in
-                        Label("Share", systemImage: copied ? "checkmark" : "square.and.arrow.up")
-                    }
-                    .help("Share Article")
+                if store.hasSelectedArticle {
+                    SelectedShareToolbarMenu(store: store)
+                        .help("Share Article")
                 }
 
                 Button {
@@ -311,56 +307,6 @@ struct ContentView: View {
                 Task { await plusStore.loadContent() }
             }
         }
-        .focusedSceneValue(\.readerCommandActions, composeSession == nil ? readerCommandActions : nil)
-    }
-
-    /// The menu-bar commands' bindings. Built here rather than inline in the
-    /// `.focusedSceneValue` call: the parser action is a closure that returns a
-    /// closure, and inside that already-long modifier chain the type checker gave up
-    /// on the whole `body`.
-    private var readerCommandActions: ReaderCommandActions {
-        let selected = store.selectedArticle
-        var switchParser: (@MainActor () -> Void)?
-        var refresh: (@MainActor () -> Void)?
-        var other: ReaderParserEngine?
-        // Offered only where a parser is actually running. With reader content off and
-        // no offline copy, the reader shows the feed's own body and nothing was parsed,
-        // so an enabled menu item would do nothing at all.
-        if let selected,
-           store.isBrowserPresented
-               || store.usesReaderContentByDefault
-               || store.isOfflineSaved(selected.id) {
-            let inBrowser = store.isBrowserPresented
-            other = inBrowser
-                ? store.browserParser(for: selected).other
-                : store.displayedReaderParser(for: selected).other
-            // Refresh replaces the *native* reader's body, so it is offered only
-            // where there is one to replace. The browser reloads by reopening.
-            if store.usesReaderContentByDefault || store.isOfflineSaved(selected.id) {
-                refresh = { [store] in store.refreshReaderContent(for: selected) }
-            }
-            switchParser = { [store] in
-                // The browser keeps its own copy of the page and re-renders from it, so
-                // aim at that surface while it is up rather than starting the native
-                // reader's re-extraction behind the sheet.
-                if store.isBrowserPresented {
-                    store.setBrowserParser(store.browserParser(for: selected).other, for: selected)
-                } else {
-                    store.setReaderParser(store.displayedReaderParser(for: selected).other, for: selected)
-                }
-            }
-        }
-        return ReaderCommandActions(
-            refreshAll: store.refreshAll,
-            markSelectedRead: store.markSelectedRead,
-            toggleSelectedStarred: store.toggleSelectedStarred,
-            selectNextArticle: store.selectNextArticle,
-            selectPreviousArticle: store.selectPreviousArticle,
-            toggleReaderMode: store.toggleBrowserMode,
-            switchArticleParser: switchParser,
-            otherArticleParser: other,
-            refreshArticle: refresh
-        )
     }
 
     /// Opens publishing directly from the main reader window. The retained Plus
@@ -387,10 +333,9 @@ struct ContentView: View {
                     .transition(.opacity)
             }
 
-            if store.isBrowserPresented, let article = store.selectedArticle {
-                InAppBrowserPanel(
+            if store.isBrowserPresented, store.hasSelectedArticle {
+                SelectedArticleBrowserPanel(
                     store: store,
-                    article: article,
                     style: readerStyle,
                     linkOpensInApp: readerLinkBehavior == .inApp,
                     dragOffset: $browserDragOffset,
@@ -498,6 +443,121 @@ private extension FileManager {
             .appending(path: "Library/Mobile Documents/com~apple~CloudDocs", directoryHint: .isDirectory)
         return fileExists(atPath: url.path(percentEncoded: false)) ? url : nil
     }
+}
+
+/// Selection-dependent window chrome. Each reads the selected article in its own
+/// body so a selection change re-evaluates only these leaves, not `ContentView`.
+private struct SelectedStarToolbarButton: View {
+    let store: ReaderStore
+
+    var body: some View {
+        let isStarred = store.selectedArticle?.isStarred == true
+        Button {
+            store.toggleSelectedStarred()
+        } label: {
+            Label(isStarred ? "Unstar" : "Star", systemImage: isStarred ? "star.fill" : "star")
+        }
+        .disabled(!store.hasSelectedArticle)
+    }
+}
+
+private struct SelectedShareToolbarMenu: View {
+    let store: ReaderStore
+
+    var body: some View {
+        if let article = store.selectedArticle {
+            ArticleShareMenu(
+                articleURL: article.url,
+                title: article.title,
+                markdown: { store.nativeReaderMarkdown(for: article) }
+            ) { copied in
+                Label("Share", systemImage: copied ? "checkmark" : "square.and.arrow.up")
+            }
+        }
+    }
+}
+
+private struct SelectedArticleBrowserPanel: View {
+    let store: ReaderStore
+    let style: ReaderStyle
+    let linkOpensInApp: Bool
+    @Binding var dragOffset: CGFloat
+    let onClose: () -> Void
+
+    var body: some View {
+        if let article = store.selectedArticle {
+            InAppBrowserPanel(
+                store: store,
+                article: article,
+                style: style,
+                linkOpensInApp: linkOpensInApp,
+                dragOffset: $dragOffset,
+                onClose: onClose
+            )
+        }
+    }
+}
+
+/// Publishes the menu-bar commands' bindings from a leaf, because they capture the
+/// selected article and its parser state. Built here rather than inline in the
+/// `.focusedSceneValue` call: the parser action is a closure that returns a
+/// closure, and inside a long modifier chain the type checker gave up on `body`.
+private struct ReaderCommandActionsPublisher: View {
+    let store: ReaderStore
+    let isEnabled: Bool
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .focusedSceneValue(\.readerCommandActions, isEnabled ? actions : nil)
+    }
+
+    private var actions: ReaderCommandActions {
+        let selected = store.selectedArticle
+        var switchParser: (@MainActor () -> Void)?
+        var refresh: (@MainActor () -> Void)?
+        var other: ReaderParserEngine?
+        // Offered only where a parser is actually running. With reader content off and
+        // no offline copy, the reader shows the feed's own body and nothing was parsed,
+        // so an enabled menu item would do nothing at all.
+        if let selected,
+           store.isBrowserPresented
+               || store.usesReaderContentByDefault
+               || store.isOfflineSaved(selected.id) {
+            let inBrowser = store.isBrowserPresented
+            other = inBrowser
+                ? store.browserParser(for: selected).other
+                : store.displayedReaderParser(for: selected).other
+            // Refresh replaces the *native* reader's body, so it is offered only
+            // where there is one to replace. The browser reloads by reopening.
+            if store.usesReaderContentByDefault || store.isOfflineSaved(selected.id) {
+                refresh = { [store] in store.refreshReaderContent(for: selected) }
+            }
+            switchParser = { [store] in
+                // The browser keeps its own copy of the page and re-renders from it, so
+                // aim at that surface while it is up rather than starting the native
+                // reader's re-extraction behind the sheet.
+                if store.isBrowserPresented {
+                    store.setBrowserParser(store.browserParser(for: selected).other, for: selected)
+                } else {
+                    store.setReaderParser(store.displayedReaderParser(for: selected).other, for: selected)
+                }
+            }
+        }
+        return ReaderCommandActions(
+            refreshAll: store.refreshAll,
+            markSelectedRead: store.markSelectedRead,
+            toggleSelectedStarred: store.toggleSelectedStarred,
+            selectNextArticle: store.selectNextArticle,
+            selectPreviousArticle: store.selectPreviousArticle,
+            toggleReaderMode: store.toggleBrowserMode,
+            switchArticleParser: switchParser,
+            otherArticleParser: other,
+            refreshArticle: refresh
+        )
+    }
+
 }
 
 private struct ReaderWorkspaceView: View {
@@ -1702,32 +1762,11 @@ private struct ArticleListView: View {
                 ArticleListEmptyState(store: store)
             } else {
                 List(selection: $store.selectedArticleID) {
-                    ForEach(store.listWindow.rows) { article in
-                        #if DEBUG
-                        // The closure itself, which runs per row per pass whatever
-                        // SwiftUI decides about the row's body — the two feed and
-                        // translation lookups below are paid here, not there.
-                        let _ = MainThreadLog.add("list.rowcontent", ms: 0)
-                        #endif
-                        ArticleRow(article: article, feed: store.feed(for: article.feedID), translationBox: titleTranslator.box(for: article.id))
-                            .tag(article.id)
-                            .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
-                            .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
-                            .onAppear { store.listWindow.rowAppeared(id: article.id) }
-                            // One view value each, not a tree each. Both closures are
-                            // re-run whenever this row's content is re-evaluated —
-                            // measured at 8,865 times in half a minute of scrolling,
-                            // against 650 evaluations of the row's own body — and
-                            // spelling the items out inline meant building ten views,
-                            // a nested category menu among them, every one of those
-                            // times, for a menu nobody had opened. A child view's
-                            // `body` is SwiftUI's to call when it actually needs the
-                            // items; the counters inside them say whether it does.
-                            .contextMenu { ArticleRowMenu(store: store, article: article) }
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                ArticleRowSwipeActions(store: store, article: article)
-                            }
-                    }
+                    // A separate view, so a pass over this body (selection, the
+                    // download button, the status bar) does not re-run the per-row
+                    // closure for the whole window: its inputs compare equal, and
+                    // only `listWindow.rows` invalidates it.
+                    ArticleListRows(store: store, titleTranslator: titleTranslator)
                 }
                 .id(store.listGeneration)
                 .listStyle(.inset)
@@ -1796,6 +1835,45 @@ private struct ArticleListView: View {
 
     private var titleTargetLanguageCode: String {
         titleTargetLocale.language.languageCode?.identifier ?? "en"
+    }
+}
+
+/// The window's rows. Reads nothing but `listWindow.rows` and per-row data, so
+/// selection changes and outer list chrome never re-run the per-row closure.
+private struct ArticleListRows: View {
+    let store: ReaderStore
+    let titleTranslator: ListTitleTranslator
+
+    var body: some View {
+        #if DEBUG
+        let _ = MainThreadLog.add("list.rows.body", ms: 0)
+        #endif
+        ForEach(store.listWindow.rows) { article in
+            #if DEBUG
+            // The closure itself, which runs per row per pass whatever
+            // SwiftUI decides about the row's body — the two feed and
+            // translation lookups below are paid here, not there.
+            let _ = MainThreadLog.add("list.rowcontent", ms: 0)
+            #endif
+            ArticleRow(article: article, feed: store.feed(for: article.feedID), translationBox: titleTranslator.box(for: article.id))
+                .tag(article.id)
+                .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
+                .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
+                .onAppear { store.listWindow.rowAppeared(id: article.id) }
+                // One view value each, not a tree each. Both closures are
+                // re-run whenever this row's content is re-evaluated —
+                // measured at 8,865 times in half a minute of scrolling,
+                // against 650 evaluations of the row's own body — and
+                // spelling the items out inline meant building ten views,
+                // a nested category menu among them, every one of those
+                // times, for a menu nobody had opened. A child view's
+                // `body` is SwiftUI's to call when it actually needs the
+                // items; the counters inside them say whether it does.
+                .contextMenu { ArticleRowMenu(store: store, article: article) }
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    ArticleRowSwipeActions(store: store, article: article)
+                }
+        }
     }
 }
 
