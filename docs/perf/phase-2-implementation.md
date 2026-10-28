@@ -56,3 +56,33 @@ Phase 1 리뷰 수정 커밋: `d8d7d22`.
 - first publish, TTFR, worstStall, growMaxMs 등 성능 PASS를 빌드/테스트로 주장하지 않는다.
 - 최종 로그: `/private/tmp/nook-p2-build.log`, `/private/tmp/nook-p2-ios.log`, `/private/tmp/nook-p2-tests.log`. Phase 1 로그는 같은 이름의 `nook-p2-p1-*` 파일이다.
 - `tools/perf`, `docs/perf/measurement.md`, PerfDriver, native row-height invalidator 변경 없음. push와 앱 실행 없음.
+
+## Fix round 1
+
+브랜치 `feature/perf-p2-fix1`(main `2b0d275` 기준). 앱 실행, `tools/perf/run.sh`, push는 하지 않았다. 커밋: `42a99d2`(리뷰 지적), `d5b4a68`(C3 선택 invalidation).
+
+### 리뷰 지적
+
+- **#1 major (데이터 재정렬 = 전체 교체)**: 정렬 순서를 `ListSource.order`에 넣었다. 그래서 정렬 토글은 source 변경으로 처리되어 교체와 `listGeneration` bump가 일어난다. `replacement = !sameIDs && replacesList`이다. 데이터 재정렬(date resolution, 피드 날짜 정정)은 증분 길이 규칙(기존 길이 + 순증가)을 따르며 bump가 없다. 새 rows는 새 full의 prefix이다. `reordered`는 애니메이션 억제에만 쓴다. 테스트: growth로 400행을 만든 뒤 900번째 글의 `publishedAt`을 바꾸면 generation 불변, rows 400, 맨 위가 이동한 글이다. 정렬 토글은 generation +1, rows 200이다. 정렬 테스트는 UserDefaults 선호를 같은 턴에 복원한다.
+- **#2 minor (증분 install이 growth 취소)**: `install(..., replacement:)`에서 replacement일 때만 generation을 올리고 growth를 취소한다. 증분 install 뒤 대기 중인 growth Task는 새 prefix에서 이어서 append한다. 테스트: `rowAppeared(row-150)` 직후 증분 install을 해도 rows가 400이 된다.
+- **#3 minor (테스트 공백)**: detached 결과 처리 두 경로를 추가했다. 하나는 batch 상태가 바뀌어 버리고 재예약하는 경로로, 실행 횟수 +2를 확인한다. 다른 하나는 윈도가 커져 re-cut하는 경로로, 실행 +1과 rows 750을 확인한다. `computeDisplayDiff` end-to-end 3개 slide(willAnimate, 비교체, rows 203), diff 단위 재정렬/토글 테스트도 추가했다. 오프라인 stand-in은 index, 윈도 patch, 제거 시 index 탈락(prune 근거)을 테스트한다. batch 끝 `hasNew` 플래그는 `batchEndAnimates`로 추출해 네 조합을 테스트한다. stand-in 생성은 순수 static `offlineDisplayArticles(infos:articles:...)`로 분리했다. `OfflineArticleStore.shared`는 테스트 프로세스에서 `~/Library/Application Support/Nook/Offline`에 쓰므로 store 경유 테스트는 하지 않았다. 새 테스트는 수정을 되돌리면 4개가 실패함을 확인했다.
+- **NIT 5**: detached 결과가 윈도 확장 때문에만 stale하면 refilter하지 않는다. 대신 메인에서 `rows = full.prefix(max(result.rows.count, current))`로 다시 자른다(비교체 결과만). revision과 batch/bulk가 바뀐 경우에는 기존처럼 재예약한다.
+- **NIT 4 (선행 확장 상한)**: 상한을 두지 않기로 했다. List selection은 선택 행이 rows에 있어야 동작하므로 ensureVisible의 깊은 점프는 간격 전체를 한 번에 append한다. 이 append는 이미 `disablesAnimations` 트랜잭션이다(애니메이션 install 안에서 호출돼도 마찬가지). C3 측정의 비용은 append(growMaxMs < 0.3ms)가 아니라 선택마다 일어나는 list body 재평가가 윈도 전체 행 클로저를 다시 실행하는 데서 나왔고, 이는 아래에서 제거했다. 깊은 점프의 1회 비용은 C5 게이트에서 판정한다. 근거는 `ArticleListWindow.ensureVisible` 주석에 남겼다.
+
+### C3/T3 선택 invalidation (Phase 4에서 앞당김)
+
+- 원인: ContentView 루트 body가 `store.selectedArticle`을 읽었다. 읽는 곳은 toolbar의 star 라벨, disabled, share, `readerCommandActions`(focusedSceneValue), 브라우저 overlay였다. `selectedArticle`은 `articles`도 관찰한다. 그래서 ↓ 한 번마다 루트가 재평가됐다. 루트는 매번 새 클로저로 `FeedSidebar`를 만들어 sidebar body도 재실행되고, `ArticleListView` body와 그 안의 inline `ForEach`가 윈도 전체(~1,200행)의 행 클로저를 다시 실행했다(`list.rowcontentx7212`).
+- 수정:
+  - star/share는 leaf(`SelectedStarToolbarButton`, `SelectedShareToolbarMenu`)로 옮겼다. 메뉴 명령 바인딩은 배경 leaf `ReaderCommandActionsPublisher`가 `focusedSceneValue`로 게시한다. 브라우저 패널은 `SelectedArticleBrowserPanel`로 옮겼다.
+  - 루트는 nil ↔ non-nil일 때만 바뀌는 `ReaderStore.hasSelectedArticle`만 읽는다(Mark Read disabled, share 슬롯 존재).
+  - `ForEach`는 별도 뷰 `ArticleListRows(store:titleTranslator:)`로 분리했다. 입력이 같은 참조이므로 바깥 list body가 재평가돼도 행 클로저는 다시 실행되지 않는다. 행 클로저는 `listWindow.rows` 변경(install, patch, growth)에서만 실행된다. DEBUG 카운터 `list.rows.body`를 추가했다.
+  - `List(selection:)`, 키보드 포커스, ⌘↓/⌘↑, 위젯 딥링크(`onOpenURL` → `selectSmartSource`), 자동 선택 금지 규칙은 변경하지 않았다.
+- 검증: `ListSelectionInvalidationTests`가 실제 `NSHostingView` + `List(selection:)`로 확인한다. 분리된 rows 뷰는 선택 5회 이동에서 행 클로저 0회이고 rows 변경 시에는 재실행된다. 대조군인 inline + 선택 관찰 body는 매 이동마다 재실행된다.
+- C1/T4 hitchRatio: rowAppeared 자체는 관찰 쓰기가 없다(translator는 `@Observable`이 아님). 하지만 growth와 patch는 `listWindow.rows`를 바꾸고, 수정 전에는 이것이 바깥 `ArticleListView` body 전체(searchable/toolbar/status bar 포함)를 재평가시켰다. 분리 후 growth는 rows 뷰만 무효화한다. 다만 growth 1회는 macOS List 특성상 여전히 윈도 전체 행 클로저를 실행한다(O(window)). 그래서 깊이 fling할수록 비용이 커지는 구조는 남는다. 이 부분은 ArticleRowModel(Phase 4) 또는 NSTableView(Phase 5)에서 판정한다. 성능 PASS는 주장하지 않으며, C1/C3/T3/T4 재측정은 코디네이터 게이트다.
+
+### 검증
+
+- `make build`, iOS `NookiOS` generic device Release 빌드(`CODE_SIGNING_ALLOWED=NO`, `-skipPackagePluginValidation`) 통과.
+- `swift test --package-path NookKit`: **631 tests / 85 suites** 통과.
+- `git diff --check`와 `plutil -lint Nook.xcodeproj/project.pbxproj Nook/Nook.entitlements` 통과. 생략한 체크 없음.
+- 실제 UI 확인(toolbar star/share 표시, 메뉴 명령 활성화, 브라우저 패널 전환 애니메이션, 정렬 토글 후 스크롤 위치)은 코디네이터 게이트다.
