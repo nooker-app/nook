@@ -127,8 +127,13 @@ final class PerfDriver {
     }
 
     private func run(step: Step, rep: Int, cold: Bool, warmup: Bool = false, adapter: PerfStoreAdapter) async throws {
-        for action in step.setup ?? [] { try await perform(action, adapter: adapter) }
-        try await settle(adapter: adapter, id: step.id)
+        // Settle after every setup action, not just the last: a selectIndex that
+        // follows a source change must see that source's filtered list.
+        for action in step.setup ?? [] {
+            try await perform(action, adapter: adapter)
+            try await settle(adapter: adapter, id: step.id)
+        }
+        if step.setup?.isEmpty ?? true { try await settle(adapter: adapter, id: step.id) }
         MainThreadLog.scenarioBegin(id: step.id, rep: rep, cold: cold)
         if warmup { MainThreadLog.scenarioValue("warmup", 1) }
         PerfListScrollTarget.setRecording(true)
