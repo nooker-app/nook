@@ -20,6 +20,7 @@ struct ListSelectionInvalidationTests {
     @Observable final class Model {
         var selection: Int?
         var rows = Array(0..<300)
+        var generation = 0
     }
 
     struct Rows: View {
@@ -38,6 +39,52 @@ struct ListSelectionInvalidationTests {
         let counter: Counter
         var body: some View {
             List(selection: $model.selection) { Rows(model: model, counter: counter) }
+        }
+    }
+
+    struct ObservingOuter: View {
+        let model: Model
+        let counter: Counter
+        let outer: Counter
+        var body: some View {
+            let _ = outer.bump()
+            let _ = model.selection
+            SeparateRows(model: model, counter: counter)
+        }
+    }
+
+    // Regression control: identity and rows have different observation owners.
+    struct ReplacedParent: View {
+        @Bindable var model: Model
+        let counter: Counter
+        var body: some View {
+            List(selection: $model.selection) { Rows(model: model, counter: counter) }
+                .id(model.generation)
+        }
+    }
+
+    struct SnapshotRows: View {
+        let rows: [Int]
+        let counter: Counter
+        var body: some View {
+            ForEach(rows, id: \.self) { row in
+                let _ = counter.bump()
+                Text("Row \(row)").tag(row)
+            }
+        }
+    }
+
+    // Capture rows outside List's binding evaluation. The child does not observe
+    // live rows, so the old identity cannot evaluate the new window before removal.
+    struct ReplacedLeaf: View {
+        @Bindable var model: Model
+        let counter: Counter
+        var body: some View {
+            let rows = model.rows
+            List(selection: $model.selection) {
+                SnapshotRows(rows: rows, counter: counter)
+            }
+            .id(model.generation)
         }
     }
 
@@ -60,6 +107,7 @@ struct ListSelectionInvalidationTests {
 
     private static func host<V: View>(_ view: V) -> NSHostingView<V> {
         let host = NSHostingView(rootView: view)
+        host.sizingOptions = []
         host.frame = NSRect(x: 0, y: 0, width: 400, height: 600)
         host.layoutSubtreeIfNeeded()
         return host
@@ -87,6 +135,98 @@ struct ListSelectionInvalidationTests {
         model.rows.append(300)
         await Self.settle(host)
         #expect(counter.count > before, "a rows change must still re-run the closure")
+    }
+
+    @Test("an observing outer body reruns while separate rows stay untouched")
+    func observingOuterSurvivesSelection() async {
+        let model = Model()
+        let counter = Counter()
+        let outer = Counter()
+        let host = Self.host(ObservingOuter(model: model, counter: counter, outer: outer))
+        await Self.settle(host)
+        let before = counter.count
+        let outerBefore = outer.count
+        for row in 1...5 {
+            model.selection = row
+            await Self.settle(host)
+        }
+        #expect(outer.count >= outerBefore + 5)
+        #expect(counter.count == before)
+    }
+
+    @Test("one replacement costs one fresh List, and selection does not reevaluate rows")
+    func replacementEvaluatesRowsOnce() async {
+        let model = Model()
+        let counter = Counter()
+        let host = Self.host(ReplacedLeaf(model: model, counter: counter))
+        await Self.settle(host)
+        counter.count = 0
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            model.generation += 1
+            model.rows = Array(300..<500)
+        }
+        await Self.settle(host)
+        // macOS List can call ForEach content more than once per row even on a
+        // fresh mount (e.g. native table sizing). Compare to that measured baseline,
+        // rather than claiming one closure call per row from a headless host.
+        let freshCounter = Counter()
+        let freshHost = Self.host(ReplacedLeaf(model: model, counter: freshCounter))
+        await Self.settle(freshHost)
+        #expect(freshCounter.count > 0)
+        #expect(counter.count == freshCounter.count)
+        counter.count = 0
+        for row in 301...305 {
+            model.selection = row
+            await Self.settle(host)
+        }
+        #expect(counter.count == 0)
+    }
+
+    @Test("a separately observed rows child under a replaced parent costs twice a fresh List")
+    func replacementControlEvaluatesTwice() async {
+        let model = Model()
+        let counter = Counter()
+        let host = Self.host(ReplacedParent(model: model, counter: counter))
+        await Self.settle(host)
+        counter.count = 0
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            model.generation += 1
+            model.rows = Array(300..<500)
+        }
+        await Self.settle(host)
+        let freshCounter = Counter()
+        let freshHost = Self.host(ReplacedParent(model: model, counter: freshCounter))
+        await Self.settle(freshHost)
+        #expect(freshCounter.count > 0)
+        #expect(counter.count == freshCounter.count * 2)
+    }
+
+    @Test("ContentView keeps selected article resolution outside the root")
+    func rootSelectionObservationGuard() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("Nook/ContentView.swift"), encoding: .utf8)
+        let rootView = try #require(source.components(separatedBy: "private extension ContentView").first)
+        let reads = rootView.components(separatedBy: "store.selectedArticle").dropFirst()
+            .filter { !$0.hasPrefix("ID") }
+        #expect(reads.isEmpty)
+        let listOuter = try #require(source.components(separatedBy: "private struct ArticleListView: View").last?
+            .components(separatedBy: "private struct ArticleListRows: View").first)
+        #expect(!listOuter.contains(".id(store.listGeneration)"))
+        #expect(!listOuter.contains("ForEach(store.listWindow.rows)"))
+        let rowsOwner = try #require(source.components(separatedBy: "private struct ArticleListRows: View").last?
+            .components(separatedBy: "private struct ArticleListRowContents: View").first)
+        #expect(rowsOwner.contains("let rows = store.listWindow.rows"))
+        #expect(rowsOwner.contains("ArticleListRowContents(rows: rows,"))
+        #expect(rowsOwner.contains(".id(store.listGeneration)"))
+        let contents = try #require(source.components(separatedBy: "private struct ArticleListRowContents: View").last?
+            .components(separatedBy: "private struct ArticleRowMenu: View").first)
+        #expect(contents.contains("ForEach(rows)"))
+        #expect(!contents.contains("store.listWindow.rows"))
     }
 
     /// The control: when the body holding the `ForEach` observes the selection,

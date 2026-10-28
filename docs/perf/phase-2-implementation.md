@@ -1,6 +1,6 @@
 # Phase 2 구현 보고서
 
-작업 브랜치: `feature/perf-p2`. 앱 실행, `tools/perf/run.sh`, push는 하지 않는다.
+앱 실행, `tools/perf/run.sh`, push는 하지 않는다.
 체크리스트 ID는 Phase 1 보고서와 같은 `§그룹.항목순서` 표기다.
 
 ## Phase 1 리뷰 수정
@@ -59,7 +59,7 @@ Phase 1 리뷰 수정 커밋: `d8d7d22`.
 
 ## Fix round 1
 
-브랜치 `feature/perf-p2-fix1`(main `2b0d275` 기준). 앱 실행, `tools/perf/run.sh`, push는 하지 않았다. 커밋: `42a99d2`(리뷰 지적), `d5b4a68`(C3 선택 invalidation).
+main `2b0d275` 기준. 앱 실행, `tools/perf/run.sh`, push는 하지 않았다. main 커밋: `f302715`(리뷰 지적), `5d87545`(C3 선택 invalidation), `ad9da75`(Fix round 1 보고서).
 
 ### 리뷰 지적
 
@@ -86,3 +86,30 @@ Phase 1 리뷰 수정 커밋: `d8d7d22`.
 - `swift test --package-path NookKit`: **631 tests / 85 suites** 통과.
 - `git diff --check`와 `plutil -lint Nook.xcodeproj/project.pbxproj Nook/Nook.entitlements` 통과. 생략한 체크 없음.
 - 실제 UI 확인(toolbar star/share 표시, 메뉴 명령 활성화, 브라우저 패널 전환 애니메이션, 정렬 토글 후 스크롤 위치)은 코디네이터 게이트다.
+
+## Fix round 2
+
+### 리뷰 지적과 관찰 경계
+
+- **A1**: Star와 Mark Read의 disabled 조건을 각 leaf의 `selectedArticle == nil`로 복원했다. ID만 남은 Downloaded stand-in/피드 제거 직후에는 버튼이 비활성화된다. Share는 루트의 `hasSelectedArticle` 조건을 제거하고 leaf의 `if let`으로 표시를 결정한다. 브라우저 열기 이벤트의 selectedArticle 조회도 별도 메서드로 옮겨 root body 안의 직접 조회를 없앴다.
+- **A2**: 선택을 관찰하는 outer body + 별도 rows view 조합을 추가했다. outer 카운터는 선택마다 증가하고 row closure는 증가하지 않아야 한다. 저장소 소스를 읽는 guard로 root의 selectedArticle 재도입과 바깥 ArticleListView의 generation identity/ForEach 재도입도 검사한다. offline stand-in 테스트 이름과 주석은 실제 검증인 제거 후 index 탈락에 맞췄다(선택 prune 실행을 주장하지 않는다).
+- **A3**: Fix round 1의 작업 브랜치 언급을 없애고 main의 실제 커밋 참조로 수정했다. 이번 커밋은 cherry-pick 후 해시가 바뀌므로 subject로 기술한다: `fix: coalesce list replacement row evaluation`.
+
+### 교체 publish의 중복 row-content 평가
+
+- fix1은 `.id(store.listGeneration)`을 읽는 부모 List 아래에 `listWindow.rows`를 관찰하는 ArticleListRows를 뒀다. 교체에서 generation과 rows가 함께 바뀌면 이전 자식의 rows 관찰 갱신과 새 identity의 자식 생성이 겹쳐 행 클로저가 두 번 실행될 수 있다.
+- ArticleListRows leaf가 rows snapshot과 `.id(listGeneration)`을 함께 읽고 List(selection:)을 만든다. ForEach는 snapshot을 값으로 받는 ArticleListRowContents 자식에 둬 기존 identity의 자식이 새 rows를 직접 관찰하지 않게 했다. 바깥 ArticleListView는 storage/empty/chrome만 관찰하며 generation과 rows는 읽지 않는다. List binding 평가가 leaf를 재실행해도 snapshot 자식의 입력이 같으면 행 클로저는 재실행되지 않는다. per-row tag, 번역 onAppear/onDisappear, 별도 growth callback, deferred menu/swipe child, Enter 및 native List identity reset은 유지한다.
+- NSHostingView의 행 클로저 카운터로 기존 구조와 새 구조를 비교한다. headless macOS List는 새로 mount할 때도 200행의 클로저를 400회 실행하므로 절대 1회/행을 주장하지 않는다. 동일 환경의 fresh List 비용을 기준으로 교체 1회가 수정 구조에서는 1배(400회), 기존 구조에서는 2배(800회)인지 검사하고, 선택 5회 이동은 추가 row-content 0회인지 검사한다. 단순히 List/ForEach를 같은 body에 합치면 선택 때 행 클로저가 재실행되어 snapshot 자식을 유지해야 한다. 이 카운터는 DEBUG `list.rowcontent`와 같은 ForEach closure 위치를 센다. 실제 ContentView를 import하는 앱 테스트는 아니므로 C3 root/sidebar=0, rowcontent 약 2.6k/run, T3 약 950 및 A1/A6/A11/A12/T1 재측정은 코디네이터 게이트다.
+
+### Phase 4에 남기는 reader 증거
+
+- 제공된 C3 key-repeat 측정에서 30Hz 선택 이동 때 `reader.body`에 귀속된 0.1–0.36초 stall이 남는다. 새로 선택한 글마다 reader pane이 렌더되는 비용이며 이번 수정 범위에서 reader를 변경하지 않았다.
+- fix1 warm lib-5k 측정은 Phase 2 대비 A1 worstStall 173→247ms, A6 170→260ms, A11 172→346ms, A12 178→269ms, T1(번역 off) TTFR 360→537ms였다. rowcontent/switch는 A1/A6 400→800, A11 800→1480이었다. 이는 수정 전 증거이며 이번 수정의 성능 결과로 해석하지 않는다.
+
+### 검증
+
+- 최종 macOS `make build`, iOS `NookiOS` generic device Release 빌드(`CODE_SIGNING_ALLOWED=NO`, `-skipPackagePluginValidation`) 통과.
+- `swift test --package-path NookKit`: **635 tests / 85 suites** 통과. 선택을 관찰하는 outer, fresh List 대비 교체 비용, 기존 구조의 2배 대조군, 선택 5회 추가 row-content 0회, 소스 관찰 경계 guard 포함.
+- `git diff --check`, `plutil -lint Nook.xcodeproj/project.pbxproj Nook/Nook.entitlements` 통과. 초기 sandbox 캐시 접근 실패 후 외부 실행으로 재시도했다. NSHostingView 테스트의 NSTableView reentrant delegate 경고는 통과 로그에도 나타나며 실제 앱 오류로 단정하지 않는다.
+- 로그: `/private/tmp/nook-p2f2-build.log`, `/private/tmp/nook-p2f2-ios.log`, `/private/tmp/nook-p2f2-tests.log`, `/private/tmp/nook-p2f2-selection.log`.
+- 필수 체크 생략 없음. 앱 실행, tools/perf/run.sh, push 및 실제 UI/성능 측정은 요청에 따라 수행하지 않았다.

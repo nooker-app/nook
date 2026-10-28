@@ -318,7 +318,7 @@ struct ArticleListWindowTests {
         #expect(toggled.rows.count == 200)
     }
 
-    @Test("Offline stand-ins are indexed, patched in the window and pruned when removed")
+    @Test("Offline stand-ins are indexed, patched and absent from the index when removed")
     func offlineStandIns() {
         let inLibrary = Fixture.article("kept", feedID: "a")
         let info = { (id: String, at: TimeInterval) in
@@ -342,7 +342,7 @@ struct ArticleListWindowTests {
         let after = ReaderStore.computeDisplayDiff(old: display, result: removed, feedTitles: [:],
             oldFeedTitles: [:], savedIDs: ["kept"], oldSavedIDs: ["orphan", "kept"], replacesList: false,
             previousLength: 2, selectedID: "orphan", animated: false, bulk: false, batch: false)
-        #expect(after.indexByID["orphan"] == nil) // pruneSelectionIfHidden drops the selection
+        #expect(after.indexByID["orphan"] == nil) // Membership basis for pruning; this test does not invoke store pruning.
         #expect(after.rows.map(\.id) == ["kept"])
     }
 

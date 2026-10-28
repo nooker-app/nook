@@ -154,22 +154,15 @@ struct ContentView: View {
 
                 // The root body must not read the selected article: every keyboard
                 // move would re-run it, and with it the sidebar and list columns.
-                // Leaf views own those reads; the root sees only nil ↔ non-nil.
+                // Leaf views own those reads and resolve missing IDs themselves.
                 SelectedStarToolbarButton(store: store)
                     .help("Star Article")
 
-                Button {
-                    store.markSelectedRead()
-                } label: {
-                    Label("Mark Read", systemImage: "checkmark.circle")
-                }
-                .disabled(!store.hasSelectedArticle)
-                .help("Mark Selected Article as Read")
+                SelectedMarkReadToolbarButton(store: store)
+                    .help("Mark Selected Article as Read")
 
-                if store.hasSelectedArticle {
-                    SelectedShareToolbarMenu(store: store)
-                        .help("Share Article")
-                }
+                SelectedShareToolbarMenu(store: store)
+                    .help("Share Article")
 
                 Button {
                     isInspectorPresented.toggle()
@@ -291,12 +284,7 @@ struct ContentView: View {
         .overlay { browserOverlay }
         .onChange(of: store.isBrowserPresented) { _, presented in
             if presented {
-                // Honor the selected article's feed preference, falling back to
-                // the global default (advancing articles re-resolves this in the
-                // store, so "next" follows the setting too).
-                if let article = store.selectedArticle {
-                    store.browserMode = store.resolvedBrowserMode(for: article)
-                }
+                resolvePresentedBrowserMode()
                 browserDragOffset = 0
             }
         }
@@ -359,6 +347,13 @@ struct ContentView: View {
 }
 
 private extension ContentView {
+    func resolvePresentedBrowserMode() {
+        // Resolve in the event handler, outside root body observation.
+        if let article = store.selectedArticle {
+            store.browserMode = store.resolvedBrowserMode(for: article)
+        }
+    }
+
     func closeBrowser() {
         withAnimation(.easeInOut(duration: 0.28)) {
             store.isBrowserPresented = false
@@ -457,7 +452,20 @@ private struct SelectedStarToolbarButton: View {
         } label: {
             Label(isStarred ? "Unstar" : "Star", systemImage: isStarred ? "star.fill" : "star")
         }
-        .disabled(!store.hasSelectedArticle)
+        .disabled(store.selectedArticle == nil)
+    }
+}
+
+private struct SelectedMarkReadToolbarButton: View {
+    let store: ReaderStore
+
+    var body: some View {
+        Button {
+            store.markSelectedRead()
+        } label: {
+            Label("Mark Read", systemImage: "checkmark.circle")
+        }
+        .disabled(store.selectedArticle == nil)
     }
 }
 
@@ -1761,27 +1769,7 @@ private struct ArticleListView: View {
             } else if store.listWindow.totalCount == 0 {
                 ArticleListEmptyState(store: store)
             } else {
-                List(selection: $store.selectedArticleID) {
-                    // A separate view, so a pass over this body (selection, the
-                    // download button, the status bar) does not re-run the per-row
-                    // closure for the whole window: its inputs compare equal, and
-                    // only `listWindow.rows` invalidates it.
-                    ArticleListRows(store: store, titleTranslator: titleTranslator)
-                }
-                .id(store.listGeneration)
-                .listStyle(.inset)
-                #if DEBUG
-                .background { PerfDisplayLinkProbe().accessibilityHidden(true) }
-                #endif
-                .onKeyPress(.return) {
-                    // Enter on the selected row opens the web view, mirroring a
-                    // click on the reader's title.
-                    guard store.selectedArticle != nil else { return .ignored }
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        store.isBrowserPresented = true
-                    }
-                    return .handled
-                }
+                ArticleListRows(store: store, titleTranslator: titleTranslator)
             }
         }
         // The source is shown by the toolbar breadcrumb instead, so no column
@@ -1838,9 +1826,36 @@ private struct ArticleListView: View {
     }
 }
 
-/// The window's rows. Reads nothing but `listWindow.rows` and per-row data, so
-/// selection changes and outer list chrome never re-run the per-row closure.
+/// Captures the window before building the List. The row child receives a value,
+/// not an observation of live rows: replacing List identity cannot also update
+/// the old child with the new window. Binding-driven List passes keep equal child
+/// inputs, so selection changes do not re-evaluate the per-row closure.
 private struct ArticleListRows: View {
+    @Bindable var store: ReaderStore
+    let titleTranslator: ListTitleTranslator
+
+    var body: some View {
+        let rows = store.listWindow.rows
+        List(selection: $store.selectedArticleID) {
+            ArticleListRowContents(rows: rows, store: store, titleTranslator: titleTranslator)
+        }
+        .id(store.listGeneration)
+        .listStyle(.inset)
+        #if DEBUG
+        .background { PerfDisplayLinkProbe().accessibilityHidden(true) }
+        #endif
+        .onKeyPress(.return) {
+            guard store.selectedArticle != nil else { return .ignored }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                store.isBrowserPresented = true
+            }
+            return .handled
+        }
+    }
+}
+
+private struct ArticleListRowContents: View {
+    let rows: [Article]
     let store: ReaderStore
     let titleTranslator: ListTitleTranslator
 
@@ -1848,7 +1863,7 @@ private struct ArticleListRows: View {
         #if DEBUG
         let _ = MainThreadLog.add("list.rows.body", ms: 0)
         #endif
-        ForEach(store.listWindow.rows) { article in
+        ForEach(rows) { article in
             #if DEBUG
             // The closure itself, which runs per row per pass whatever
             // SwiftUI decides about the row's body — the two feed and
