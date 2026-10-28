@@ -100,9 +100,11 @@ struct ReaderStorePhaseOneTests {
     @Test("Rapid large-library transitions install only the latest source")
     func latestWins() async throws {
         let store = makeStore(count: 1_000)
-        for index in store.articles.indices where index.isMultiple(of: 2) {
-            store.articles[index].isRead = true
+        var articles = store.articles
+        for index in articles.indices where index.isMultiple(of: 2) {
+            articles[index].isRead = true
         }
+        store.articles = articles
         store.feedSelection = ["a"]
         store.selectSmartSource(.all)
         store.selectSmartSource(.unread)

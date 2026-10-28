@@ -166,7 +166,13 @@ public final class ReaderStore {
     // retaining an already-visible article must stay recompute-free, since it
     // happens on every article open, mid push-animation.
     private var retainedArticleIDs: Set<Article.ID> = []
-    public var selectedArticleID: Article.ID?
+    public var selectedArticleID: Article.ID? {
+        didSet {
+            #if os(macOS)
+            if let selectedArticleID { listWindow.ensureVisible(id: selectedArticleID) }
+            #endif
+        }
+    }
     /// The raw text bound to the search field; updates instantly as the user types.
     public var searchText = ""
     /// The query actually used to filter articles. Trails `searchText` by a
@@ -186,9 +192,19 @@ public final class ReaderStore {
 
     /// The filtered, sorted articles shown in the list. Recomputed off the main
     /// thread for large libraries so typing/scrolling never blocks the UI.
-    private(set) var displayedArticles: [Article] = []
+    @ObservationIgnored private let displayContents = ArticleListContents()
+    private(set) var displayedArticles: [Article] {
+        get { _ = displayRevision; return displayContents.articles }
+        set { displayContents.articles = newValue; displayRevision &+= 1 }
+    }
     private var filterTask: Task<Void, Never>?
-    private var filterComputationTask: Task<[Article], Never>?
+    private var filterComputationTask: Task<DisplayResult, Never>?
+    public let listWindow = ArticleListWindow()
+    @ObservationIgnored private var displayedIndexByID: [Article.ID: Int] = [:]
+    private var displayRevision = 0
+    @ObservationIgnored private var filterGeneration = 0
+    @ObservationIgnored private var displayedFeedTitles: [Feed.ID: String] = [:]
+    @ObservationIgnored private var displayedSavedIDs: Set<Article.ID> = []
     /// Changes only when a different navigation/search result is installed.
     /// macOS List uses this to rebuild NSTableView instead of diffing thousands
     /// of inserted/deleted rows. Incremental data publishes retain the identity.
@@ -747,6 +763,8 @@ public final class ReaderStore {
         feeds = []
         articles = []
         displayedArticles = []
+        displayedIndexByID = [:]
+        listWindow.install(full: [], indexByID: [:], rows: [])
         folders = []
         filters = []
         categories = []
@@ -894,7 +912,12 @@ public final class ReaderStore {
     /// are filtered on a background executor so the main thread stays responsive.
     private func performArticleFilter(animated: Bool = true) {
         filterTask?.cancel()
+        filterTask = nil
         filterComputationTask?.cancel()
+        filterComputationTask = nil
+        filterGeneration &+= 1
+        let generation = filterGeneration
+        let revision = displayRevision
         #if DEBUG
         filterExecutionCount += 1
         #endif
@@ -908,6 +931,22 @@ public final class ReaderStore {
         let filteredIDs = filteredArticleIDs
         let query = activeSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let order = currentSortOrder
+        let source = currentListSource
+        let replacesList = displayedSource != source
+        let old = displayedArticles
+        let oldFeedTitles = displayedFeedTitles
+        let oldSavedIDs = displayedSavedIDs
+        let savedIDs = OfflineArticleStore.shared.savedIDs
+        let previousLength = listWindow.rows.count
+        let selectedID = selectedArticleID
+        let bulk = isBulkImporting
+        let batch = isBatchRefreshing
+        let computeDisplay: @Sendable ([Article]) -> DisplayResult = { result in
+            Self.computeDisplayDiff(old: old, result: result, feedTitles: feedTitles,
+                oldFeedTitles: oldFeedTitles, savedIDs: savedIDs, oldSavedIDs: oldSavedIDs,
+                replacesList: replacesList, previousLength: previousLength, selectedID: selectedID,
+                animated: animated, bulk: bulk, batch: batch)
+        }
 
         // The Downloaded source is driven by the offline store itself, not the
         // in-memory library, so a saved article that was deleted from a feed or
@@ -915,7 +954,7 @@ public final class ReaderStore {
         // point of a durable download. Built on the main actor from the (small,
         // capped) offline index; newest-saved first.
         if feedSelection.isEmpty, smartSelection == .offline {
-            applyDisplayed(offlineDisplayArticles(query: query, filteredIDs: filteredIDs), animated: animated)
+            applyDisplayed(computeDisplay(offlineDisplayArticles(query: query, filteredIDs: filteredIDs)), source: source)
             return
         }
 
@@ -936,34 +975,43 @@ public final class ReaderStore {
                     ms: (ProcessInfo.processInfo.systemUptime - filterStarted) * 1000)
             }
             #endif
-            applyDisplayed(Self.computeVisibleArticles(
+            applyDisplayed(computeDisplay(Self.computeVisibleArticles(
                 snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
                 smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order
-            ), animated: animated)
+            )), source: source)
             return
         }
 
         let computation = Task.detached(priority: .userInitiated) {
             #if DEBUG && os(macOS)
             return MainThreadLog.measure("bg.filter") {
-                Self.computeVisibleArticles(
+                computeDisplay(Self.computeVisibleArticles(
                     snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
                     smartSelection: smartSelection, categorySelection: categorySelection, retained: retained,
                     filteredIDs: filteredIDs, query: query, order: order, isCancelled: { Task.isCancelled }
-                )
+                ))
             }
             #else
-            Self.computeVisibleArticles(
+            computeDisplay(Self.computeVisibleArticles(
                 snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
                 smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order, isCancelled: { Task.isCancelled }
-            )
+            ))
             #endif
         }
         filterComputationTask = computation
         filterTask = Task { [weak self] in
             let result = await computation.value
-            guard !Task.isCancelled, let self else { return }
-            self.applyDisplayed(result, animated: animated)
+            guard !Task.isCancelled, let self, self.filterGeneration == generation else { return }
+            // An in-place flag patch after capture must never be overwritten by a stale result.
+            guard self.displayRevision == revision,
+                  self.isBatchRefreshing == batch, self.isBulkImporting == bulk,
+                  self.listWindow.rows.count <= previousLength || replacesList else {
+                self.scheduleArticleFilter(animated: animated)
+                return
+            }
+            self.filterComputationTask = nil
+            self.filterTask = nil
+            self.applyDisplayed(result, source: source)
         }
     }
 
@@ -973,7 +1021,7 @@ public final class ReaderStore {
     /// them, and body hydration would otherwise defeat the equality guard in
     /// `applyDisplayed`. Readers are unaffected: they re-resolve articles by ID
     /// from `articles`, never from the displayed array.
-    private struct RowProjection: Equatable {
+    private struct RowProjection: Equatable, Sendable {
         let title: String
         let summary: String
         let isRead: Bool
@@ -983,7 +1031,7 @@ public final class ReaderStore {
         let estimatedReadMinutes: Int
         let categories: [String]
 
-        init(_ article: Article) {
+        nonisolated init(_ article: Article) {
             title = article.title
             summary = article.summary
             isRead = article.isRead
@@ -995,66 +1043,89 @@ public final class ReaderStore {
         }
     }
 
-    private func applyDisplayed(_ result: [Article], animated: Bool = true) {
+    private struct DisplayResult: Sendable {
+        let full: [Article]
+        let indexByID: [Article.ID: Int]
+        let rows: [Article]
+        let feedTitles: [Feed.ID: String]
+        let savedIDs: Set<Article.ID>
+        let identical: Bool
+        let replacesList: Bool
+        let willAnimate: Bool
+    }
+
+    /// Diff, membership index and window prefix are all prepared on the filter executor.
+    nonisolated private static func computeDisplayDiff(old: [Article], result: [Article],
+        feedTitles: [Feed.ID: String], oldFeedTitles: [Feed.ID: String],
+        savedIDs: Set<Article.ID>, oldSavedIDs: Set<Article.ID>, replacesList: Bool,
+        previousLength: Int, selectedID: Article.ID?, animated: Bool, bulk: Bool, batch: Bool
+    ) -> DisplayResult {
+        let oldIDs = old.map(\.id)
+        let newIDs = result.map(\.id)
+        var indexByID: [Article.ID: Int] = [:]
+        for (index, article) in result.enumerated() where indexByID[article.id] == nil {
+            indexByID[article.id] = index
+        }
+        let sameIDs = oldIDs == newIDs
+        let identical = sameIDs && zip(old, result).allSatisfy {
+            RowProjection($0) == RowProjection($1)
+                && oldFeedTitles[$0.feedID] == feedTitles[$1.feedID]
+                && oldSavedIDs.contains($0.id) == savedIDs.contains($1.id)
+        }
+        let oldSet = Set(oldIDs)
+        let newSet = Set(newIDs)
+        let reordered = oldIDs.filter(newSet.contains) != newIDs.filter(oldSet.contains)
+        let replacement = !sameIDs && (replacesList || reordered)
+        let length = ArticleListWindow.length(total: result.count, previousTotal: old.count,
+            previousLength: previousLength, replacement: replacement,
+            selectedIndex: selectedID.flatMap { indexByID[$0] })
+        return DisplayResult(full: result, indexByID: indexByID, rows: Array(result.prefix(length)),
+            feedTitles: feedTitles, savedIDs: savedIDs, identical: identical,
+            replacesList: replacement,
+            willAnimate: shouldAnimateDisplay(oldIDs: oldIDs, newIDs: newIDs, animated: animated,
+                replacesList: replacesList || reordered, isBulkImporting: bulk, isBatchRefreshing: batch))
+    }
+
+    private func applyDisplayed(_ result: DisplayResult, source: ListSource) {
         #if DEBUG && os(macOS)
         let applyStarted = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("store.applyDisplayed", ms: (ProcessInfo.processInfo.systemUptime - applyStarted) * 1000) }
         #endif
-        // Animate only when the visible rows actually change and still overlap
-        // the current list — i.e. articles arriving (or filtering out) — so new
-        // stories slide in instead of the list snapping/jumping. A full swap
-        // (switching source) or the very first fill isn't animated, which would
-        // otherwise look like a jarring reshuffle. This runs for both the sync
-        // and background filter paths, so large libraries animate too.
-        let source = currentListSource
-        let replacesList = displayedSource != source
         displayedSource = source
-        #if os(macOS)
-        #endif
-        let oldIDs = displayedArticles.map(\.id)
-        let newIDs = result.map(\.id)
-        #if os(macOS)
-        if replacesList && oldIDs != newIDs { listGeneration &+= 1 }
-        #endif
-        // @Observable republishes on every assignment, invalidating every row —
-        // skip it entirely when nothing a row renders has changed (identical
-        // recomputes are common: selection retention, no-op merges, re-sorts).
-        if oldIDs == newIDs,
-           zip(displayedArticles, result).allSatisfy({ RowProjection($0) == RowProjection($1) }) {
+        if result.identical {
             #if DEBUG && os(macOS)
-            // Counted because it is the good case, and its ratio to `list.publish` is
-            // what says whether the guard is earning its keep.
             MainThreadLog.add("list.publish.skipped", ms: 0)
             #endif
             pruneSelectionIfHidden()
             markVisibleArticlesSeen()
             return
         }
-        let willAnimate = Self.shouldAnimateDisplay(oldIDs: oldIDs, newIDs: newIDs,
-            animated: animated, replacesList: replacesList, isBulkImporting: isBulkImporting,
-            isBatchRefreshing: isBatchRefreshing)
         #if DEBUG && os(macOS)
-        // Every republish invalidates every row, and the list is a thousand of them.
-        // Three separate questions, so three counters: how often the list is handed a
-        // new array at all, how many rows it holds when that happens, and whether the
-        // swap was animated — SwiftUI has to interpolate a thousand row identities
-        // when it is. The row-body counter on the other side (`list.row`) says how
-        // many rows each of these actually cost.
-        let outerActivity = MainThreadLog.activity(
-            willAnimate ? "list.publish.animated" : "list.publish")
-        defer { MainThreadLog.activity(outerActivity) }
-        MainThreadLog.recordListPublish(from: oldIDs.count, to: newIDs.count, animated: willAnimate)
+        let activity = MainThreadLog.activity(result.willAnimate ? "list.publish.animated" : "list.publish")
+        defer { MainThreadLog.activity(activity) }
+        MainThreadLog.recordListPublish(from: listWindow.rows.count, to: result.rows.count, animated: result.willAnimate)
         #endif
-        if willAnimate {
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                displayedArticles = result
-            }
+        let install = {
+            #if os(macOS)
+            if result.replacesList { self.listGeneration &+= 1 }
+            #endif
+            self.displayedIndexByID = result.indexByID
+            self.displayedArticles = result.full
+            self.displayedFeedTitles = result.feedTitles
+            self.displayedSavedIDs = result.savedIDs
+            #if os(macOS)
+            self.listWindow.install(contents: self.displayContents, indexByID: result.indexByID, rows: result.rows)
+            if let id = self.selectedArticleID { self.listWindow.ensureVisible(id: id) }
+            #endif
+        }
+        if result.willAnimate {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86), install)
         } else {
-            displayedArticles = result
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction, install)
         }
         pruneSelectionIfHidden()
-        // The list the user is looking at now counts as "seen"; suppress future
-        // notifications for it (no-op unless the app is foreground-active).
         markVisibleArticlesSeen()
     }
 
@@ -3992,7 +4063,7 @@ public final class ReaderStore {
         // Retention only widens visibility: when the article is already in the
         // displayed list the recompute is a guaranteed no-op, so skip the
         // debounced full filter that would otherwise land mid push-animation.
-        if !displayedArticles.contains(where: { $0.id == id }) {
+        if displayedIndexByID[id] == nil {
             scheduleArticleFilter(debounced: true)
         }
     }
@@ -4081,8 +4152,13 @@ public final class ReaderStore {
         let updateStarted = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("store.updateInPlace", ms: (ProcessInfo.processInfo.systemUptime - updateStarted) * 1000) }
         #endif
-        guard let index = displayedArticles.firstIndex(where: { $0.id == id }) else { return false }
-        mutate(&displayedArticles[index])
+        guard let index = displayedIndexByID[id] else { return false }
+        #if os(macOS)
+        listWindow.patch(id, mutate)
+        #else
+        mutate(&displayContents.articles[index])
+        #endif
+        displayRevision &+= 1
         return true
     }
 
@@ -4172,7 +4248,7 @@ public final class ReaderStore {
     /// and gets marked read via `markReadOnOpen` every time the app starts.
     public func pruneSelectionIfHidden() {
         guard let selectedArticleID else { return }
-        if !visibleArticles.contains(where: { $0.id == selectedArticleID }) {
+        if displayedIndexByID[selectedArticleID] == nil {
             self.selectedArticleID = nil
         }
     }
@@ -4217,7 +4293,7 @@ public final class ReaderStore {
     /// `id` is the last one. Lets the UI preview what "next" would open.
     public func article(after id: Article.ID) -> Article? {
         let visible = visibleArticles
-        guard let index = visible.firstIndex(where: { $0.id == id }), index + 1 < visible.count else {
+        guard let index = displayedIndexByID[id], index + 1 < visible.count else {
             return nil
         }
         return visible[index + 1]
@@ -4227,7 +4303,7 @@ public final class ReaderStore {
     /// `id` is the first one. Lets the native reader preview "previous".
     public func article(before id: Article.ID) -> Article? {
         let visible = visibleArticles
-        guard let index = visible.firstIndex(where: { $0.id == id }), index > 0 else {
+        guard let index = displayedIndexByID[id], index > 0 else {
             return nil
         }
         return visible[index - 1]
@@ -4605,6 +4681,14 @@ public final class ReaderStore {
         await runBatchedFetch(targets: targets, mode: mode)
     }
 
+    private func beginBatchFiltering() {
+        let hadPending = filterDebounceTask != nil
+        filterDebounceTask?.cancel()
+        filterDebounceTask = nil
+        isBatchRefreshing = true
+        if hadPending { scheduleArticleFilter(debounced: true) }
+    }
+
     /// Fetches a set of feeds concurrently (bounded) and merges the results in
     /// batches, holding per-feed saves until the end. This is the shared engine
     /// behind both "Refresh All" and OPML import: the network is the slow part and
@@ -4615,14 +4699,6 @@ public final class ReaderStore {
     /// serialize every feed's up-to-15s timeout (the old OPML import did exactly
     /// that). `onProgress` (completed, total) is called on the main actor as each
     /// fetch finishes, for the import's determinate progress indicator.
-    private func beginBatchFiltering() {
-        let hadPending = filterDebounceTask != nil
-        filterDebounceTask?.cancel()
-        filterDebounceTask = nil
-        isBatchRefreshing = true
-        if hadPending { scheduleArticleFilter(debounced: true) }
-    }
-
     private func runBatchedFetch(
         targets: [(id: Feed.ID, url: URL)],
         mode: RefreshMode,
@@ -5200,7 +5276,7 @@ public final class ReaderStore {
         }
 
         guard let selectedArticleID,
-              let currentIndex = visible.firstIndex(where: { $0.id == selectedArticleID }) else {
+              let currentIndex = displayedIndexByID[selectedArticleID] else {
             self.selectedArticleID = visible.first?.id
             return
         }

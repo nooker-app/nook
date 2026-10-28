@@ -1698,11 +1698,11 @@ private struct ArticleListView: View {
                 } description: {
                     Text("Nook stores its RSS library in a folder you choose, so iCloud Drive can sync it like a vault.")
                 }
-            } else if store.visibleArticles.isEmpty {
+            } else if store.listWindow.totalCount == 0 {
                 ArticleListEmptyState(store: store)
             } else {
                 List(selection: $store.selectedArticleID) {
-                    ForEach(store.visibleArticles) { article in
+                    ForEach(store.listWindow.rows) { article in
                         #if DEBUG
                         // The closure itself, which runs per row per pass whatever
                         // SwiftUI decides about the row's body — the two feed and
@@ -1713,6 +1713,7 @@ private struct ArticleListView: View {
                             .tag(article.id)
                             .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
                             .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
+                            .onAppear { store.listWindow.rowAppeared(id: article.id) }
                             // One view value each, not a tree each. Both closures are
                             // re-run whenever this row's content is re-evaluated —
                             // measured at 8,865 times in half a minute of scrolling,
