@@ -219,7 +219,7 @@ public final class ReaderStore {
     /// Largest add+remove delta the list will still animate. Beyond it the change
     /// is a source/selection switch, not a few new stories, so it snaps instead of
     /// springing hundreds of row identities on the main thread.
-    private static let maxAnimatedRowDelta = 40
+    nonisolated private static let maxAnimatedRowDelta = 40
     var lastRefreshedAt: Date?
     public var errorMessage: String?
     /// What the launch pipeline is doing right now, for the splash screen's
@@ -880,8 +880,9 @@ public final class ReaderStore {
         if isBatchRefreshing, filterDebounceTask != nil { return }
         filterDebounceTask?.cancel()
         let interval: Duration = isBatchRefreshing ? .milliseconds(1500) : Self.filterDebounceInterval
+        let deadline = ContinuousClock.now.advanced(by: interval)
         filterDebounceTask = Task { [weak self] in
-            try? await Task.sleep(for: interval)
+            try? await Task.sleep(until: deadline, clock: .continuous)
             guard !Task.isCancelled, let self else { return }
             self.filterDebounceTask = nil
             self.performArticleFilter(animated: animated)
@@ -948,13 +949,13 @@ public final class ReaderStore {
                 Self.computeVisibleArticles(
                     snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
                     smartSelection: smartSelection, categorySelection: categorySelection, retained: retained,
-                    filteredIDs: filteredIDs, query: query, order: order
+                    filteredIDs: filteredIDs, query: query, order: order, isCancelled: { Task.isCancelled }
                 )
             }
             #else
             Self.computeVisibleArticles(
                 snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
-                smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order
+                smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order, isCancelled: { Task.isCancelled }
             )
             #endif
         }
@@ -1009,10 +1010,12 @@ public final class ReaderStore {
         let replacesList = displayedSource != source
         displayedSource = source
         #if os(macOS)
-        if replacesList { listGeneration &+= 1 }
         #endif
         let oldIDs = displayedArticles.map(\.id)
         let newIDs = result.map(\.id)
+        #if os(macOS)
+        if replacesList && oldIDs != newIDs { listGeneration &+= 1 }
+        #endif
         // @Observable republishes on every assignment, invalidating every row —
         // skip it entirely when nothing a row renders has changed (identical
         // recomputes are common: selection retention, no-op merges, re-sorts).
@@ -1027,23 +1030,9 @@ public final class ReaderStore {
             markVisibleArticlesSeen()
             return
         }
-        let oldSet = Set(oldIDs)
-        let newSet = Set(newIDs)
-        // How many rows this update adds or removes. A handful (a refresh bringing
-        // a few new stories) animates so they slide in like Mail; a large change —
-        // switching source, or selecting many feeds at once, which republishes a
-        // list hundreds of rows different — does NOT. Springing that many row
-        // identities is the dominant cost behind "selecting all feeds is far slower
-        // than All", and a wholesale change reads as a reshuffle, not new stories.
-        let changedRowCount = oldSet.symmetricDifference(newSet).count
-        // `isBulkImporting` forces a non-animated batch update: during a bulk OPML
-        // import the displayed list is republished every ~400ms flush, and a spring
-        // per flush over a growing row set is the dominant cause of the import
-        // freeze (overlapping animations never let the list settle).
-        let willAnimate = animated && !replacesList && !isBulkImporting && !isBatchRefreshing && oldIDs != newIDs && !oldSet.isEmpty
-            && !oldSet.isDisjoint(with: newIDs)
-            && changedRowCount <= Self.maxAnimatedRowDelta
-            && oldIDs.filter(newSet.contains) == newIDs.filter(oldSet.contains)
+        let willAnimate = Self.shouldAnimateDisplay(oldIDs: oldIDs, newIDs: newIDs,
+            animated: animated, replacesList: replacesList, isBulkImporting: isBulkImporting,
+            isBatchRefreshing: isBatchRefreshing)
         #if DEBUG && os(macOS)
         // Every republish invalidates every row, and the list is a thousand of them.
         // Three separate questions, so three counters: how often the list is handed a
@@ -1069,6 +1058,16 @@ public final class ReaderStore {
         markVisibleArticlesSeen()
     }
 
+    nonisolated static func shouldAnimateDisplay(oldIDs: [Article.ID], newIDs: [Article.ID],
+        animated: Bool, replacesList: Bool, isBulkImporting: Bool, isBatchRefreshing: Bool) -> Bool {
+        let oldSet = Set(oldIDs)
+        let newSet = Set(newIDs)
+        return animated && !replacesList && !isBulkImporting && !isBatchRefreshing
+            && oldIDs != newIDs && !oldSet.isEmpty && !oldSet.isDisjoint(with: newIDs)
+            && oldSet.symmetricDifference(newSet).count <= Self.maxAnimatedRowDelta
+            && oldIDs.filter(newSet.contains) == newIDs.filter(oldSet.contains)
+    }
+
     /// Pure filtering + sorting over a snapshot. `nonisolated` so it can run on
     /// a background executor; all inputs are value types (`Sendable`).
     nonisolated private static func computeVisibleArticles(
@@ -1080,7 +1079,8 @@ public final class ReaderStore {
         retained: Set<Article.ID>,
         filteredIDs: Set<Article.ID>,
         query: String,
-        order: ArticleSortOrder
+        order: ArticleSortOrder,
+        isCancelled: () -> Bool = { false }
     ) -> [Article] {
         func matchesSource(_ article: Article) -> Bool {
             if !feedSelection.isEmpty { return feedSelection.contains(article.feedID) }
@@ -1112,7 +1112,7 @@ public final class ReaderStore {
 
         var result: [Article] = []
         for article in articles {
-            guard !Task.isCancelled else { return [] }
+            guard !isCancelled() else { return [] }
             let matches: Bool
             if feedSelection.isEmpty, let categoryID = categorySelection {
                 // Categories include read and hidden articles.
@@ -1126,9 +1126,9 @@ public final class ReaderStore {
             }
             if matches && matchesQuery(article) { result.append(article) }
         }
-        guard !Task.isCancelled else { return [] }
+        guard !isCancelled() else { return [] }
         result.sort { Article.isOrdered($0, $1, by: order) }
-        return Task.isCancelled ? [] : result
+        return isCancelled() ? [] : result
     }
 
     public var syncFolderName: String? {
@@ -1986,6 +1986,9 @@ public final class ReaderStore {
         // same `hasFilters` condition that gates the sidebar row.
         if !hasFilters, feedSelection.isEmpty, smartSelection == .filtered {
             selectSmartSource(.all)
+            recomputeCounts()
+            updateUnreadBadge()
+            return
         }
         recomputeCounts()
         updateUnreadBadge()
@@ -2051,10 +2054,16 @@ public final class ReaderStore {
         recomputeFilteredIDs()
         if !hasFilters, feedSelection.isEmpty, smartSelection == .filtered {
             selectSmartSource(.all)
+            recomputeCounts()
+            updateUnreadBadge()
+            return
         }
         // Don't strand the user browsing a category that was just deleted.
         if let selected = categorySelection, !categories.contains(where: { $0.id == selected }) {
             selectSmartSource(.all)
+            recomputeCounts()
+            updateUnreadBadge()
+            return
         }
         recomputeCounts()
         updateUnreadBadge()
@@ -4129,7 +4138,7 @@ public final class ReaderStore {
     }
 
     public func toggleStarred(articleID: Article.ID) {
-        guard let article = articles.first(where: { $0.id == articleID }) else { return }
+        guard let article = article(withID: articleID) else { return }
         setStarred(articleID: articleID, isStarred: !article.isStarred)
     }
 
@@ -4606,6 +4615,14 @@ public final class ReaderStore {
     /// serialize every feed's up-to-15s timeout (the old OPML import did exactly
     /// that). `onProgress` (completed, total) is called on the main actor as each
     /// fetch finishes, for the import's determinate progress indicator.
+    private func beginBatchFiltering() {
+        let hadPending = filterDebounceTask != nil
+        filterDebounceTask?.cancel()
+        filterDebounceTask = nil
+        isBatchRefreshing = true
+        if hadPending { scheduleArticleFilter(debounced: true) }
+    }
+
     private func runBatchedFetch(
         targets: [(id: Feed.ID, url: URL)],
         mode: RefreshMode,
@@ -4616,9 +4633,7 @@ public final class ReaderStore {
         // doesn't rewrite the whole library repeatedly. `defer` guarantees the flag
         // clears and the final state is saved even on early exit.
         let initialArticleIDs = Set(articles.map(\.id))
-        filterDebounceTask?.cancel()
-        filterDebounceTask = nil
-        isBatchRefreshing = true
+        beginBatchFiltering()
         defer {
             // Safety net: no bucket may outlive the fetch, whatever the exit path
             // (idempotent — the explicit end flush below already handled the normal
@@ -4863,6 +4878,13 @@ public final class ReaderStore {
             store.ownShard = DeviceStateDocument(deviceID: "test")
         }
         return store
+    }
+
+    func _beginBatchFilteringForTesting() { beginBatchFiltering() }
+    func _endBatchFilteringForTesting() { isBatchRefreshing = false }
+    func _applyPrecomputedForTesting(_ library: ReaderLibrary) {
+        apply(library, precomputed: Self.precomputeFilterState(
+            articles: library.articles, filters: library.filters, categories: library.categories))
     }
 
     var _shardForTesting: DeviceStateDocument { ownShard }

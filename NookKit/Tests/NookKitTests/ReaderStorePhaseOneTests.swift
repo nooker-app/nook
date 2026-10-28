@@ -100,20 +100,23 @@ struct ReaderStorePhaseOneTests {
     @Test("Rapid large-library transitions install only the latest source")
     func latestWins() async throws {
         let store = makeStore(count: 1_000)
+        for index in store.articles.indices where index.isMultiple(of: 2) {
+            store.articles[index].isRead = true
+        }
         store.feedSelection = ["a"]
         store.selectSmartSource(.all)
         store.selectSmartSource(.unread)
-        for _ in 0..<100 where store.visibleArticles.count != 1_000 {
+        for _ in 0..<100 where store.visibleArticles.count != 500 {
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(store.visibleArticles.count == 1_000)
+        #expect(store.visibleArticles.count == 500)
         #expect(store.smartSelection == .unread)
         #expect(store.feedSelection.isEmpty)
         #expect(store.selectedArticleID == nil)
         let generation = store.listGeneration
         try await Task.sleep(for: .milliseconds(350))
         #expect(store.listGeneration == generation)
-        #expect(store.visibleArticles.count == 1_000)
+        #expect(store.visibleArticles.count == 500)
     }
 
     @Test("Search replacement changes identity, clearing is immediate, and a cleared pending query cannot return")
@@ -158,6 +161,72 @@ struct ReaderStorePhaseOneTests {
         #expect(store.feedSelection.isEmpty)
         #expect(store.visibleArticles.isEmpty)
         #expect(store.selectedArticleID == nil)
+    }
+
+    @Test("Cancelled callers cannot erase a synchronous filter or its selection")
+    func cancelledSyncFilter() async {
+        let store = makeStore()
+        store.selectedArticleID = "article-0"
+        let task = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            store.selectSmartSource(.all)
+            #expect(store.visibleArticles.count == 3)
+            #expect(store.selectedArticleID == "article-0")
+        }
+        await task.value
+    }
+
+    @Test("Batch start re-enrols a pending data filter; later data does not move the deadline")
+    func batchThrottle() async throws {
+        let store = makeStore()
+        store.selectSmartSource(.unread)
+        store.setRead(articleID: "article-0", isRead: true)
+        store._beginBatchFilteringForTesting()
+        let executions = store.filterExecutionCount
+        try await Task.sleep(for: .milliseconds(800))
+        #expect(store.filterExecutionCount == executions)
+        store.setStarred(articleID: "article-1", isStarred: true)
+        try await Task.sleep(for: .milliseconds(850))
+        #expect(store.filterExecutionCount == executions + 1)
+        #expect(store.visibleArticles.count == 2)
+        store.setStarred(articleID: "article-2", isStarred: true)
+        store.selectSmartSource(.all)
+        #expect(store.filterExecutionCount == executions + 2)
+        #expect(store.visibleArticles.count == 3)
+        try await Task.sleep(for: .milliseconds(1600))
+        #expect(store.filterExecutionCount == executions + 2)
+        store._endBatchFilteringForTesting()
+    }
+
+    @Test("Precomputed install replaces the library index and filtered All count atomically")
+    func precomputedIndex() {
+        let store = makeStore()
+        let library = ReaderLibrary(feeds: [Fixture.feed("a")], articles: [
+            Fixture.article("replacement", feedID: "a"),
+            Fixture.article("hidden", feedID: "a")
+        ], lastRefreshedAt: nil, folders: [], filters: [ArticleFilter(pattern: "hidden")])
+        store._applyPrecomputedForTesting(library)
+        #expect(store.article(withID: "article-0") == nil)
+        #expect(store.article(withID: "replacement")?.id == "replacement")
+        #expect(store.count(for: .all) == 1)
+    }
+
+    @Test("Animation accepts small ordered overlap and rejects replacement, batches, reorder and 41-row deltas")
+    func animationPredicate() {
+        func animates(_ old: [String], _ new: [String], replacement: Bool = false,
+                      batch: Bool = false, bulk: Bool = false, animated: Bool = true) -> Bool {
+            ReaderStore.shouldAnimateDisplay(oldIDs: old, newIDs: new, animated: animated,
+                replacesList: replacement, isBulkImporting: bulk, isBatchRefreshing: batch)
+        }
+        #expect(animates(["a", "b"], ["new", "a", "b"]))
+        #expect(!animates(["a", "b"], ["b", "a"]))
+        #expect(!animates(["a"], ["a", "b"], replacement: true))
+        #expect(!animates(["a"], ["a", "b"], batch: true))
+        #expect(!animates(["a"], ["a", "b"], bulk: true))
+        #expect(!animates(["a"], ["a", "b"], animated: false))
+        #expect(!animates([], ["a"]))
+        #expect(!animates(["a"], ["b"]))
+        #expect(!animates(["a"], ["a"] + (0..<41).map { "new-\($0)" }))
     }
 
     @Test("Seen writes share one HLC, preserve user flags, and skip background/already-seen/read articles")
