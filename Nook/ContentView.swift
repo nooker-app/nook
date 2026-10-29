@@ -635,6 +635,7 @@ private struct FeedSidebar: View {
                 isTopLevelDropTargeted: isTopLevelDropTargeted,
                 collapsedFoldersData: collapsedFoldersData,
                 ownPublicationURL: ownPublicationURL,
+                isFollowingOwnFeed: isFollowingOwnFeed,
                 drafts: drafts
             )
             .equatable()
@@ -1317,12 +1318,19 @@ private struct FeedSidebar: View {
 /// the selection highlight in each row's `SidebarSelectionState`; the sidebar's
 /// closures and remaining state are only written by actions, so they are left
 /// out of the comparison (a held copy writes the same `@State` storage).
+///
+/// Rule: every `@State`/`@AppStorage` of `FeedSidebar` that `sections` (or a row
+/// it builds) *reads* must be a field here and in `==`. Reading it through the
+/// held `sidebar` registers no dependency on this child, so a value left out
+/// never redraws: My Nook's follow spinner stayed stuck that way.
+/// `ListSelectionInvalidationTests.sidebarSectionsCompareReadState` enforces it.
 private struct FeedSidebarSections: View, Equatable {
     let sidebar: FeedSidebar
     let dropTargetFolder: String?
     let isTopLevelDropTargeted: Bool
     let collapsedFoldersData: Data
     let ownPublicationURL: String
+    let isFollowingOwnFeed: Bool
     let drafts: [PlusDraft]
 
     nonisolated static func == (lhs: FeedSidebarSections, rhs: FeedSidebarSections) -> Bool {
@@ -1330,6 +1338,7 @@ private struct FeedSidebarSections: View, Equatable {
             && lhs.isTopLevelDropTargeted == rhs.isTopLevelDropTargeted
             && lhs.collapsedFoldersData == rhs.collapsedFoldersData
             && lhs.ownPublicationURL == rhs.ownPublicationURL
+            && lhs.isFollowingOwnFeed == rhs.isFollowingOwnFeed
             && lhs.drafts == rhs.drafts
     }
 
