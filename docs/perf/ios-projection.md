@@ -173,3 +173,40 @@ macOS 수치는 측정값이고(lib-5k, 코디네이터 측정), iOS 이득은 �
 - **xctrace 미사용.** 이 호스트에서 시뮬레이터 대상 `xctrace record`가 끝나지 않았다. 실기기(또는 다른 호스트)에서 Hangs·Time Profiler로 A1/A2/B2를 다시 재면 위 추정 칸을 측정값으로 바꿀 수 있다. 드라이버의 `OSSignposter` interval(`scenario id=… rep=…`)이 그때 구간 표시가 된다.
 - 튜토리얼 spotlight와 OPML import는 코드 대조만 했다(네트워크 starter 사이트, 파일 선택기 필요).
 - 시뮬레이터 창 클릭이 포커스 문제로 동작하지 않아, smoke는 탭과 같은 진입점을 앱 안에서 호출했다. 실제 터치 제스처(스와이프 액션, 길게 누르기 메뉴)는 확인하지 않았다.
+
+## Follow-ups
+
+위 "남은 것"의 TTFR 항목을 처리했다(`763eed5`). iOS 제품 동작(`displayedArticles`, `identical`, 애니메이션 판정)은 그대로다.
+
+### 변경
+
+- `computeDisplayDiff`: 창 길이(`ArticleListWindow.length`)와 행 모델(`rowModels`, 최대 200)을 `#if os(macOS)`에서만 만든다. iOS는 `rows: []`다. iOS 목록은 `displayedArticles`를 직접 그리고, `listWindow.install`은 macOS 전용이다.
+- 별도의 `reordered` 계산(Set 2개 + filter 2번)을 없앴다. `shouldAnimateDisplay`의 마지막 조건(상대 순서 비교)과 같은 판정이었다.
+- `shouldAnimateDisplay`가 플래그(`animated`, `replacesList`, bulk/batch, 빈 목록, 동일 id)를 먼저 확인한다. 소스 전환에서는 id Set을 만들지 않는다. 결과는 같다. `ReaderStorePhaseOneTests`와 `ArticleListWindowTests`가 이를 고정한다.
+
+### 귀속 (Simulator Debug, 임시 계측, warm 8회 median)
+
+off-main 필터 경로를 단계별로 쟀다.
+
+| 단계 | A1 30→5,000 | A2 5,000→3,000 |
+|---|---|---|
+| 입력 캡처(main) | ~1 ms | ~1 ms |
+| 필터 루프 | ~6 ms | ~5 ms |
+| 정렬(`Article.isOrdered`) | 21–27 ms | 18–24 ms |
+| `computeDisplayDiff` 수정 전 | 10.2 ms | 8.6 ms |
+| `computeDisplayDiff` 수정 후 | 7.0 ms | 6.5 ms |
+
+- 남은 diff ~6.5 ms는 id 배열 2개, `indexByID`(전체 결과), `sameIDs` 비교다. 그중 ~3.5 ms는 8d8d17e가 main에서 하던 id 비교를 옮겨 온 몫이다. 순수 증가분은 `indexByID` 정도다. `indexByID`는 iOS에서도 `displayedIndexByID`로 쓰인다.
+- 정렬과 루프는 8d8d17e와 같은 알고리즘이다. 원소별 `isCancelled` 호출은 측정상 루프 몫(~6 ms) 안에 있어 따로 손대지 않았다.
+- 나머지 차이는 측정 방식에서 온다. 시뮬레이터 display link가 ~30 Hz라서 TTFR은 33 ms 단위 tick에 걸린다. 같은 빌드를 연속으로 실행해도 A1 median이 46–72 ms를 오간다. 그래서 Phase 6의 "+10–29 ms"는 대부분 tick 하나 차이와 잡음이다. 코드에서 더 떼어 낼 싼 몫은 찾지 못했다.
+
+### 측정 (iPhone 17 Pro Simulator, iOS 26.5, Debug, lib-5k; before = `4db46da`, after = `763eed5`; 번갈아 2라운드 × warm 12회 = 24회)
+
+| 시나리오 | 빌드 | TTFR median / max | publish median | 메인 최장 median / max | ≥100 ms 정지 |
+|---|---|---|---|---|---|
+| A1 30→5,000 | before | 68.3 / 86.5 | 34.3 | 27.5 / 70.7 | 0 |
+| | after | **60.7** / 69.4 | 34.2 | 26.9 / 76.0 | 0 |
+| A2 5,000→3,000 | before | 68.9 / 87.2 | 28.9 | 25.1 / 30.1 | 0 |
+| | after | **60.5** / 84.9 | 30.7 | 26.7 / 34.1 | 0 |
+
+- TTFR median이 두 시나리오 모두 약 8 ms 줄었다. 메인 스레드 지표(publish, 메인 최장)는 변화가 없다.

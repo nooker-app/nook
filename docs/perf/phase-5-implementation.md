@@ -314,3 +314,35 @@ main `f007cc6` 기준. fix round 2에서 reader를 제자리 갱신으로 바꾸
   - 삭제 확인을 띄운 상태에서 메뉴의 다음/이전 명령으로 글을 바꾼다. 다이얼로그가 닫혀야 한다.
   - 각주 anchor로 점프한 뒤 다른 글을 고른다. 맨 위에서 시작해야 한다.
   - Copy as Markdown 직후 다른 글로 바꾼다. 체크 표시가 바로 꺼져야 한다.
+
+## Follow-ups
+
+review-p5f3 LOW(글을 바꿀 때마다 같은 update 안에서 block list를 두 번 그림)를 처리했다.
+
+### 변경 (`f7df8a1`, 계측 `538ae41`)
+
+- `ReaderArticleSession.translator(for:)`는 이제 번역기가 **비활성이면** 다른 글에도 번역기를 그대로 넘긴다. `nil`은 다른 글의 번역이 아직 켜져 있을 때만 돌려준다.
+  - 비활성 번역기는 아무것도 그리지 않는다. `translatedBlock(at:)`, `completedMarkdownBlocks()`, 댓글 번역이 모두 `isActive`로 막혀 있다.
+  - 그래서 B의 첫 body와 `begin(B)` 뒤의 body가 같은 `translator` 입력을 받는다. 번역 중인 글에서 다음 글로 넘어갈 때는 여전히 첫 프레임에 `nil`이 간다(review-p5f2 MEDIUM 2 유지).
+  - 테스트: `ReaderArticleSessionTests`에 비활성이면 같은 객체, 활성이면 다른 글에 `nil`, 같은 글에는 객체를 넘기는 경우를 추가했다. `NativeArticleTranslator._activateForTesting()`(DEBUG)을 쓴다.
+- 계측: `MainThreadLog` scenario stats에 `readerBlocks=`를 추가했다. 글의 최상위 `HTMLBlockList` body(블록 `ForEach`)를 센다. DEBUG macOS 전용이다.
+
+### 확인한 것 (C3 trace, 임시 로그)
+
+- 리뷰가 예상한 두 번째 `ReaderDetailView` pass는 그대로 남는다. `begin(B)`가 `articleID`를 바꾸고 body가 그것을 읽기 때문이다. 그래서 **`reader.body`는 줄지 않는다**(C3 warm rep당 6 → 6).
+- HTML 글로 settle할 때마다 `HTMLContentView.body`는 `ReaderDetailView` pass마다 다시 돈다(3회). 수정 전후가 같고, `translator`가 같아도 그렇다. 바뀐 것은 그 아래 `HTMLBlockList`다. 수정 전에는 `tr=0`, `tr=1`로 두 번 돌았고, 수정 후에는 첫 pass에서 한 번만 돈다. 이후 pass는 입력이 같아서 건너뛴다.
+
+### 측정 (lib-5k, warm median/worst, A14·C3 5회, T3 1회; before = `538ae41`, after = `f7df8a1`, 같은 머신)
+
+| 시나리오 | 지표 | before | after |
+|---|---|---|---|
+| C3 ↓ 30 Hz | readerBlocks / rep | 2 | **1** |
+| C3 | readerBody / rep | 6 | 6 |
+| C3 | worstStall ms / stalls100 | 0/58, 0 | 0/67, 0 |
+| A14 | readerBlocks, readerBody | 0, 1 | 0, 1 |
+| A14 | worstStall ms / stalls100 | 0/79, 0 | 62/65, 0 |
+| T3 번역 on | readerBlocks, readerBody | 1, 9 | 1, 9 |
+| T3 | worstStall ms / stalls100 | 0, 0 | 0, 0 |
+
+- C3/T3/A14 모두 ≥100 ms 정지는 0회다. A14의 60 ms대 값은 실행마다 0과 79 사이를 오간다. 이 시나리오에서는 reader 글이 바뀌지 않으므로(readerBlocks 0) 이번 변경과 관계없다.
+- 골든 라이브러리의 HTML 글은 블록이 1개뿐이라 시간 차이는 측정되지 않는다. 블록 수가 많은 실제 글에서는 settle마다 O(blocks) `ForEach` 한 번이 빠진다.
