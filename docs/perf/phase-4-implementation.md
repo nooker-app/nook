@@ -124,3 +124,62 @@ C3에서 측정한 행당 20–35 ms에는 같은 stall에 묶인 `reader.body` 
   - 메뉴와 swipe 라벨이 바뀌는지
   - Downloaded stand-in의 메뉴가 동작하는지
   - 피드 이름을 바꾼 뒤 행에 반영되는지
+
+## Fix round 1
+
+main `ea35ab6` 기준. 이번에는 워크트리에서 `make perf-build`와 `tools/perf/run.sh`로 직접 측정했다(lib-5k, warm, median/worst ms). 기준선(`ea35ab6`)도 같은 머신에서 다시 쟀다. 코디네이터 측정과 절대값이 다르다. 예를 들어 이 머신의 T4 hitchRatio는 기준선에서 이미 62였다. 그래서 아래 비교는 같은 머신의 before/after로만 읽어야 한다. 원인은 추측하지 않고 `--xctrace 'Time Profiler'`로 A1, A14, T4를 기록한 뒤 메인 스레드 샘플을 시나리오 구간별로 집계해 찾았다.
+
+### 결론
+
+- 전환 1회의 메인 스레드 작업량은 약 250 ms에서 약 190 ms로 줄었다. 가장 큰 단일 항목은 행이 아니라 **사이드바**였다. 전환마다 사이드바 body가 피드 300개 행과 그 컨텍스트 메뉴를 다시 만들었고, 비용은 전환당 40–70 ms였다.
+- 행 1개를 만드는 비용은 이제 대부분 AppKit이 정한다. 남은 비용은 약 3–4 ms/행이다. 이 가운데 NSTableView 자동 행 높이(`_automaticRowHeightsUpdateVisibleRowViews` → 행마다 `NSHostingView` `sizeThatFits`)가 35행 기준 약 69 ms이고, 그중 텍스트 측정이 약 22 ms다. 행의 SwiftUI 그래프 생성(swipe, contextMenu, onAppear, equatable)은 35행에 약 7 ms뿐이다. 코디네이터 로그의 "행당 6–11 ms"는 같은 stall에 묶인 사이드바 재렌더와 자동 높이 측정이 합쳐진 값이었다.
+- **A 게이트(<100 ms)는 SwiftUI List로는 닿지 않는다고 본다.** 남은 stall(약 130 ms)의 구성은 보이는 행 약 35개의 자동 높이 측정과 첫 레이아웃·렌더, 툴바 갱신, 200행 윈도의 outline diff다. 앱 코드에서 더 걷어낼 덩어리가 없다. 이 비용을 없애려면 고정 또는 캐시된 행 높이, 셀 재사용, 전환마다 테이블을 다시 만들지 않는 구조가 필요하다. 이것은 Phase 5(NSTableView)의 범위다.
+
+### 커밋과 각각이 줄인 것
+
+| 커밋 | 내용 | 측정 |
+|---|---|---|
+| fix: clear row offline badge when expired downloads are purged | 리뷰 LOW. `purgeExpiredOffline`이 지운 id를 `offlineCopiesRemoved`에 넘긴다. 이 함수는 `listWindow.setSavedOffline(id, false)`로 행을 패치한 뒤 refilter한다. 테스트 `purgeClearsOfflineBadge` | 동작 수정 |
+| perf: keep source switches from re-running the sidebar's feed rows | 사이드바 섹션을 equatable child(`FeedSidebarSections`)로 옮겼다. 선택 하이라이트는 행별 `SidebarSelectionState`가 읽는다. 피드와 폴더 메뉴는 열 때만 만든다(`DeferredMenuContent`) | A1 프로파일에서 전환당 `FeedSidebar.feedRow`/`feedContextMenu`(`feedFolders` 정렬) 약 40 ms, outline diff와 메뉴 preference 약 25 ms가 사라짐. A1 TTFR 271→201 |
+| perf: build plain macOS list rows while title translation is off | 번역이 꺼져 있으면 box, slot, reveal preference, 행 높이 probe NSView를 만들지 않는다. 설정을 토글하면 List identity에 포함된 값이 바뀌어 다시 측정한다. 행의 onAppear 훅 2개를 1개로 합쳤다 | 번역 off에서 titleBox: 전환당 35→0, T4 150→0, C1 142→0 |
+| perf: clear a hidden selection inside the list install transaction | 선택이 숨겨지는 전환에서 prune을 install 트랜잭션 안으로 옮겼다. 이전에는 교체되는 List와 reader가 이를 별도 변경으로 처리했다 | A14 readerBody 2→1 |
+| fix: keep the push transition on quick reader-pane navigation | 리뷰 NIT. `ReaderSelectionSettler.passingThrough`로 reader-pane next/previous는 hold를 거치지 않는다. 호출자의 `withAnimation` 안에서 반영되고, 목록 키 반복은 그대로 합쳐진다. 테스트 `navigationPassesThrough` | 동작 수정 |
+
+### 측정 (같은 머신, `ea35ab6` → `0447bc2`)
+
+| 시나리오 | 지표 | before | after |
+|---|---|---|---|
+| A1 | worstStall / ttfr | 147/157 · 271/292 | 128/129 · 201/201 |
+| A6 (`--only`) | worstStall / ttfr / stalls100 | 145/147 · 271/284 · 2 | 130/143 · 203/217 · 1 |
+| A8 (`--only`) | worstStall / ttfr / stalls100 | 147/152 · 282/300 · 2 | 135/157 · 206/222 · 1 |
+| A14 | worstStall / ttfr / readerBody | 205/211 · 329/337 · 2 | 201/225 · 246/258 · 1 |
+| C1 | hitchRatio / stalls100 | 30.7 · 0 | 32.6 · 0 |
+| C3 | worstStall / stalls100 | 236/256 · 9/11 | 122/226 · 1/4 |
+| T3 off | worstStall / stalls100 | 250/271 · 14.5/17 | 274/379 · 12.5/15 |
+| T4 off | worstStall / hitchRatio / titleBox | 89/177 · 62 · 150 | 90/181 · 68 · 0 |
+| T3 on | worstStall / stalls100 | 444/467 · 14/16 | 506/659 · 14.5/16 |
+| T4 on | worstStall / hitchRatio | 175/176 · 43 | 89/178 · 60 |
+
+전체 switch.json 1회(after)의 A2–A13 worstStall은 130–153 ms였다. 코디네이터의 p4 실행은 150–180 ms였다. A10은 66, A13은 0이다. 예외가 하나 있다. 전체 실행의 A8은 242/260이었고, 5회 중 3회에서 install과 행 생성이 한 run-loop 턴에 합쳐졌다. `--only A6,A8`로 따로 돌리면 기준선보다 낫다(위 표). 앞 시나리오에 따라 달라지는 타이밍 문제로 보이며, 코디네이터의 전체 재측정에서 확인해야 한다. T는 반복 1회 × 2실행이라 잡음이 크다.
+
+### 항목별 결과
+
+1. **오프라인 badge (LOW)**: 수정과 테스트를 마쳤다. **NIT**: 수정과 테스트를 마쳤다.
+2. **행 생성 비용**: 위 결론 참고. 번역 off 행에는 번역 장치가 없다. 행 안의 조건부 뷰(`if isStarred`, `if isSavedOffline`, badge `.transition`)는 `DynamicLayoutViewAdaptor`로 전환당 약 8 ms다. 행 모양이 바뀌지 않으면 없앨 수 없어서 남겼다.
+3. **A14**: 코디네이터 로그의 `reader.bodyx3, list.rowcontentx402` stall은 A14의 **setup**(`selectIndex 499` → ensureVisible이 윈도를 549행으로 늘리고 reader가 렌더) 구간이었다. 시나리오 측정 구간이 아니다. 시나리오 안에서 A1보다 더 드는 비용은 두 가지다. 하나는 선택 해제에 따른 reader 처리로, prune을 옮겨 줄였다. 다른 하나는 breadcrumb의 글 제목 crumb가 사라지면서 생기는 NSToolbar 재배치(`NSToolbarView layout`, toolbar preference)로, 전환당 약 30 ms다. 공유 버튼을 비활성 상태로 남겨 보는 실험은 효과가 없어서 되돌렸다.
+4. **T4 off**: 남은 stall은 등속 스크롤 중 윈도 growth(`list.window.grow`, rowcontent 602, relativetime 32)다. 기준선에서도 2회 중 1회 나타나므로 Phase 4 배선 때문이 아니다. 프로파일에서 `onScrollPhaseChange`/`setScrolling`이 차지하는 샘플은 없었다. 코디네이터 측정의 T3 stalls100 "두 배"는 이 머신에서 재현되지 않았다(기준선 14.5, after 12.5).
+5. **install + 재생성**: 전환당 비용은 outline이 200행 윈도 전체를 훑는 `diffRows`(행마다 `isGroupRow` → ForEach item) 약 12 ms와 테이블 teardown 약 3 ms다. `.id` 재생성 자체는 싸다. 큰 비용은 새 테이블의 첫 레이아웃이다. 교체 윈도를 200행보다 줄이면 diff는 줄지만, 보이는 행이 35개라 첫 렌더 직후 growth가 바로 일어난다. 그래서 바꾸지 않았다.
+
+### 기타
+
+- `sidebar.body` 카운터는 전환당 여전히 1이다. 임시 프로브 테스트로 확인한 결과, `List(selection:)`을 가진 body는 바인딩을 `@Bindable`로 만들든 `Binding(get:set:)`으로 만들든 선택이 바뀔 때마다 다시 실행된다. 다시 실행되는 것은 껍데기뿐이고, 섹션과 피드 행은 다시 만들어지지 않는다(`sidebarRow` 0).
+- 검증 결과는 다음과 같다.
+  - 커밋마다 `make build` 통과. 헝크로 나눈 사이드바 커밋은 따로 checkout해서 빌드했다.
+  - `git diff --check` 통과.
+  - `swift test --filter "ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness"`(600 s 제한): 61개 통과.
+  - iOS 빌드는 하지 않았다. 변경은 `#if os(macOS)` 경로와 macOS 앱 타깃에 한정된다. 공용 코드에서 바뀐 것은 `offlineCopiesRemoved`(iOS에서는 refilter만 한다)와 settler의 `passingThrough`(macOS에서만 호출)다.
+- 수동 확인이 필요한 것:
+  - 번역 설정을 켤 때 캐시된 번역 행의 높이. List가 다시 만들어지므로 화면 행의 번역은 dwell(1.5 s) 뒤에 시작된다.
+  - 사이드바 하이라이트, 폴더 접기, 드래그 앤 드롭 대상 표시.
+  - 피드와 폴더 컨텍스트 메뉴의 내용(다중 선택 라벨 포함).
+  - reader에서 next/previous를 빠르게 두 번 눌렀을 때 push 전환이 보이는지.
