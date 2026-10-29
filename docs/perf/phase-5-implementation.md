@@ -254,3 +254,63 @@ main `dec200e` 기준. 남은 두 stall(C3/T3의 키 반복, A14의 선택 있�
 - `make build` 통과, iOS `NookiOS` Release(generic iOS, `CODE_SIGNING_ALLOWED=NO`) 통과.
 - `swift test --package-path NookKit --filter "ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness|ArticleTableModel"`(600 s 제한): 76개 통과. 바뀐 코드는 앱 타깃의 `ContentView`뿐이라 새 단위 테스트는 없다.
 - `git diff --check`, `plutil -lint` 통과.
+
+## Fix round 3
+
+main `f007cc6` 기준. fix round 2에서 reader를 제자리 갱신으로 바꾸면서 reader의 `@State`가 글을 넘어 살아남게 됐다. 리뷰(`review-p5f2`)의 MEDIUM 2개와 LOW 2개를 고치고, reader 하위 트리의 글별 상태를 다시 점검했다. reader를 다시 통째로 만드는 방식(`.id(article.id)`)은 되돌리지 않았다.
+
+### 1. 글별 상태를 `ReaderArticleSession`으로 (`c9cd884`)
+
+- 새 타입 `NookKit/Sources/NookKit/ReaderArticleSession.swift`(`@MainActor @Observable`). reader의 번역기(`NativeArticleTranslator`), 요약(`ArticleSummaryController`), 감지 언어, 시스템 Translation overlay 플래그, 평문 번역(제목/문단/표시 여부/진행 중)을 한곳에 두고, 이 상태가 어느 글의 것인지(`articleID`)를 함께 기록한다.
+- 모든 읽기는 글 id를 받는다(`translator(for:)`, `summary(for:)`, `detectedLanguage(for:)`, `plainTranslation(for:)`, `isTranslating(for:)` …). bound된 글이 아니면 nil/false를 돌려준다. 그래서 새 글의 첫 body는 `begin(articleID:)`가 돌기 전에도 깨끗하다. 이전 글의 번역 제목, `HTMLContentView`에 넘기던 번역기(`completedMarkdownBlocks()`/`translatedBlock(at:)`), "Translated by …" 라벨, 요약 카드, Translate 버튼 노출(감지 언어)이 모두 여기에 해당한다(MEDIUM 2).
+- `begin(articleID:)`는 `.onChange(of: article.id, initial: true)`에서 부른다. 안전을 위해 글 task·요약 task·`toggleTranslation`·`requestSummary`에서도 부른다. 같은 글이면 아무것도 하지 않는다. 글이 바뀌면 `translator.stop()`과 `summary.reset()`을 하고, 평문 번역 task를 취소하고, 나머지 값을 비운다. 값이 이미 기본값이면 쓰지 않는다(Observation 무효화 방지, `stop()`과 같은 방식).
+- 평문 번역(MEDIUM 1): `translatePlainBody(articleID:…)`는 bound된 글에서만 시작한다. 실행마다 `plainRun`을 올리고, `begin`도 이 값을 올린다. 늦게 끝난 결과는 run이 맞지 않으면 버린다. 그래서 A의 결과가 B에 들어가지 않는다. B에서 배너와 Translate 비활성은 `isTranslating(for: B)`를 따르므로 A의 요청이 끝나기를 기다리지 않는다.
+- 삭제 확인(LOW 3): 휴지통을 누를 때 `pendingDeleteID`에 글 id를 담고 `confirmationDialog(…, presenting:)`로 그 id를 지운다. 글이 바뀌면 다이얼로그를 닫는다(전에는 reader 재생성이 닫았다).
+- 스크롤 리셋(LOW 4): 고칠 것이 없었다. `ScrollPosition`은 `scrollTo(edge: .top)`를 부를 때마다 이전 값과 다른 값이 된다(`.top`에서 `.top`으로 가도 마찬가지, 내부 seed). 그래서 바인딩이 `.top`으로 남아 있어도 리셋은 매번 적용된다. 테스트로 고정했다. 초기 호출(`initial: true`)에서는 스크롤하지 않는다.
+- 하단 Share 메뉴(`ArticleShareMenu`, NookKit): `articleURL`이 바뀌면 "copied" 체크를 끈다. 타이머는 자기 run일 때만 끈다. 그래서 이전 복사의 1.5초 타이머가 나중 체크를 일찍 끄지 않는다. 팝업 버튼을 다시 만들지 않으므로 round 2의 비용 절감은 그대로다. iOS도 같은 컴포넌트를 쓴다. 동작은 같은 글 안에서는 같고, 글이 바뀌면 체크가 꺼지는 것만 다르다.
+
+### 점검한 나머지 상태
+
+| 상태 | 결과 |
+|---|---|
+| find bar | reader에 없음 |
+| 각주 anchor/flash (`HTMLContentView` `@State`) | `.id(article.id)` 그대로 |
+| 요약 카드 펼침, 요약 버튼 | 요약 `Group`의 `.id(article.id)` + session 게이트 |
+| 댓글 `showsAll` | `.id(article.id)`. 번역기는 session 게이트 |
+| 읽음 dwell 타이머 | `.task(id: article.id)`가 취소 |
+| full-article web reader | `store.isBrowserPresented`, reader 밖이고 `ArticleWebView` identity는 글 기준 |
+| 오프라인/재파싱/파서/카테고리 | store에서 읽음. 하위 뷰(`ReaderUnavailableNotice`, `ReaderReparsingBanner`, `ReaderDroppedEmbedsNotice`, `ReaderLoadingPlaceholder`, `CategoryMenuItems`, `ReaderParserMenuItems`, `ReaderTitleButtonStyle`)에 `@State` 없음 |
+| swipe pull/armed | 스크롤 geometry에서 다시 계산되고, commit 시 리셋. 글 상태가 아님 |
+| `summaryRequestedArticleID` | 글 id와 비교해 읽음. 글이 바뀌면 nil |
+
+### 측정 (lib-5k, warm median/worst ms, A/C는 5회, T3는 1회씩 3번)
+
+| 시나리오 | f007cc6 (코디네이터) | 이번 | 게이트 |
+|---|---|---|---|
+| A1 worstStall / ttfr | 0, 39–85 | 0/0, 84/85 | PASS |
+| A14 worstStall / ttfr | 59/66, 85/111 | 0/64, 106/116 | PASS |
+| C3 worstStall / stalls100 | 0/63, 0 | 0/0, 0/0 | PASS |
+| C1 worstStall / hitchRatio | 0 | 0/0, 3.8/16.9 | |
+| T3 번역 on worstStall (stalls100) | 0 | 60, 0, 0 (모두 0) | PASS |
+| T3 번역 off worstStall (stalls100) | 25/50 | 63, 60, 0 (모두 0) | PASS |
+
+- T3의 60 ms 안팎 값은 실행마다 나왔다가 사라진다(on 60/0/0, off 63/60/0). stalls100은 모두 0이다. 측정 잡음으로 본다.
+
+### 테스트와 검증
+
+- `NookKit/Tests/NookKitTests/ReaderArticleSessionTests.swift`(6개). 내용:
+  - A의 평문 번역이 B로 바꾼 뒤에 끝나도 B에 아무것도 들어가지 않는다.
+  - bound 전 B에 대한 읽기는 모두 비어 있다(번역기, 요약, 감지 언어, overlay, 평문 번역, 진행 중).
+  - bound되지 않은 글에 대한 쓰기는 무시된다.
+  - 같은 글을 다시 bind하면 상태가 유지된다.
+  - 평문 번역은 제목 길이 가드와 표시/숨김을 지킨다.
+  - `scrollTo(edge: .top)`는 매번 새 값이다.
+- `swift test --package-path NookKit --filter "ReaderArticleSession|ArticleSummaryTests|ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness|ArticleTableModel|ArticleMarkdownTests|ReaderSwipeNavigation"`(600 s 제한): 102개 통과.
+- `make build`, `NookiOS` Release(generic iOS, `CODE_SIGNING_ALLOWED=NO`), `git diff --check`, `plutil -lint` 통과.
+- 수동 확인(앱 실행 필요):
+  - HTML 글 A에서 번역을 켠 뒤 B를 선택(클릭, ↓, 사이드바). B의 첫 화면에 A의 번역 제목·본문·"Translated by" 라벨이 보이지 않아야 한다.
+  - 평문 글 A에서 Translate를 누르고 곧바로 B로 바꾼다. B에 "Translating…" 배너가 없어야 하고, Translate 버튼이 활성이어야 하며, 나중에 A의 번역이 B에 들어가지 않아야 한다.
+  - 요약을 켠 채 글을 바꾼다. 이전 글의 요약 카드가 한 프레임도 보이지 않아야 한다.
+  - 삭제 확인을 띄운 상태에서 메뉴의 다음/이전 명령으로 글을 바꾼다. 다이얼로그가 닫혀야 한다.
+  - 각주 anchor로 점프한 뒤 다른 글을 고른다. 맨 위에서 시작해야 한다.
+  - Copy as Markdown 직후 다른 글로 바꾼다. 체크 표시가 바로 꺼져야 한다.
