@@ -164,9 +164,12 @@ public final class ArticleListWindow {
     /// The row an id is displayed at, if the window holds it: the window is a
     /// prefix of the full result, so a full-result index below `rows.count` is a row.
     public func rowIndex(of id: Article.ID) -> Int? {
-        guard let index = indexByID[id], index < rows.count else { return nil }
+        guard let index = indexByID[id], index < _rows.count else { return nil }
         return index
     }
+
+    /// Whether the full result holds the id, displayed yet or not.
+    public func contains(_ id: Article.ID) -> Bool { indexByID[id] != nil }
 
     /// Not capped: List selection needs the selected row to exist, so a deep jump
     /// (⌘↓ past the window, openArticle, a restored selection) appends the whole gap

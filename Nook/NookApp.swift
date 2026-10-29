@@ -17,6 +17,7 @@ struct NookApp: App {
         _ = AppLanguage.launchLanguage
         // Before the first filter runs, so its rows are measured off the main thread.
         if MacListBackend.current == .table {
+            ArticleRowTextWidths.prepareFonts()
             ArticleRowTextWidths.prefillEnabled.store(true, ordering: .relaxed)
         }
     }

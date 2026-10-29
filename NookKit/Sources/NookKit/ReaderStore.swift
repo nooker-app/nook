@@ -1091,7 +1091,10 @@ public final class ReaderStore {
         #if os(macOS)
         // The AppKit table's row heights need these widths; measured here, off the
         // main thread on the filter executor, the install finds them cached.
-        if ArticleRowTextWidths.prefillEnabled.load(ordering: .relaxed) { ArticleRowTextWidths.shared.prefill(rows) }
+        if ArticleRowTextWidths.prefillEnabled.load(ordering: .relaxed) {
+            ArticleRowTextWidths.shared.trim(keeping: indexByID)
+            ArticleRowTextWidths.shared.prefill(rows)
+        }
         #endif
         return DisplayResult(full: result, indexByID: indexByID,
             rows: rows,

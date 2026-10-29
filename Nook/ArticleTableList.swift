@@ -63,10 +63,13 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     private let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("article"))
     private let heights = ArticleTableRowHeights(metrics: ArticleRowCalibration.measure)
     private var translatesTitles = false
-    private var lastSelectedID: Article.ID?
-    /// Set while the table's selection is changed to follow the store, so the
-    /// change is not written back as if the user had made it.
-    private var isFollowingStore = false
+    private lazy var selection = ArticleTableSelectionSync(
+        tableView: tableView, window: window,
+        storeSelection: { [store] in store.selectedArticleID },
+        setStoreSelection: { [store] in store.selectedArticleID = $0 })
+    /// Ids of the row views on screen, as the translator was told of them, so a
+    /// table torn down with rows showing releases their visibility.
+    private var displayedIDs: [Article.ID: Int] = [:]
     private var columnWidth: CGFloat = 0
     private var pendingHeightIDs: Set<Article.ID> = []
     private var heightFlushTask: Task<Void, Never>?
@@ -119,7 +122,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         ]
 
         window.observer = self
-        lastSelectedID = store.selectedArticleID
+        _ = selection
         reload()
         return scrollView
     }
@@ -131,10 +134,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
             heights.forgetMeasured()
             reload(scrollToTop: false)
         }
-        if selectedID != lastSelectedID {
-            lastSelectedID = selectedID
-            followStoreSelection(scroll: true)
-        }
+        selection.storeSelectionChanged(to: selectedID)
     }
 
     func dismantle() {
@@ -142,6 +142,12 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         scrollObservers.forEach(NotificationCenter.default.removeObserver)
         scrollObservers = []
         heightFlushTask?.cancel()
+        // Removing the table from its window removes no row views, so the rows
+        // on screen would count as visible to the translator for good.
+        for (id, count) in displayedIDs {
+            for _ in 0..<count { translator.rowDisappeared(id: id) }
+        }
+        displayedIDs = [:]
         // A table removed mid-scroll never reports the scroll's end.
         translator.setScrolling(false)
     }
@@ -179,20 +185,40 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
             return
         case .reload:
             reload()
-            return
         case .insert(let rows):
-            tableView.insertRows(at: rows, withAnimation: [])
+            selection.mutate { withoutAnimation { tableView.insertRows(at: rows, withAnimation: []) } }
         case .reloadRows(let rows):
-            refresh(rows)
+            selection.mutate { refresh(rows) }
         case .apply(let removed, let inserted, let reloaded, let animated):
-            // Only an interactive refresh's new rows slide in (`willAnimate`).
-            tableView.beginUpdates()
-            tableView.removeRows(at: removed, withAnimation: animated ? [.effectFade, .slideUp] : [])
-            tableView.insertRows(at: inserted, withAnimation: animated ? [.effectFade, .slideDown] : [])
-            tableView.endUpdates()
-            refresh(reloaded)
+            // A removed or moved selected row drops the table's selection; the
+            // store keeps it (prune decides), and `mutate` puts it back.
+            selection.mutate {
+                // Only an interactive refresh's new rows slide in (`willAnimate`).
+                if animated {
+                    tableView.beginUpdates()
+                    tableView.removeRows(at: removed, withAnimation: [.effectFade, .slideUp])
+                    tableView.insertRows(at: inserted, withAnimation: [.effectFade, .slideDown])
+                    tableView.endUpdates()
+                } else {
+                    withoutAnimation {
+                        tableView.beginUpdates()
+                        tableView.removeRows(at: removed, withAnimation: [])
+                        tableView.insertRows(at: inserted, withAnimation: [])
+                        tableView.endUpdates()
+                    }
+                }
+                refresh(reloaded)
+            }
         }
-        followStoreSelection(scroll: false)
+    }
+
+    /// NSTableView animates row moves and height changes unless told not to.
+    private func withoutAnimation(_ body: () -> Void) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            body()
+        }
     }
 
     /// A new source: every row, from the top. The table and its cells stay.
@@ -202,15 +228,17 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         defer { MainThreadLog.add("list.table.reload", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000) }
         #endif
         pendingHeightIDs.removeAll()
-        tableView.reloadData()
-        let clip = scrollView.contentView
-        let top = NSPoint(x: 0, y: -clip.contentInsets.top)
-        // Updating the scrollers costs a few ms; most switches are already at the top.
-        if scrollToTop, clip.bounds.origin != top {
-            clip.scroll(to: top)
-            scrollView.reflectScrolledClipView(clip)
+        if scrollToTop { heights.trim(keeping: window.contains) }
+        selection.mutate {
+            tableView.reloadData()
+            let clip = scrollView.contentView
+            let top = NSPoint(x: 0, y: -clip.contentInsets.top)
+            // Updating the scrollers costs a few ms; most switches are already at the top.
+            if scrollToTop, clip.bounds.origin != top {
+                clip.scroll(to: top)
+                scrollView.reflectScrolledClipView(clip)
+            }
         }
-        followStoreSelection(scroll: false)
     }
 
     /// Content changes in place: the visible cells are reconfigured, the rest are
@@ -223,32 +251,13 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
                 configure(cell, row: row)
             }
         }
-        tableView.noteHeightOfRows(withIndexesChanged: valid)
+        withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: valid) }
     }
 
     // MARK: Selection
 
-    /// Puts the table's selection on the store's, never the other way round: no
-    /// path here selects a row the store has not (78f5655).
-    private func followStoreSelection(scroll: Bool) {
-        let target = ArticleTableSelection.row(following: store.selectedArticleID, in: window)
-        guard tableView.selectedRow != (target ?? -1) else { return }
-        isFollowingStore = true
-        defer { isFollowingStore = false }
-        if let target {
-            tableView.selectRowIndexes(IndexSet(integer: target), byExtendingSelection: false)
-            if scroll { tableView.scrollRowToVisible(target) }
-        } else {
-            tableView.deselectAll(nil)
-        }
-    }
-
     func tableViewSelectionDidChange(_ notification: Notification) {
-        guard !isFollowingStore else { return }
-        let row = tableView.selectedRow
-        let id = row >= 0 && row < window.rowCount ? window.row(at: row).id : nil
-        lastSelectedID = id
-        if store.selectedArticleID != id { store.selectedArticleID = id }
+        selection.tableSelectionDidChange()
     }
 
     private func openSelectionInBrowser() -> Bool {
@@ -311,12 +320,15 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     // dwell, and growth when a row near the end of the window comes into view.
     func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
         guard let model = (rowView.view(atColumn: 0) as? ArticleTableCellView)?.model else { return }
+        displayedIDs[model.id, default: 0] += 1
         translator.rowAppeared(id: model.id, title: model.title)
         window.rowAppeared(id: model.id)
     }
 
     func tableView(_ tableView: NSTableView, didRemove rowView: NSTableRowView, forRow row: Int) {
-        guard let model = (rowView.view(atColumn: 0) as? ArticleTableCellView)?.model else { return }
+        guard let model = (rowView.view(atColumn: 0) as? ArticleTableCellView)?.model,
+              let count = displayedIDs[model.id] else { return }
+        displayedIDs[model.id] = count > 1 ? count - 1 : nil
         translator.rowDisappeared(id: model.id)
     }
 
@@ -325,7 +337,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         columnWidth = column.width
         // Heights per width are arithmetic over cached text widths, so this is
         // cheap even for a long window.
-        tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<window.rowCount))
+        withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<window.rowCount)) }
     }
 
     // MARK: Heights
@@ -373,10 +385,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         #if DEBUG
         MainThreadLog.addOncePerTurn("list.row.height.flush")
         #endif
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            tableView.noteHeightOfRows(withIndexesChanged: rows)
-        }
+        withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: rows) }
     }
 
     // MARK: Menu and swipe
@@ -451,12 +460,16 @@ final class ArticleTableCellView: NSTableCellView {
     private let host: NSHostingView<ArticleTableCellContent>
     private(set) var model: ArticleRowModel?
     private var box: ListTitleTranslator.StateBox?
+    /// Bumped on every configure, so a reused or patched cell reports its height
+    /// even when it lays out at the same height as before: the table's estimate
+    /// for the new content may differ from it.
+    private var version = 0
     var onHeight: ((ArticleTableCellView, CGFloat) -> Void)?
 
     init(translator: ListTitleTranslator) {
         self.translator = translator
         host = NSHostingView(rootView: ArticleTableCellContent(
-            model: nil, box: nil, translator: translator, emphasized: false, onHeight: { _ in }))
+            model: nil, box: nil, translator: translator, emphasized: false, version: 0, onHeight: { _ in }))
         super.init(frame: .zero)
         // The table sets the cell's size; the hosting view only fills it. Without
         // this it would publish its fitting size as constraints on every update.
@@ -472,6 +485,7 @@ final class ArticleTableCellView: NSTableCellView {
     func configure(model: ArticleRowModel, box: ListTitleTranslator.StateBox?) {
         self.model = model
         self.box = box
+        version &+= 1
         render()
     }
 
@@ -485,7 +499,7 @@ final class ArticleTableCellView: NSTableCellView {
         let id = model.id
         host.rootView = ArticleTableCellContent(
             model: model, box: box, translator: translator, emphasized: backgroundStyle == .emphasized,
-            onHeight: { [weak self] height in
+            version: version, onHeight: { [weak self] height in
                 guard let self, self.model?.id == id else { return }
                 self.onHeight?(self, height)
             })
@@ -499,7 +513,13 @@ struct ArticleTableCellContent: View {
     let box: ListTitleTranslator.StateBox?
     let translator: ListTitleTranslator
     let emphasized: Bool
+    let version: Int
     let onHeight: (CGFloat) -> Void
+
+    private struct HeightReport: Equatable {
+        let version: Int
+        let height: CGFloat
+    }
 
     var body: some View {
         if let model {
@@ -520,7 +540,9 @@ struct ArticleTableCellContent: View {
             // Natural height, whatever height the table gave the cell, so the
             // report below cannot feed back into itself.
             .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHeight($0) }
+            .onGeometryChange(for: HeightReport.self) { [version] in
+                HeightReport(version: version, height: $0.size.height)
+            } action: { onHeight($0.height) }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .environment(\.backgroundProminence, emphasized ? .increased : .standard)
         }

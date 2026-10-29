@@ -74,6 +74,87 @@ public enum ArticleTableSelection {
     }
 }
 
+/// Keeps an `NSTableView`'s selection and the store's in step, both ways.
+///
+/// - The table only ever selects the store's article (`ArticleTableSelection`).
+/// - A selection the table makes while it is following the store or applying a
+///   data change is not the user's: NSTableView drops or truncates its selection
+///   when the selected row is removed, moved or past a reload's row count, and
+///   that must not reach the store as "nothing selected" (`mutate`).
+/// - A selection the store makes (keyboard command, deep link, openArticle) is
+///   scrolled into view once its row exists, even when a growth or a replacing
+///   install selected the row before the store's change arrived here.
+@MainActor
+public final class ArticleTableSelectionSync {
+    private let tableView: NSTableView
+    private let window: ArticleListWindow
+    private let storeSelection: @MainActor () -> Article.ID?
+    private let setStoreSelection: @MainActor (Article.ID?) -> Void
+    private var lastSelectedID: Article.ID?
+    /// The store's selection, not yet scrolled into view.
+    private var pendingScrollID: Article.ID?
+    private var followDepth = 0
+
+    public init(tableView: NSTableView, window: ArticleListWindow,
+                storeSelection: @escaping @MainActor () -> Article.ID?,
+                setStoreSelection: @escaping @MainActor (Article.ID?) -> Void) {
+        self.tableView = tableView
+        self.window = window
+        self.storeSelection = storeSelection
+        self.setStoreSelection = setStoreSelection
+        lastSelectedID = storeSelection()
+    }
+
+    /// The store's selection as the view last saw it. A change the table did not
+    /// make is programmatic and is scrolled to when its row exists.
+    public func storeSelectionChanged(to id: Article.ID?) {
+        guard id != lastSelectedID else { return }
+        lastSelectedID = id
+        pendingScrollID = id
+        follow()
+    }
+
+    /// Runs a change to the table's rows without letting the selection changes it
+    /// causes reach the store, then puts the store's selection back.
+    public func mutate(_ body: () -> Void) {
+        followDepth += 1
+        body()
+        followDepth -= 1
+        follow()
+    }
+
+    /// Puts the table's selection on the store's, never the other way round: no
+    /// path here selects a row the store has not (78f5655).
+    public func follow() {
+        let selected = storeSelection()
+        let target = ArticleTableSelection.row(following: selected, in: window)
+        let scroll = target != nil && pendingScrollID != nil && pendingScrollID == selected
+        if tableView.selectedRow != (target ?? -1) {
+            followDepth += 1
+            if let target {
+                tableView.selectRowIndexes(IndexSet(integer: target), byExtendingSelection: false)
+            } else {
+                tableView.deselectAll(nil)
+            }
+            followDepth -= 1
+        }
+        if scroll, let target {
+            pendingScrollID = nil
+            tableView.scrollRowToVisible(target)
+        }
+    }
+
+    /// From `tableViewSelectionDidChange`: the user's selection goes to the store.
+    public func tableSelectionDidChange() {
+        guard followDepth == 0 else { return }
+        let row = tableView.selectedRow
+        let id = row >= 0 && row < window.rowCount ? window.row(at: row).id : nil
+        lastSelectedID = id
+        pendingScrollID = nil
+        if storeSelection() != id { setStoreSelection(id) }
+    }
+}
+
 /// Row heights for the AppKit article table, known before a row is laid out.
 ///
 /// The SwiftUI `List` let `NSTableView` size every row that came into view from
@@ -211,6 +292,18 @@ public final class ArticleTableRowHeights {
     /// Forgets every reported height (a toggle that changes what rows draw).
     public func forgetMeasured() { measured.removeAll() }
 
+    /// Reported heights kept across source switches before `trim` drops those of
+    /// articles the new source does not hold.
+    static let measuredLimit = 2_000
+    var measuredCount: Int { measured.count }
+
+    /// Bounds the reported heights: on a new source, once there are more than
+    /// `measuredLimit`, keeps only the articles `keeping` says it still holds.
+    public func trim(keeping: (Article.ID) -> Bool) {
+        guard measured.count > Self.measuredLimit else { return }
+        measured = measured.filter { keeping($0.key) }
+    }
+
     private func translationWidth(_ text: String) -> CGFloat {
         if let cached = translationWidths[text] { return cached }
         let width = Self.lineWidth(text, font: ArticleRowTextWidths.translationFont)
@@ -267,11 +360,35 @@ public final class ArticleRowTextWidths: Sendable {
     nonisolated(unsafe) static let summaryFont = NSFont.systemFont(ofSize: calloutSize, weight: .regular)
     nonisolated(unsafe) static let translationFont = NSFont.systemFont(ofSize: calloutSize, weight: .medium)
 
+    /// Creates the fonts on the main thread. `+[NSFont initialize]` posts a
+    /// notification that waits for the main thread, so the first font made on a
+    /// measuring thread while the main thread waits on that thread (concurrent
+    /// measuring from main, or main laying out text) never returns. Call before
+    /// anything measures off the main thread.
+    @MainActor
+    public static func prepareFonts() {
+        _ = (titleRegular, titleUnread, summaryFont, translationFont)
+    }
+
     private let entries = Mutex<[Article.ID: Entry]>([:])
 
     public init() {}
 
     var count: Int { entries.withLock { $0.count } }
+
+    /// Entries kept before `trim` drops those of articles the installing result
+    /// does not hold: one per article ever shown otherwise, for the process's life.
+    public static let entryLimit = 10_000
+
+    /// Bounds the cache: once it holds more than `max(limit, result size)`
+    /// entries, keeps only the articles of the result about to be installed.
+    /// Called off the main thread, next to `prefill`.
+    public func trim(keeping indexByID: [Article.ID: Int], limit: Int = entryLimit) {
+        entries.withLock { cached in
+            guard cached.count > max(limit, indexByID.count) else { return }
+            cached = cached.filter { indexByID[$0.key] != nil }
+        }
+    }
 
     func widths(for model: ArticleRowModel) -> Entry {
         if let cached = entries.withLock({ $0[model.id] }), cached.matches(model) { return cached }

@@ -6,6 +6,10 @@ import Testing
 
 @Suite("AppKit article table model") @MainActor
 struct ArticleTableModelTests {
+    // These tests measure text off the main thread and turn prefill on for
+    // every filter running meanwhile; the fonts must exist before that.
+    init() { ArticleRowTextWidths.prepareFonts() }
+
     private func articles(_ count: Int, from start: Int = 0) -> [Article] {
         (start..<(start + count)).map { Fixture.article("row-\($0)", feedID: "a") }
     }
@@ -233,6 +237,141 @@ struct ArticleTableModelTests {
         // Losing its chips is a different height: the reported one no longer applies.
         heights.record(73.5, for: first, width: 400, translation: nil)
         #expect(heights.height(for: model("a", title: "x"), width: 400, translation: nil) == 74)
+    }
+    // MARK: Selection sync against a real NSTableView
+
+    private final class ScrollRecordingTable: NSTableView {
+        var scrolledTo: [Int] = []
+        override func scrollRowToVisible(_ row: Int) {
+            scrolledTo.append(row)
+            super.scrollRowToVisible(row)
+        }
+    }
+
+    /// The controller's part that matters here: rows from the window, every
+    /// window change applied through `mutate`, the table's selection changes
+    /// handed to the sync.
+    private final class TableHarness: NSObject, NSTableViewDataSource, NSTableViewDelegate,
+        ArticleListWindowObserver {
+        let window = ArticleListWindow()
+        let table = ScrollRecordingTable()
+        var storeSelection: Article.ID?
+        var storeWrites: [Article.ID?] = []
+        lazy var sync = ArticleTableSelectionSync(
+            tableView: table, window: window,
+            storeSelection: { [unowned self] in storeSelection },
+            setStoreSelection: { [unowned self] in storeSelection = $0; storeWrites.append($0) })
+
+        override init() {
+            super.init()
+            table.addTableColumn(NSTableColumn(identifier: .init("c")))
+            table.dataSource = self
+            table.delegate = self
+            window.observer = self
+        }
+
+        func numberOfRows(in tableView: NSTableView) -> Int { window.rowCount }
+        // View-based, as the app's table: only those insert and remove rows outside an update block.
+        func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+            NSTableCellView()
+        }
+        func tableViewSelectionDidChange(_ notification: Notification) { sync.tableSelectionDidChange() }
+
+        func articleListWindow(_ window: ArticleListWindow, didChange change: ArticleListWindow.Change) {
+            let update = ArticleTableUpdate.plan(for: change, rows: (0..<window.rowCount).map(window.row(at:)))
+            sync.mutate {
+                switch update {
+                case .reload, .reloadRows: table.reloadData()
+                case .insert(let rows): table.insertRows(at: rows, withAnimation: [])
+                case .apply(let removed, let inserted, _, _):
+                    table.beginUpdates()
+                    table.removeRows(at: removed, withAnimation: [])
+                    table.insertRows(at: inserted, withAnimation: [])
+                    table.endUpdates()
+                case .none: break
+                }
+            }
+        }
+
+        var selectedID: Article.ID? {
+            table.selectedRow >= 0 ? window.row(at: table.selectedRow).id : nil
+        }
+    }
+
+    @Test("A store selection that growth selected first is still scrolled into view")
+    func growthSelectionScrolls() {
+        let harness = TableHarness()
+        install(articles(1_000), in: harness.window)
+        // ⌘↓ past the window: the store selects, its didSet grows the window,
+        // and growth selects the row before the view hears of the change.
+        harness.storeSelection = "row-700"
+        harness.window.ensureVisible(id: "row-700")
+        #expect(harness.selectedID == "row-700")
+        harness.sync.storeSelectionChanged(to: "row-700")
+        #expect(harness.table.scrolledTo == [700])
+        // Already shown: another pass does not scroll again.
+        harness.sync.follow()
+        #expect(harness.table.scrolledTo == [700])
+        #expect(harness.storeWrites.isEmpty)
+    }
+
+    @Test("A deep link selected before its source installs is scrolled to once the row exists")
+    func deepLinkSelectionScrollsAfterInstall() {
+        let harness = TableHarness()
+        install(articles(10, from: 500), in: harness.window)
+        harness.storeSelection = "row-40"
+        harness.sync.storeSelectionChanged(to: "row-40")
+        #expect(harness.selectedID == nil)
+        #expect(harness.table.scrolledTo.isEmpty)
+        install(articles(1_000), in: harness.window)
+        #expect(harness.selectedID == "row-40")
+        #expect(harness.table.scrolledTo == [40])
+        #expect(harness.storeWrites.isEmpty)
+    }
+
+    @Test("Table updates that drop the table's selection never clear the store's")
+    func mutationsKeepStoreSelection() {
+        let harness = TableHarness()
+        let old = articles(300)
+        install(old, in: harness.window, length: 300)
+        harness.storeSelection = "row-5"
+        harness.sync.storeSelectionChanged(to: "row-5")
+        #expect(harness.selectedID == "row-5")
+        // A refresh re-sorts the selected article to the top: remove + insert.
+        let moved = [old[5]] + old.filter { $0.id != "row-5" }
+        install(moved, in: harness.window, length: 300, replacement: false)
+        #expect(harness.selectedID == "row-5")
+        #expect(harness.table.selectedRow == 0)
+        // A new source where the selection sits past the reloaded row count.
+        harness.storeSelection = "row-250"
+        harness.sync.storeSelectionChanged(to: "row-250")
+        install(articles(100, from: 1_000) + [old[250]], in: harness.window, length: 101)
+        #expect(harness.selectedID == "row-250")
+        #expect(harness.storeWrites.isEmpty)
+        // The user's own selection still reaches the store, without scrolling.
+        let scrolls = harness.table.scrolledTo
+        harness.table.selectRowIndexes(IndexSet(integer: 3), byExtendingSelection: false)
+        #expect(harness.storeWrites == ["row-1003"])
+        harness.sync.storeSelectionChanged(to: "row-1003")
+        #expect(harness.table.scrolledTo == scrolls)
+    }
+
+    @Test("Caches are bounded: reported heights and text widths keep only the current result past a limit")
+    func cachesAreBounded() {
+        let heights = ArticleTableRowHeights(metrics: metrics, textWidths: ArticleRowTextWidths())
+        for index in 0...ArticleTableRowHeights.measuredLimit {
+            heights.record(80, for: model("m-\(index)", title: "x"), width: 400, translation: nil)
+        }
+        heights.trim(keeping: { $0 == "m-1" })
+        #expect(heights.measuredCount == 1)
+        #expect(heights.height(for: model("m-1", title: "x"), width: 400, translation: nil) == 80)
+
+        let widths = ArticleRowTextWidths()
+        widths.prefill((0..<50).map { model("w-\($0)", title: "t") })
+        widths.trim(keeping: ["w-0": 0], limit: 100)
+        #expect(widths.count == 50)
+        widths.trim(keeping: ["w-0": 0], limit: 10)
+        #expect(widths.count == 1)
     }
 }
 #endif
