@@ -1,4 +1,7 @@
 import Foundation
+#if os(macOS)
+import Synchronization
+#endif
 import Observation
 import SwiftUI
 
@@ -185,6 +188,16 @@ public final class ArticleListWindow {
         growthTask = Task { [weak self] in
             await Task.yield()
             guard !Task.isCancelled, let self, self.generation == expectedGeneration else { return }
+            #if os(macOS)
+            // The AppKit table sizes the appended rows from their text widths:
+            // measure them off the main thread before the rows exist.
+            if ArticleRowTextWidths.prefillEnabled.load(ordering: .relaxed) {
+                let next = self.full.articles[self.rows.count..<min(self.full.articles.count, self.rows.count + 200)]
+                    .map(self.model(for:))
+                await Task.detached(priority: .userInitiated) { ArticleRowTextWidths.shared.prefill(next) }.value
+                guard !Task.isCancelled, self.generation == expectedGeneration else { return }
+            }
+            #endif
             self.growthTask = nil
             #if DEBUG && os(macOS)
             let started = ProcessInfo.processInfo.systemUptime

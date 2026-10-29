@@ -15,6 +15,10 @@ struct NookApp: App {
         // a relaunch is still required.
         AppLanguage.applyStoredPreference()
         _ = AppLanguage.launchLanguage
+        // Before the first filter runs, so its rows are measured off the main thread.
+        if MacListBackend.current == .table {
+            ArticleRowTextWidths.prefillEnabled.store(true, ordering: .relaxed)
+        }
     }
 
     var body: some Scene {

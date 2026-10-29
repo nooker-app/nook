@@ -203,9 +203,11 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         #endif
         pendingHeightIDs.removeAll()
         tableView.reloadData()
-        if scrollToTop {
-            let clip = scrollView.contentView
-            clip.scroll(to: NSPoint(x: 0, y: -clip.contentInsets.top))
+        let clip = scrollView.contentView
+        let top = NSPoint(x: 0, y: -clip.contentInsets.top)
+        // Updating the scrollers costs a few ms; most switches are already at the top.
+        if scrollToTop, clip.bounds.origin != top {
+            clip.scroll(to: top)
             scrollView.reflectScrolledClipView(clip)
         }
         followStoreSelection(scroll: false)
@@ -557,12 +559,10 @@ enum ArticleRowCalibration {
         let plain = size(model(title: long, summary: ""), width: unbounded).width
         let starred = size(model(title: long, summary: "", starred: true), width: unbounded).width
         let offline = size(model(title: long, summary: "", offline: true), width: unbounded).width
-        let titleFont = NSFont.systemFont(ofSize: NSFont.preferredFont(forTextStyle: .body).pointSize, weight: .semibold)
-        let titleWidth = ArticleTableRowHeights.lineWidth(long, font: titleFont)
-        let callout = NSFont.preferredFont(forTextStyle: .callout)
+        let titleWidth = ArticleTableRowHeights.lineWidth(long, font: ArticleRowTextWidths.titleUnread)
         let calloutLine = rows[0][2] - rows[0][1]
         let glyph = NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: callout.pointSize, weight: .regular))?.size.width ?? 16
+            .withSymbolConfiguration(.init(pointSize: ArticleRowTextWidths.calloutSize, weight: .regular))?.size.width ?? 16
         return ArticleTableRowHeights.Metrics(
             rows: rows,
             textInset: plain - titleWidth,

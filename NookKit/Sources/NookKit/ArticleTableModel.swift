@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import CoreText
+import Synchronization
 
 /// How one `ArticleListWindow.Change` reaches the AppKit article table.
 ///
@@ -116,17 +117,6 @@ public final class ArticleTableRowHeights {
         }
     }
 
-    /// One-line text widths, independent of the column width.
-    struct TextWidths {
-        let title: String
-        let summary: String
-        let isRead: Bool
-        let titleWidth: CGFloat
-        let titleBreaks: Bool
-        let summaryWidth: CGFloat
-        let summaryBreaks: Bool
-    }
-
     /// Everything a reported height depends on.
     struct HeightKey: Equatable {
         let width: CGFloat
@@ -141,7 +131,7 @@ public final class ArticleTableRowHeights {
 
     private let metricsProvider: @MainActor () -> Metrics
     private var resolvedMetrics: Metrics?
-    private var widths: [Article.ID: TextWidths] = [:]
+    private let textWidths: ArticleRowTextWidths
     private var measured: [Article.ID: (key: HeightKey, height: CGFloat)] = [:]
     private var translationWidths: [String: CGFloat] = [:]
     /// What category chips and a translated-title block do to a row's height
@@ -155,21 +145,9 @@ public final class ArticleTableRowHeights {
     private static func adjustmentKind(_ model: ArticleRowModel, _ translation: String?) -> Int {
         (model.categories.isEmpty ? 0 : 1) | (translation == nil ? 0 : 2)
     }
-    /// Title/summary fonts the widths were measured with: a different system font
-    /// size (never expected on macOS) drops every cached width.
-    private let titleRegular: NSFont
-    private let titleUnread: NSFont
-    private let summaryFont: NSFont
-    private let translationFont: NSFont
-
-    public init(metrics: @escaping @MainActor () -> Metrics) {
+    public init(metrics: @escaping @MainActor () -> Metrics, textWidths: ArticleRowTextWidths = .shared) {
         metricsProvider = metrics
-        let body = NSFont.preferredFont(forTextStyle: .body).pointSize
-        let callout = NSFont.preferredFont(forTextStyle: .callout).pointSize
-        titleRegular = .systemFont(ofSize: body, weight: .regular)
-        titleUnread = .systemFont(ofSize: body, weight: .semibold)
-        summaryFont = .systemFont(ofSize: callout, weight: .regular)
-        translationFont = .systemFont(ofSize: callout, weight: .medium)
+        self.textWidths = textWidths
     }
 
     public var metrics: Metrics {
@@ -213,7 +191,7 @@ public final class ArticleTableRowHeights {
     func estimate(for model: ArticleRowModel, width: CGFloat, translation: String?) -> CGFloat {
         let metrics = metrics
         let textWidth = max(1, width - metrics.textInset)
-        let text = textWidths(for: model)
+        let text = textWidths.widths(for: model)
         var titleWidth = textWidth
         if model.isStarred { titleWidth -= metrics.starGlyph }
         if model.isSavedOffline { titleWidth -= metrics.offlineGlyph }
@@ -233,26 +211,9 @@ public final class ArticleTableRowHeights {
     /// Forgets every reported height (a toggle that changes what rows draw).
     public func forgetMeasured() { measured.removeAll() }
 
-    var cachedWidthCount: Int { widths.count }
-
-    private func textWidths(for model: ArticleRowModel) -> TextWidths {
-        if let cached = widths[model.id], cached.title == model.title, cached.summary == model.summary,
-           cached.isRead == model.isRead {
-            return cached
-        }
-        let entry = TextWidths(
-            title: model.title, summary: model.summary, isRead: model.isRead,
-            titleWidth: Self.lineWidth(model.title, font: model.isRead ? titleRegular : titleUnread),
-            titleBreaks: model.title.contains(where: \.isNewline),
-            summaryWidth: Self.lineWidth(model.summary, font: summaryFont),
-            summaryBreaks: model.summary.contains(where: \.isNewline))
-        widths[model.id] = entry
-        return entry
-    }
-
     private func translationWidth(_ text: String) -> CGFloat {
         if let cached = translationWidths[text] { return cached }
-        let width = Self.lineWidth(text, font: translationFont)
+        let width = Self.lineWidth(text, font: ArticleRowTextWidths.translationFont)
         if translationWidths.count > 4_000 { translationWidths.removeAll() }
         translationWidths[text] = width
         return width
@@ -266,6 +227,91 @@ public final class ArticleTableRowHeights {
         guard !text.isEmpty else { return 0 }
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
         return CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)).rounded(.up)
+    }
+}
+/// One-line widths of each article row's title and summary, independent of the
+/// column width, shared by the table and the threads that fill it ahead of time.
+///
+/// Measuring a row's two texts costs about 0.2 ms, which is all a row's height
+/// costs; a source's first 200 rows or a 200-row growth step measured on the main
+/// thread is a 40 ms stall. The filter executor fills the widths of the rows it
+/// is about to install, and growth fills the next step before publishing it, both
+/// off the main thread and in parallel, so the table finds them cached.
+public final class ArticleRowTextWidths: Sendable {
+    public static let shared = ArticleRowTextWidths()
+    /// Off unless the AppKit table backend is in use: the SwiftUI list never reads them.
+    public static let prefillEnabled = Atomic<Bool>(false)
+
+    struct Entry: Sendable {
+        let title: String
+        let summary: String
+        let isRead: Bool
+        let titleWidth: CGFloat
+        let titleBreaks: Bool
+        let summaryWidth: CGFloat
+        let summaryBreaks: Bool
+
+        func matches(_ model: ArticleRowModel) -> Bool {
+            isRead == model.isRead && title == model.title && summary == model.summary
+        }
+    }
+
+    // SwiftUI's `.body` and `.callout` on macOS, which do not scale. Not from
+    // `NSFont.preferredFont(forTextStyle:)`: that waits on the main thread, and
+    // these are first touched by whichever thread measures first — a filter
+    // executor thread while the main thread waits for the same initializer.
+    public static let bodySize: CGFloat = 13
+    public static let calloutSize: CGFloat = 12
+    nonisolated(unsafe) static let titleRegular = NSFont.systemFont(ofSize: bodySize, weight: .regular)
+    nonisolated(unsafe) public static let titleUnread = NSFont.systemFont(ofSize: bodySize, weight: .semibold)
+    nonisolated(unsafe) static let summaryFont = NSFont.systemFont(ofSize: calloutSize, weight: .regular)
+    nonisolated(unsafe) static let translationFont = NSFont.systemFont(ofSize: calloutSize, weight: .medium)
+
+    private let entries = Mutex<[Article.ID: Entry]>([:])
+
+    public init() {}
+
+    var count: Int { entries.withLock { $0.count } }
+
+    func widths(for model: ArticleRowModel) -> Entry {
+        if let cached = entries.withLock({ $0[model.id] }), cached.matches(model) { return cached }
+        #if DEBUG
+        MainThreadLog.add("list.table.measure", ms: 0)
+        #endif
+        let entry = Self.measure(model)
+        entries.withLock { $0[model.id] = entry }
+        return entry
+    }
+
+    /// Measures every row not already cached, spread over the cores. Called off
+    /// the main thread.
+    public func prefill(_ models: some Collection<ArticleRowModel>) {
+        let missing = entries.withLock { cached in
+            models.filter { model in !(cached[model.id]?.matches(model) ?? false) }
+        }
+        guard !missing.isEmpty else { return }
+        let chunk = 16
+        let chunks = (missing.count + chunk - 1) / chunk
+        let measured = Mutex<[Entry?]>(Array(repeating: nil, count: missing.count))
+        DispatchQueue.concurrentPerform(iterations: chunks) { index in
+            let range = (index * chunk)..<min(missing.count, (index + 1) * chunk)
+            let results = range.map { Self.measure(missing[$0]) }
+            measured.withLock { all in
+                for (offset, entry) in zip(range, results) { all[offset] = entry }
+            }
+        }
+        let results = measured.withLock { $0 }
+        entries.withLock { cached in
+            for (model, entry) in zip(missing, results) { cached[model.id] = entry }
+        }
+    }
+
+    static func measure(_ model: ArticleRowModel) -> Entry {
+        Entry(title: model.title, summary: model.summary, isRead: model.isRead,
+              titleWidth: ArticleTableRowHeights.lineWidth(model.title, font: model.isRead ? titleRegular : titleUnread),
+              titleBreaks: model.title.contains(where: \.isNewline),
+              summaryWidth: ArticleTableRowHeights.lineWidth(model.summary, font: summaryFont),
+              summaryBreaks: model.summary.contains(where: \.isNewline))
     }
 }
 #endif

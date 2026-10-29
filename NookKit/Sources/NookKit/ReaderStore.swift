@@ -1,4 +1,7 @@
 import Foundation
+#if os(macOS)
+import Synchronization
+#endif
 import Observation
 import SwiftUI
 
@@ -1084,8 +1087,14 @@ public final class ReaderStore {
         let length = ArticleListWindow.length(total: result.count, previousTotal: old.count,
             previousLength: previousLength, replacement: replacement,
             selectedIndex: selectedID.flatMap { indexByID[$0] })
+        let rows = rowModels(result.prefix(length), feedTitles: feedTitles, savedIDs: savedIDs)
+        #if os(macOS)
+        // The AppKit table's row heights need these widths; measured here, off the
+        // main thread on the filter executor, the install finds them cached.
+        if ArticleRowTextWidths.prefillEnabled.load(ordering: .relaxed) { ArticleRowTextWidths.shared.prefill(rows) }
+        #endif
         return DisplayResult(full: result, indexByID: indexByID,
-            rows: rowModels(result.prefix(length), feedTitles: feedTitles, savedIDs: savedIDs),
+            rows: rows,
             feedTitles: feedTitles, savedIDs: savedIDs, identical: identical,
             replacesList: replacement,
             willAnimate: shouldAnimateDisplay(oldIDs: oldIDs, newIDs: newIDs, animated: animated,

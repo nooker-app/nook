@@ -133,8 +133,9 @@ struct ArticleTableModelTests {
 
     @Test("Heights follow line counts per width, from text widths measured once")
     func heightsPerWidth() {
-        let heights = ArticleTableRowHeights(metrics: metrics)
-        let font = NSFont.systemFont(ofSize: NSFont.preferredFont(forTextStyle: .body).pointSize, weight: .semibold)
+        let widths = ArticleRowTextWidths()
+        let heights = ArticleTableRowHeights(metrics: metrics, textWidths: widths)
+        let font = ArticleRowTextWidths.titleUnread
         let title = "A title of some length"
         let titleWidth = ArticleTableRowHeights.lineWidth(title, font: font)
         let row = model("a", title: title)
@@ -151,12 +152,49 @@ struct ArticleTableModelTests {
         // A shown translation adds its block; a placeholder counts one line.
         #expect(heights.height(for: model("e", title: "x"), width: 400, translation: "y") == CGFloat(101))
         #expect(heights.height(for: model("e", title: "x"), width: 400, translation: "") == CGFloat(101))
-        #expect(heights.cachedWidthCount == 5)
+        #expect(widths.count == 5)
+    }
+
+    @Test("Prefilled widths are the ones the table would measure, and a changed title is re-measured")
+    func prefillMatchesMeasuring() {
+        let widths = ArticleRowTextWidths()
+        let rows = (0..<100).map { model("row-\($0)", title: String(repeating: "Wide title ", count: $0 % 7 + 1),
+                                         summary: String(repeating: "s", count: $0), read: $0.isMultiple(of: 2)) }
+        widths.prefill(rows)
+        #expect(widths.count == 100)
+        for row in rows {
+            let cached = widths.widths(for: row)
+            let measured = ArticleRowTextWidths.measure(row)
+            #expect(cached.titleWidth == measured.titleWidth && cached.summaryWidth == measured.summaryWidth)
+        }
+        let renamed = model("row-3", title: "Renamed")
+        #expect(widths.widths(for: renamed).title == "Renamed")
+        // Prefilling what is cached measures nothing new.
+        widths.prefill(rows.prefix(10))
+        #expect(widths.count == 100)
+    }
+
+    @Test("Growth measures the rows it is about to append before publishing them")
+    func growthPrefillsWidths() async {
+        ArticleRowTextWidths.prefillEnabled.store(true, ordering: .relaxed)
+        defer { ArticleRowTextWidths.prefillEnabled.store(false, ordering: .relaxed) }
+        let window = ArticleListWindow()
+        let full = (0..<1_000).map { Fixture.article("prefill-\($0)", feedID: "a") }
+        install(full, in: window)
+        window.requestGrowth()
+        for _ in 0..<200 where window.rowCount == 200 { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(window.rowCount == 400)
+        for index in 200..<400 {
+            let row = window.row(at: index)
+            #expect(ArticleRowTextWidths.shared.widths(for: row).titleWidth
+                    == ArticleRowTextWidths.measure(row).titleWidth)
+        }
+        #expect(ArticleRowTextWidths.shared.count >= 200)
     }
 
     @Test("A reported height wins for its row and content, and any change to either drops it")
     func reportedHeightsInvalidate() {
-        let heights = ArticleTableRowHeights(metrics: metrics)
+        let heights = ArticleTableRowHeights(metrics: metrics, textWidths: ArticleRowTextWidths())
         let row = model("a", title: "x")
         #expect(heights.record(74, for: row, width: 400, translation: nil) == false)
         #expect(heights.record(80, for: row, width: 400, translation: nil) == true)
@@ -177,7 +215,7 @@ struct ArticleTableModelTests {
 
     @Test("The first row of a kind teaches every other row of it its sub-point height")
     func categoryChipsLearnTheirHeight() {
-        let heights = ArticleTableRowHeights(metrics: metrics)
+        let heights = ArticleTableRowHeights(metrics: metrics, textWidths: ArticleRowTextWidths())
         let first = model("a", title: "x", categories: ["c"])
         let second = model("b", title: "y", categories: ["c"])
         #expect(heights.height(for: second, width: 400, translation: nil) == 74)
