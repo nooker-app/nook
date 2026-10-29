@@ -1849,6 +1849,8 @@ private struct ArticleListView: View {
                 }
             } else if store.listWindow.totalCount == 0 {
                 ArticleListEmptyState(store: store)
+            } else if MacListBackend.current == .table {
+                ArticleTableRowsHost(store: store, titleTranslator: titleTranslator, translatesTitles: translateListTitles)
             } else {
                 ArticleListRows(store: store, titleTranslator: titleTranslator, translatesTitles: translateListTitles)
             }
@@ -1956,6 +1958,25 @@ private struct ArticleListRows: View {
     }
 }
 
+/// The AppKit table backend (`MacListBackend.table`). Reads the selection, so a
+/// selection change re-runs this small body and the table's `updateNSView`;
+/// rows reach the table through `ArticleListWindow.observer`, not through here.
+private struct ArticleTableRowsHost: View {
+    let store: ReaderStore
+    let titleTranslator: ListTitleTranslator
+    let translatesTitles: Bool
+
+    var body: some View {
+        ArticleTableRows(store: store, titleTranslator: titleTranslator, translatesTitles: translatesTitles,
+                         selectedID: store.selectedArticleID)
+            // Scrolls under the toolbar like the List; AppKit insets the content.
+            .ignoresSafeArea(.container, edges: .top)
+            #if DEBUG
+            .background { PerfDisplayLinkProbe().accessibilityHidden(true) }
+            #endif
+    }
+}
+
 private struct ArticleListIdentity: Hashable {
     let generation: Int
     let translatesTitles: Bool
@@ -2013,7 +2034,7 @@ private struct ArticleListRowContents: View {
 /// value, not ten views built on every pass over a thousand rows. It holds only
 /// the id and resolves the article when it is built, so its labels follow the
 /// current read/star state; an offline stand-in resolves from the displayed result.
-private struct ArticleRowMenu: View {
+struct ArticleRowMenu: View {
     let store: ReaderStore
     let id: Article.ID
 
@@ -2155,7 +2176,7 @@ private struct TranslatingArticleRow: View {
 
 /// The row's content. `translation` sits under the title line, inside the
 /// zero-spacing title group.
-private struct ArticleRowLayout<Translation: View>: View {
+struct ArticleRowLayout<Translation: View>: View {
     let model: ArticleRowModel
     @ViewBuilder let translation: () -> Translation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

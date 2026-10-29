@@ -258,7 +258,7 @@ struct ListSelectionInvalidationTests {
         #expect(rowsOwner.contains("ArticleListRowContents(rows: rows,"))
         #expect(rowsOwner.contains(".id(ArticleListIdentity(generation: store.listGeneration,"))
         let contents = try #require(source.components(separatedBy: "private struct ArticleListRowContents: View").last?
-            .components(separatedBy: "private struct ArticleRowMenu: View").first)
+            .components(separatedBy: "struct ArticleRowMenu: View").first)
         #expect(contents.contains("ForEach(rows)"))
         #expect(!contents.contains("store.listWindow.rows"))
     }
@@ -272,7 +272,7 @@ struct ListSelectionInvalidationTests {
             try #require(source.components(separatedBy: start).last?.components(separatedBy: end).first)
         }
         // The per-row closure runs for the whole window on every rows change.
-        let contents = try section("private struct ArticleListRowContents: View", "private struct ArticleRowMenu: View")
+        let contents = try section("private struct ArticleListRowContents: View", "struct ArticleRowMenu: View")
         for lookup in ["store.feed(for:", "titleTranslator.box(", "OfflineArticleStore", "categories(for"] {
             #expect(!contents.contains(lookup), "per-row closure resolves \(lookup)")
         }
