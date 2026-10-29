@@ -172,9 +172,21 @@ public final class ReaderStore {
             if hasSelectedArticle != hasSelection { hasSelectedArticle = hasSelection }
             #if os(macOS)
             if let selectedArticleID { listWindow.ensureVisible(id: selectedArticleID) }
+            if selectedArticleID != oldValue { readerSelection.selectionChanged(to: selectedArticleID) }
             #endif
         }
     }
+    #if os(macOS)
+    /// What the macOS reader pane shows; trails `selectedArticleID` only while
+    /// the selection repeats faster than a reader can render (key repeat).
+    public let readerSelection = ReaderSelectionSettler()
+
+    /// The reader pane's article. Like `selectedArticle`, resolved from the library.
+    public var readerArticle: Article? {
+        guard let id = readerSelection.settledID else { return nil }
+        return article(withID: id)
+    }
+    #endif
     /// Changes only on nil ↔ non-nil, so chrome that merely enables selection
     /// actions is not re-evaluated on every keyboard move through the list.
     public private(set) var hasSelectedArticle = false

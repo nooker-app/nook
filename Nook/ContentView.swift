@@ -2741,7 +2741,9 @@ private struct ReaderDetailView: View {
             } description: {
                 Text("Choose a folder in iCloud Drive and Nook keeps your feeds in sync across your devices.")
             }
-        } else if let article = store.selectedArticle {
+        } else if let article = store.readerArticle {
+            // The settled selection: held back only while the list selection is
+            // key-repeating, so the reader renders where the user stops.
             articleReader(article)
         } else {
             ContentUnavailableView {
