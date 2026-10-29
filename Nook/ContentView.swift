@@ -173,7 +173,7 @@ struct ContentView: View {
             }
 
             ToolbarItem(placement: .principal) {
-                WindowBreadcrumb(store: store)
+                WindowBreadcrumbToolbarHost(store: store)
             }
         }
         .sheet(isPresented: $isAddingFeed) {
@@ -472,16 +472,21 @@ private struct SelectedMarkReadToolbarButton: View {
 private struct SelectedShareToolbarMenu: View {
     let store: ReaderStore
 
+    /// Stands in while nothing is selected. The item stays in the toolbar, disabled
+    /// like Star and Mark Read: removing it when a switch cleared the selection made
+    /// SwiftUI rebuild the toolbar's items.
+    private static let placeholderURL = URL(string: "about:blank")!
+
     var body: some View {
-        if let article = store.selectedArticle {
-            ArticleShareMenu(
-                articleURL: article.url,
-                title: article.title,
-                markdown: { store.nativeReaderMarkdown(for: article) }
-            ) { copied in
-                Label("Share", systemImage: copied ? "checkmark" : "square.and.arrow.up")
-            }
+        let article = store.selectedArticle
+        ArticleShareMenu(
+            articleURL: article?.url ?? Self.placeholderURL,
+            title: article?.title ?? "",
+            markdown: { article.map { store.nativeReaderMarkdown(for: $0) } ?? "" }
+        ) { copied in
+            Label("Share", systemImage: copied ? "checkmark" : "square.and.arrow.up")
         }
+        .disabled(article == nil)
     }
 }
 
@@ -2361,6 +2366,38 @@ private struct ReaderTitleButtonStyle: ButtonStyle {
                 .animation(.easeOut(duration: 0.12), value: isHovering)
                 .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
         }
+    }
+}
+
+/// Hosts `WindowBreadcrumb` in its own `NSHostingView`, so the toolbar item's
+/// SwiftUI content never changes.
+///
+/// The breadcrumb names the selected article. Hosted inline, every selection change
+/// changed the principal item's content, and SwiftUI answered by rebuilding the
+/// toolbar's items (`ToolbarBridge.makeStorage`, `NSToolbarView` layout): 12.7% of
+/// main-thread samples during ↓ key repeat, and the toolbar share of a switch that
+/// clears the selection. The Star, Mark Read and Share items were not the trigger;
+/// making them constant changed nothing. In its own hosting view the breadcrumb
+/// observes the store itself and only its size reaches the toolbar.
+private struct WindowBreadcrumbToolbarHost: NSViewRepresentable {
+    let store: ReaderStore
+
+    func makeNSView(context: Context) -> NSHostingView<WindowBreadcrumb> {
+        let view = NSHostingView(rootView: WindowBreadcrumb(store: store))
+        view.sizingOptions = [.intrinsicContentSize]
+        view.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSHostingView<WindowBreadcrumb>, context: Context) {}
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize, nsView: NSHostingView<WindowBreadcrumb>, context: Context
+    ) -> CGSize? {
+        let ideal = nsView.intrinsicContentSize
+        let width = max(0, ideal.width == NSView.noIntrinsicMetric ? 0 : ideal.width)
+        return CGSize(width: proposal.width.map { min($0, width) } ?? width, height: max(0, ideal.height))
     }
 }
 
