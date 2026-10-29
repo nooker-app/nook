@@ -7,17 +7,20 @@ public struct ListTitleTranslationBlock: View {
     private let title: String
     private let box: ListTitleTranslator.StateBox
     private let translator: ListTitleTranslator
+    private let opensInsertedHeight: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         title: String,
         box: ListTitleTranslator.StateBox,
-        translator: ListTitleTranslator = .shared
+        translator: ListTitleTranslator = .shared,
+        opensInsertedHeight: Bool = false
     ) {
         self.title = title
         self.box = box
         self.translator = translator
+        self.opensInsertedHeight = opensInsertedHeight
     }
 
     public var body: some View {
@@ -72,7 +75,8 @@ public struct ListTitleTranslationBlock: View {
         }
         .expandReveal(
             isVisible: presentation != nil,
-            animateAppearance: streaming && !reduceMotion
+            animateAppearance: streaming && !reduceMotion,
+            opensInsertedHeight: opensInsertedHeight
         )
     }
 
@@ -88,6 +92,35 @@ public struct ListTitleTranslationBlock: View {
             return (final, false, provider)
         case nil:
             return nil
+        }
+    }
+}
+
+/// The macOS list row's translation slot: nothing until the row's title has a
+/// translation to show, then the shared block.
+///
+/// Every row used to build the whole block — symbol effect, two localized
+/// lookups, background shape, reveal layout and its three `@State`s — although
+/// almost every row never shows one (translation off, or not yet dwelled on).
+/// The slot reads the row's own box, so the block appears when the box first gets
+/// a state, and stays once it has had one so a hide still collapses smoothly.
+/// Inserted while streaming, it takes its full height at once and fades in; the
+/// state change that inserts it also advances `layoutRevision`, which the row
+/// root hands to the native row-height invalidator.
+public struct ListTitleTranslationSlot: View {
+    private let title: String
+    private let box: ListTitleTranslator.StateBox
+    private let translator: ListTitleTranslator
+
+    public init(title: String, box: ListTitleTranslator.StateBox, translator: ListTitleTranslator = .shared) {
+        self.title = title
+        self.box = box
+        self.translator = translator
+    }
+
+    public var body: some View {
+        if box.layoutRevision > 0 || translator.state(for: box, title: title) != nil {
+            ListTitleTranslationBlock(title: title, box: box, translator: translator, opensInsertedHeight: true)
         }
     }
 }

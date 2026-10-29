@@ -250,17 +250,23 @@ private struct ExpandRevealModifier: ViewModifier {
     private let contentReveal = Animation.easeOut(duration: 0.22)
     private let contentHide = Animation.easeIn(duration: 0.16)
 
+    /// Inserted already visible and animating: open the height at once and fade
+    /// the content in on appear (see `expandReveal(opensInsertedHeight:)`).
+    private let fadesInOnInsert: Bool
+
     init(
         isVisible: Bool,
         animateAppearance: Bool,
-        animation: Animation
+        animation: Animation,
+        opensInsertedHeight: Bool = false
     ) {
         self.isVisible = isVisible
         self.animateAppearance = animateAppearance
         self.animation = animation
+        fadesInOnInsert = opensInsertedHeight && isVisible && animateAppearance
         // Seed from the prop so a cached row is correct from its first layout.
         _expanded = State(initialValue: isVisible)
-        _revealed = State(initialValue: isVisible)
+        _revealed = State(initialValue: isVisible && !fadesInOnInsert)
     }
 
     func body(content: Content) -> some View {
@@ -272,6 +278,10 @@ private struct ExpandRevealModifier: ViewModifier {
         )
         .opacity(revealed ? 1 : 0)
         .clipped()
+        .onAppear {
+            guard fadesInOnInsert, isVisible, !revealed else { return }
+            withAnimation(contentReveal) { revealed = true }
+        }
         .onChange(of: isVisible) { _, nowVisible in
             transitionID &+= 1
             let id = transitionID
@@ -343,16 +353,23 @@ public extension View {
     /// platforms. Pass `animateAppearance: false` when the content is already known
     /// (a cache hit) so scrolling it into view shows it instantly. See
     /// ``ExpandRevealModifier`` for the macOS/iOS difference.
+    ///
+    /// `opensInsertedHeight`: for a view inserted already visible (it was absent
+    /// until now rather than collapsed), take the full height in the insertion's
+    /// own layout and only fade the content in. The macOS list row then changes
+    /// height once instead of once per frame of a 0.32 s grow.
     func expandReveal(
         isVisible: Bool,
         animateAppearance: Bool = true,
-        animation: Animation = .smooth(duration: 0.32)
+        animation: Animation = .smooth(duration: 0.32),
+        opensInsertedHeight: Bool = false
     ) -> some View {
         modifier(
             ExpandRevealModifier(
                 isVisible: isVisible,
                 animateAppearance: animateAppearance,
-                animation: animation
+                animation: animation,
+                opensInsertedHeight: opensInsertedHeight
             )
         )
     }

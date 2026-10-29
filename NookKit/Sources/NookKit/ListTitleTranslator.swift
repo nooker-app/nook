@@ -84,8 +84,20 @@ public final class ListTitleTranslator {
     /// its `state`. Interning a new box mutates a non-observed dictionary, so it's
     /// safe to call from a view body (no "publishing during view update").
     public func box(for id: Article.ID) -> StateBox {
+        box(for: id, seed: nil)
+    }
+
+    /// The box for a row whose body is being built. A box made here (first sight,
+    /// or after `releaseIdleBoxes`) is seeded from the cache, so a re-created row
+    /// is full-height on its first layout like the one it replaces.
+    public func box(for id: Article.ID, title: String) -> StateBox {
         if let existing = boxes[id] { return existing }
-        let created = StateBox()
+        return box(for: id, seed: cachedState(for: title))
+    }
+
+    private func box(for id: Article.ID, seed: TitleState?) -> StateBox {
+        if let existing = boxes[id] { return existing }
+        let created = StateBox(state: seed)
         boxes[id] = created
         #if DEBUG && os(macOS)
         MainThreadLog.add("list.title.box", ms: 0)
@@ -93,11 +105,46 @@ public final class ListTitleTranslator {
         return created
     }
 
+    /// Drops every box no work is pending on. Called when the macOS list replaces
+    /// its identity, before the new rows' first body: no row view holds an old box
+    /// any more, and the new rows intern fresh, cache-seeded ones. A box with a
+    /// dwell or an in-flight translation stays, so its result still lands.
+    /// (Not on `rowDisappeared`: a hidden row's hosting cell can be shown again
+    /// without its body re-running, and it would keep observing a dropped box.)
+    public func releaseIdleBoxes() {
+        boxes = boxes.filter { id, _ in activeTasks[id] != nil || dwellTasks[id] != nil }
+    }
+
+    var boxCount: Int { boxes.count }
+
+    #if DEBUG
+    /// Turns the coordinator on with an in-memory cache entry, without a model,
+    /// the disk cache or the save that `rememberTranslation` schedules.
+    func _enableForTesting(targetLanguageCode: String, cached: [String: String] = [:]) {
+        enabled = true
+        loadedFromDisk = true
+        self.targetLanguageCode = targetLanguageCode
+        for (title, translation) in cached { cache[cacheKey(for: title)] = translation }
+    }
+
+    /// A worker result landing for `id`, as `startTranslate` delivers it.
+    func _deliverForTesting(_ state: TitleState?, for id: Article.ID) {
+        setState(state, for: id)
+    }
+    #endif
+
     private func liveState(for id: Article.ID) -> TitleState? { boxes[id]?.state }
 
+    /// Writes only an existing box. A row interns its box before its first body,
+    /// so a missing box means no row shows this id: a late result goes to the
+    /// cache alone instead of creating an orphan box nobody observes.
     private func setState(_ newState: TitleState?, for id: Article.ID) {
-        let box = box(for: id)
-        box.setState(newState)
+        boxes[id]?.setState(newState)
+    }
+
+    private func cachedState(for title: String) -> TitleState? {
+        guard enabled, !title.isEmpty, let cached = cache[cacheKey(for: title)] else { return nil }
+        return .translated(cached, provider: provider)
     }
 
     // Device-local caches (never synced), persisted to Application Support so a
@@ -203,11 +250,7 @@ public final class ListTitleTranslator {
     /// observation dependency, because the coordinator isn't `@Observable`.
     public func state(for box: StateBox, title: String) -> TitleState? {
         if let live = box.state { return live }
-        guard enabled, !title.isEmpty else { return nil }
-        if let cached = cache[cacheKey(for: title)] {
-            return .translated(cached, provider: provider)
-        }
-        return nil
+        return cachedState(for: title)
     }
 
     /// A row scrolled into view. After the dwell (if still requested), translate

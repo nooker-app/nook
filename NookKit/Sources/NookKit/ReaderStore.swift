@@ -772,7 +772,7 @@ public final class ReaderStore {
         articles = []
         displayedArticles = []
         displayedIndexByID = [:]
-        listWindow.install(full: [], indexByID: [:], rows: [])
+        listWindow.install(full: [], indexByID: [:], rows: [ArticleRowModel]())
         folders = []
         filters = []
         categories = []
@@ -932,6 +932,8 @@ public final class ReaderStore {
 
         let snapshot = articles
         let feedTitles = Dictionary(feeds.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+        // Rows show the user's custom name; search keeps matching the feed's own title.
+        let rowFeedTitles = Dictionary(feeds.map { ($0.id, $0.displayTitle) }, uniquingKeysWith: { first, _ in first })
         let feedSelection = self.feedSelection
         let smartSelection = self.smartSelection
         let categorySelection = self.categorySelection
@@ -950,7 +952,7 @@ public final class ReaderStore {
         let bulk = isBulkImporting
         let batch = isBatchRefreshing
         let computeDisplay: @Sendable ([Article]) -> DisplayResult = { result in
-            Self.computeDisplayDiff(old: old, result: result, feedTitles: feedTitles,
+            Self.computeDisplayDiff(old: old, result: result, feedTitles: rowFeedTitles,
                 oldFeedTitles: oldFeedTitles, savedIDs: savedIDs, oldSavedIDs: oldSavedIDs,
                 replacesList: replacesList, previousLength: previousLength, selectedID: selectedID,
                 animated: animated, bulk: bulk, batch: batch)
@@ -1022,45 +1024,19 @@ public final class ReaderStore {
             // Growth or ensureVisible lengthened the window meanwhile. The full result
             // is still current, so only its prefix is re-cut instead of refiltering.
             if !result.replacesList, self.listWindow.rows.count > result.rows.count {
-                result.rows = Array(result.full.prefix(self.listWindow.rows.count))
+                result.rows = Self.rowModels(result.full.prefix(self.listWindow.rows.count),
+                    feedTitles: result.feedTitles, savedIDs: result.savedIDs)
             }
             #endif
             self.applyDisplayed(result, source: source)
         }
     }
 
-    /// The projection of an article that list rows actually render (both
-    /// platforms): identity, texts, flags, date, feed, categories. Deliberately
-    /// excludes body content and `hasExplicitPublishDate` — rows don't render
-    /// them, and body hydration would otherwise defeat the equality guard in
-    /// `applyDisplayed`. Readers are unaffected: they re-resolve articles by ID
-    /// from `articles`, never from the displayed array.
-    private struct RowProjection: Equatable, Sendable {
-        let title: String
-        let summary: String
-        let isRead: Bool
-        let isStarred: Bool
-        let publishedAt: Date
-        let feedID: Feed.ID
-        let estimatedReadMinutes: Int
-        let categories: [String]
-
-        nonisolated init(_ article: Article) {
-            title = article.title
-            summary = article.summary
-            isRead = article.isRead
-            isStarred = article.isStarred
-            publishedAt = article.publishedAt
-            feedID = article.feedID
-            estimatedReadMinutes = article.estimatedReadMinutes
-            categories = article.categories
-        }
-    }
-
     struct DisplayResult: Sendable {
         let full: [Article]
         let indexByID: [Article.ID: Int]
-        var rows: [Article]
+        var rows: [ArticleRowModel]
+        /// Feed display titles, as rows render them (not the search titles).
         let feedTitles: [Feed.ID: String]
         let savedIDs: Set<Article.ID>
         let identical: Bool
@@ -1081,10 +1057,11 @@ public final class ReaderStore {
             indexByID[article.id] = index
         }
         let sameIDs = oldIDs == newIDs
+        // The row model is the equality: whatever a row renders is in it, body
+        // content is not, so body hydration alone never republishes the list.
         let identical = sameIDs && zip(old, result).allSatisfy {
-            RowProjection($0) == RowProjection($1)
-                && oldFeedTitles[$0.feedID] == feedTitles[$1.feedID]
-                && oldSavedIDs.contains($0.id) == savedIDs.contains($1.id)
+            ArticleRowModel($0, feedDisplayTitle: oldFeedTitles[$0.feedID], isSavedOffline: oldSavedIDs.contains($0.id))
+                == ArticleRowModel($1, feedDisplayTitle: feedTitles[$1.feedID], isSavedOffline: savedIDs.contains($1.id))
         }
         let oldSet = Set(oldIDs)
         let newSet = Set(newIDs)
@@ -1095,11 +1072,17 @@ public final class ReaderStore {
         let length = ArticleListWindow.length(total: result.count, previousTotal: old.count,
             previousLength: previousLength, replacement: replacement,
             selectedIndex: selectedID.flatMap { indexByID[$0] })
-        return DisplayResult(full: result, indexByID: indexByID, rows: Array(result.prefix(length)),
+        return DisplayResult(full: result, indexByID: indexByID,
+            rows: rowModels(result.prefix(length), feedTitles: feedTitles, savedIDs: savedIDs),
             feedTitles: feedTitles, savedIDs: savedIDs, identical: identical,
             replacesList: replacement,
             willAnimate: shouldAnimateDisplay(oldIDs: oldIDs, newIDs: newIDs, animated: animated,
                 replacesList: replacesList || reordered, isBulkImporting: bulk, isBatchRefreshing: batch))
+    }
+
+    nonisolated static func rowModels(_ articles: ArraySlice<Article>, feedTitles: [Feed.ID: String],
+                                      savedIDs: Set<Article.ID>) -> [ArticleRowModel] {
+        articles.map { ArticleRowModel($0, feedDisplayTitle: feedTitles[$0.feedID], isSavedOffline: savedIDs.contains($0.id)) }
     }
 
     private func applyDisplayed(_ result: DisplayResult, source: ListSource) {
@@ -1131,7 +1114,8 @@ public final class ReaderStore {
             self.displayedSavedIDs = result.savedIDs
             #if os(macOS)
             self.listWindow.install(contents: self.displayContents, indexByID: result.indexByID,
-                rows: result.rows, replacement: result.replacesList)
+                rows: result.rows, feedTitles: result.feedTitles, savedIDs: result.savedIDs,
+                replacement: result.replacesList)
             if let id = self.selectedArticleID { self.listWindow.ensureVisible(id: id) }
             #endif
         }
@@ -2218,8 +2202,13 @@ public final class ReaderStore {
     /// The category definitions assigned to an article, in the stored order — for
     /// the list badges. Reads `categories`, so a row calling this observes it.
     public func categories(forArticle article: Article) -> [ArticleCategory] {
-        guard !article.categories.isEmpty, !categoriesByID.isEmpty else { return [] }
-        return article.categories.compactMap { categoriesByID[$0] }
+        categories(forIDs: article.categories)
+    }
+
+    /// Category definitions for ids, resolved live so a rename or recolor shows.
+    public func categories(forIDs ids: [String]) -> [ArticleCategory] {
+        guard !ids.isEmpty, !categoriesByID.isEmpty else { return [] }
+        return ids.compactMap { categoriesByID[$0] }
     }
 
     /// Toggles one category on/off for an article (from a menu). No-op if the id
@@ -3374,6 +3363,9 @@ public final class ReaderStore {
     /// Removes one article's offline copy.
     public func removeOffline(_ id: Article.ID) {
         OfflineArticleStore.shared.remove(id)
+        #if os(macOS)
+        listWindow.setSavedOffline(id, false)
+        #endif
         // Don't strand the user on an empty Downloaded source.
         if smartSelection == .offline, feedSelection.isEmpty, !hasOfflineArticles {
             selectSmartSource(.all)
@@ -3420,6 +3412,9 @@ public final class ReaderStore {
             feedTitle: feedTitle, html: html, now: Date(),
             sourceFingerprint: NookPostOrigin.fingerprint(of: article)
         )
+        #if os(macOS)
+        listWindow.setSavedOffline(article.id, true)
+        #endif
         if refreshList { scheduleArticleFilter() }
     }
 
@@ -4304,6 +4299,16 @@ public final class ReaderStore {
     public func article(withID id: Article.ID) -> Article? {
         guard let index = articleIndexByID[id] else { return nil }
         return articles[index]
+    }
+
+    /// A listed article by id: the library copy, else the displayed result's own
+    /// (an offline stand-in whose feed is gone exists only there). For row menus
+    /// and swipe actions, which hold only a row model.
+    public func listedArticle(withID id: Article.ID) -> Article? {
+        if let article = article(withID: id) { return article }
+        return displayedIndexByID[id].flatMap {
+            displayContents.articles.indices.contains($0) ? displayContents.articles[$0] : nil
+        }
     }
 
     /// The article at a page URL, searched across every feed rather than the

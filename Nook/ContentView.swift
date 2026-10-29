@@ -1790,7 +1790,12 @@ private struct ArticleListView: View {
         .onChange(of: store.searchText) { _, _ in
             store.debounceSearch()
         }
-        .onAppear { configureTitleTranslator() }
+        .onAppear {
+            configureTitleTranslator()
+            // A replacement rebuilds the List's identity, so no row holds a box
+            // past it; idle boxes go before the new rows intern theirs.
+            store.listWindow.onReplacement = { [titleTranslator] in titleTranslator.releaseIdleBoxes() }
+        }
         .onChange(of: translateListTitles) { _, _ in configureTitleTranslator() }
         .onChange(of: appLanguage) { _, _ in configureTitleTranslator() }
         .onChange(of: titleProvider) { _, _ in configureTitleTranslator() }
@@ -1855,7 +1860,7 @@ private struct ArticleListRows: View {
 }
 
 private struct ArticleListRowContents: View {
-    let rows: [Article]
+    let rows: [ArticleRowModel]
     let store: ReaderStore
     let titleTranslator: ListTitleTranslator
 
@@ -1863,18 +1868,20 @@ private struct ArticleListRowContents: View {
         #if DEBUG
         let _ = MainThreadLog.add("list.rows.body", ms: 0)
         #endif
-        ForEach(rows) { article in
+        ForEach(rows) { row in
             #if DEBUG
             // The closure itself, which runs per row per pass whatever
-            // SwiftUI decides about the row's body — the two feed and
-            // translation lookups below are paid here, not there.
+            // SwiftUI decides about the row's body. It only wraps a value now:
+            // the feed, offline and translation lookups moved into the model or
+            // the row's own body.
             let _ = MainThreadLog.add("list.rowcontent", ms: 0)
             #endif
-            ArticleRow(article: article, feed: store.feed(for: article.feedID), translationBox: titleTranslator.box(for: article.id))
-                .tag(article.id)
-                .onAppear { titleTranslator.rowAppeared(id: article.id, title: article.title) }
-                .onDisappear { titleTranslator.rowDisappeared(id: article.id) }
-                .onAppear { store.listWindow.rowAppeared(id: article.id) }
+            ArticleRow(model: row, titleTranslator: titleTranslator)
+                .equatable()
+                .tag(row.id)
+                .onAppear { titleTranslator.rowAppeared(id: row.id, title: row.title) }
+                .onDisappear { titleTranslator.rowDisappeared(id: row.id) }
+                .onAppear { store.listWindow.rowAppeared(id: row.id) }
                 // One view value each, not a tree each. Both closures are
                 // re-run whenever this row's content is re-evaluated —
                 // measured at 8,865 times in half a minute of scrolling,
@@ -1884,9 +1891,9 @@ private struct ArticleListRowContents: View {
                 // times, for a menu nobody had opened. A child view's
                 // `body` is SwiftUI's to call when it actually needs the
                 // items; the counters inside them say whether it does.
-                .contextMenu { ArticleRowMenu(store: store, article: article) }
+                .contextMenu { ArticleRowMenu(store: store, id: row.id) }
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                    ArticleRowSwipeActions(store: store, article: article)
+                    ArticleRowSwipeActions(store: store, id: row.id)
                 }
         }
     }
@@ -1895,78 +1902,100 @@ private struct ArticleListRowContents: View {
 /// The row's context menu, as a view rather than a closure body.
 ///
 /// See the note at the call site: this exists so the list's per-row content stays a
-/// value, not ten views built on every pass over a thousand rows.
+/// value, not ten views built on every pass over a thousand rows. It holds only
+/// the id and resolves the article when it is built, so its labels follow the
+/// current read/star state; an offline stand-in resolves from the displayed result.
 private struct ArticleRowMenu: View {
     let store: ReaderStore
-    let article: Article
+    let id: Article.ID
 
     var body: some View {
         #if DEBUG
         let _ = MainThreadLog.add("list.row.menu", ms: 0)
         #endif
-        Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
-            store.setRead(articleID: article.id, isRead: !article.isRead)
-        }
-        Button(article.isStarred ? "Remove Star" : "Star") {
-            store.toggleStarred(articleID: article.id)
-        }
-        Button(store.isOfflineSaved(article.id) ? "Remove Download" : "Save for Offline") {
-            if store.isOfflineSaved(article.id) {
-                store.removeOffline(article.id)
-            } else {
-                store.saveOffline(article)
+        if let article = store.listedArticle(withID: id) {
+            Button(article.isRead ? "Mark as Unread" : "Mark as Read") {
+                store.setRead(articleID: article.id, isRead: !article.isRead)
             }
+            Button(article.isStarred ? "Remove Star" : "Star") {
+                store.toggleStarred(articleID: article.id)
+            }
+            Button(store.isOfflineSaved(article.id) ? "Remove Download" : "Save for Offline") {
+                if store.isOfflineSaved(article.id) {
+                    store.removeOffline(article.id)
+                } else {
+                    store.saveOffline(article)
+                }
+            }
+            Menu("Categories") {
+                CategoryMenuItems(store: store, article: article)
+            }
+            Divider()
+            Link("Open in Browser", destination: article.url)
         }
-        Menu("Categories") {
-            CategoryMenuItems(store: store, article: article)
-        }
-        Divider()
-        Link("Open in Browser", destination: article.url)
     }
 }
 
 /// The row's leading swipe actions, for the same reason as `ArticleRowMenu`.
 private struct ArticleRowSwipeActions: View {
     let store: ReaderStore
-    let article: Article
+    let id: Article.ID
 
     var body: some View {
         #if DEBUG
         let _ = MainThreadLog.add("list.row.swipe", ms: 0)
         #endif
+        let article = store.listedArticle(withID: id)
+        let isRead = article?.isRead ?? false
+        let isStarred = article?.isStarred ?? false
         Button {
-            store.setRead(articleID: article.id, isRead: !article.isRead)
+            store.setRead(articleID: id, isRead: !isRead)
         } label: {
             Label(
-                article.isRead ? "Mark as Unread" : "Mark as Read",
-                systemImage: article.isRead ? "circle" : "checkmark.circle.fill"
+                isRead ? "Mark as Unread" : "Mark as Read",
+                systemImage: isRead ? "circle" : "checkmark.circle.fill"
             )
         }
         .tint(.accentColor)
 
         Button {
-            store.toggleStarred(articleID: article.id)
+            store.toggleStarred(articleID: id)
         } label: {
             Label(
-                article.isStarred ? "Remove Star" : "Star",
-                systemImage: article.isStarred ? "star.slash.fill" : "star.fill"
+                isStarred ? "Remove Star" : "Star",
+                systemImage: isStarred ? "star.slash.fill" : "star.fill"
             )
         }
         .tint(.yellow)
     }
 }
 
-private struct ArticleRow: View {
-    var article: Article
-    var feed: Feed?
-    let translationBox: ListTitleTranslator.StateBox
+/// One article-list row, drawn from its model alone.
+///
+/// Creating a row is what a source switch and a key-repeat scroll pay for every
+/// row that comes into view, so nothing here looks anything up that the model
+/// could have carried: the feed title and offline flag are in the model, the
+/// translation block exists only once there is a translation to show, and the
+/// category chips (resolved live, so a rename shows) are built only for a row
+/// that has categories. Equatable on the model: a pass over the list that hands
+/// a row the same model leaves its body alone.
+private struct ArticleRow: View, Equatable {
+    let model: ArticleRowModel
+    let titleTranslator: ListTitleTranslator
     /// Reveal progress of the translated-title block, used only to detect that
     /// the row height moved. Badges never move it — they live inline in the
     /// metadata line, so their arrival costs no height.
     @State private var rowRevealProgress: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    nonisolated static func == (lhs: ArticleRow, rhs: ArticleRow) -> Bool {
+        lhs.model == rhs.model && lhs.titleTranslator === rhs.titleTranslator
+    }
+
     var body: some View {
+        // Interned on the row's first body, never ahead of it for the whole
+        // window: rows that never come into view never get a box.
+        let translationBox = titleTranslator.box(for: model.id, title: model.title)
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             #if DEBUG
             // Counted, not logged: the article list is a thousand rows, and the
@@ -1975,7 +2004,7 @@ private struct ArticleRow: View {
             let _ = MainThreadLog.add("list.row", ms: 0)
             #endif
             Circle()
-                .fill(article.isRead ? Color.clear : Color.accentColor)
+                .fill(model.isRead ? Color.clear : Color.accentColor)
                 .frame(width: 8, height: 8)
                 .alignmentGuide(.firstTextBaseline) { dimension in
                     dimension[VerticalAlignment.center] + 3
@@ -1986,18 +2015,18 @@ private struct ArticleRow: View {
                 // collapsed (height-zero) block leaves no gap above the summary.
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(article.title)
-                            .fontWeight(article.isRead ? .regular : .semibold)
+                        Text(model.title)
+                            .fontWeight(model.isRead ? .regular : .semibold)
                             .lineLimit(2)
 
-                        if article.isStarred {
+                        if model.isStarred {
                             Image(systemName: "star.fill")
                                 .font(.caption)
                                 .foregroundStyle(.yellow)
                                 .accessibilityLabel("Starred")
                         }
 
-                        if OfflineArticleStore.shared.isSaved(article.id) {
+                        if model.isSavedOffline {
                             Image(systemName: "arrow.down.circle.fill")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -2005,13 +2034,14 @@ private struct ArticleRow: View {
                         }
                     }
 
-                    ListTitleTranslationBlock(
-                        title: article.title,
-                        box: translationBox
+                    ListTitleTranslationSlot(
+                        title: model.title,
+                        box: translationBox,
+                        translator: titleTranslator
                     )
                 }
 
-                Text(article.summary)
+                Text(model.summary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -2027,19 +2057,14 @@ private struct ArticleRow: View {
                 // swipe-action rendering from then on; a reserved badge line
                 // put a visible gap under every untagged row.)
                 HStack(spacing: 6) {
-                    Text(feed?.displayTitle ?? String(localized: "Unknown Feed"))
+                    Text(model.feedDisplayTitle ?? String(localized: "Unknown Feed"))
                     Text("·")
-                    RelativeTimeText(article.publishedAt)
+                    RelativeTimeText(model.publishedAt)
                     Text("·")
-                    Text("\(article.estimatedReadMinutes) min")
+                    Text("\(model.readMinutes) min")
 
-                    let categories = ReaderStore.shared.categories(forArticle: article)
-                    if !categories.isEmpty {
-                        // Never compressed: a squeezed-to-nothing chip would
-                        // read as the tag silently missing. The feed title is
-                        // what truncates in a narrow column.
-                        CategoryBadges(categories)
-                            .fixedSize()
+                    if !model.categories.isEmpty {
+                        ArticleRowCategoryBadges(ids: model.categories)
                             .transition(.opacity)
                     }
                     Text(verbatim: "\u{200B}")
@@ -2054,7 +2079,7 @@ private struct ArticleRow: View {
                 .animation(
                     ReaderStore.shared.isBulkCategorizing || reduceMotion
                         ? nil : .smooth(duration: 0.28),
-                    value: article.categories
+                    value: model.categories
                 )
             }
         }
@@ -2073,6 +2098,25 @@ private struct ArticleRow: View {
         )
     }
 
+}
+
+/// A row's category chips, resolved from the live definitions so a rename or
+/// recolor in Settings shows at once. Its own view so only tagged rows observe
+/// the category definitions.
+private struct ArticleRowCategoryBadges: View {
+    let ids: [String]
+
+    var body: some View {
+        let categories = ReaderStore.shared.categories(forIDs: ids)
+        if !categories.isEmpty {
+            // Never compressed: a squeezed-to-nothing chip would
+            // read as the tag silently missing. The feed title is
+            // what truncates in a narrow column.
+            CategoryBadges(categories)
+                .fixedSize()
+                .transition(.opacity)
+        }
+    }
 }
 
 private struct ArticleListStatusBar: View {
