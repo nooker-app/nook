@@ -66,9 +66,14 @@ public final class ReaderArticleSession {
         articleID == self.articleID
     }
 
-    /// The translator, only while it belongs to `articleID`.
+    /// The translator, unless it is still showing another article's translation.
+    ///
+    /// An inactive translator renders nothing, so handing it over before
+    /// `begin(articleID:)` keeps the views' input identical across the switch;
+    /// a nil there followed by the translator after `begin` re-ran the whole
+    /// block list a second time in the same update.
     public func translator(for articleID: String) -> NativeArticleTranslator? {
-        isCurrent(articleID) ? translator : nil
+        isCurrent(articleID) || !translator.isActive ? translator : nil
     }
 
     /// The summary state, only while it belongs to `articleID`.

@@ -107,7 +107,11 @@ struct ReaderArticleSessionTests {
         #expect(session.summary(for: "A")?.issue == .noReliableSummary)
 
         // The new article's first body, before `begin(articleID: "B")` has run.
+        // An inactive translator is handed over unchanged; an active one is not.
+        #expect(session.translator(for: "B") === session.translator)
+        session.translator._activateForTesting()
         #expect(session.translator(for: "B") == nil)
+        #expect(session.translator(for: "A") === session.translator)
         #expect(session.summary(for: "B") == nil)
         #expect(session.detectedLanguage(for: "B") == nil)
         #expect(!session.isShowingSystemTranslation(for: "B"))

@@ -551,6 +551,13 @@ public final class NativeArticleTranslator {
         if !translatedComments.isEmpty { translatedComments = [:] }
     }
 
+    #if DEBUG
+    /// Marks a run active without a model, so tests can hold translated state.
+    func _activateForTesting() {
+        isActive = true
+    }
+    #endif
+
     /// Turns translation off and reverts to the original content.
     public func stop() {
         task?.cancel()
