@@ -127,6 +127,19 @@ public final class ListTitleTranslator {
         for (title, translation) in cached { cache[cacheKey(for: title)] = translation }
     }
 
+    /// Opens the post-enable window `configure` opens when the feature turns on.
+    func _markJustEnabledForTesting() {
+        immediateUntil = .now + immediateWindow
+    }
+
+    /// Where `id` is in the scheduling pipeline.
+    func _schedulingForTesting(_ id: Article.ID) -> String {
+        if activeTasks[id] != nil { return "active" }
+        if pending.contains(where: { $0.id == id }) { return "pending" }
+        if dwellTasks[id] != nil { return "dwell" }
+        return "none"
+    }
+
     /// A worker result landing for `id`, as `startTranslate` delivers it.
     func _deliverForTesting(_ state: TitleState?, for id: Article.ID) {
         setState(state, for: id)
@@ -172,6 +185,18 @@ public final class ListTitleTranslator {
     /// Rows currently on screen, with their latest title. Lets `finish` reschedule
     /// a row that disappeared and reappeared while its cancelled task wound down.
     private var visibleTitles: [Article.ID: String] = [:]
+    /// How many row views currently show each visible id. Turning translation on
+    /// or off rebuilds the macOS List, so for a moment the old table's row and the
+    /// new table's row are both "on screen", and AppKit does not promise which of
+    /// their appear/disappear callbacks comes first. Counting keeps a row visible
+    /// (and its queued or running translation alive) until the last of them goes.
+    private var visibleCounts: [Article.ID: Int] = [:]
+    /// Until this instant, a row appearing skips the dwell: the feature was just
+    /// turned on (or retargeted), and the rows appearing are the ones already on
+    /// screen, re-created by the List rebuild, not rows scrolled into view.
+    private var immediateUntil: ContinuousClock.Instant?
+    /// How long after enabling an appearing row counts as already being looked at.
+    private let immediateWindow: Duration = .seconds(1)
 
     private var loadedFromDisk = false
     /// In-flight off-main cache load; `fillSlots` holds translation starts until
@@ -236,6 +261,7 @@ public final class ListTitleTranslator {
         // rows already on screen now — without waiting for a dwell — so the list
         // the user is looking at updates immediately instead of only after scroll.
         if self.enabled, !wasEnabled || languageChanged || providerChanged {
+            immediateUntil = .now + immediateWindow
             for (id, title) in visibleTitles {
                 scheduleTranslation(id: id, title: title, afterDwell: false)
             }
@@ -261,8 +287,10 @@ public final class ListTitleTranslator {
         // Track visibility even while disabled, so enabling the feature can find
         // the rows already on screen and translate them at once.
         visibleTitles[id] = title
+        visibleCounts[id, default: 0] += 1
         guard enabled else { return }
-        scheduleTranslation(id: id, title: title, afterDwell: true)
+        let immediate = immediateUntil.map { ContinuousClock.now < $0 } ?? false
+        scheduleTranslation(id: id, title: title, afterDwell: !immediate)
     }
 
     /// Starts translating a visible row's title, unless it's already cached, the
@@ -297,6 +325,12 @@ public final class ListTitleTranslator {
     /// its partial discarded. The slot is freed by the task's own `finish` (not
     /// here), so the concurrency count stays correct even as it winds down.
     public func rowDisappeared(id: Article.ID) {
+        // Another row view for the same id is still on screen (a List rebuild).
+        if let count = visibleCounts[id], count > 1 {
+            visibleCounts[id] = count - 1
+            return
+        }
+        visibleCounts[id] = nil
         visibleTitles[id] = nil
         dwellTasks[id]?.cancel()
         dwellTasks[id] = nil
@@ -414,8 +448,9 @@ public final class ListTitleTranslator {
         // disappear) yet the row is on screen again — i.e. a real reappear gap.
         // Gating on `wasCancelled` avoids an infinite dwell→start→finish loop if the
         // translation API were to keep throwing without the task being cancelled.
-        if wasCancelled, let title = visibleTitles[id] {
-            rowAppeared(id: id, title: title)
+        // Not `rowAppeared`: the row is already counted as visible.
+        if wasCancelled, enabled, let title = visibleTitles[id] {
+            scheduleTranslation(id: id, title: title, afterDwell: true)
         }
     }
 
@@ -445,6 +480,7 @@ public final class ListTitleTranslator {
         // Also forget which rows are on screen, so cancelled tasks don't reschedule
         // and immediately rebuild the cache we just cleared.
         visibleTitles.removeAll()
+        visibleCounts.removeAll()
         cache.removeAll()
         cacheOrder.removeAll()
         sameLanguage.removeAll()

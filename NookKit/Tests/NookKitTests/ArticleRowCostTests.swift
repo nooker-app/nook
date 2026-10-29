@@ -164,4 +164,33 @@ struct ArticleRowCostTests {
         #expect(box.state == .translating("부분", provider: .appleIntelligence))
         #expect(box.layoutRevision == 1)
     }
+
+    @Test("Rows re-created by the List rebuild that follows enabling translate at once, in either callback order")
+    func enableRebuildTranslatesAtOnce() {
+        for oldRowGoesFirst in [false, true] {
+            let translator = ListTitleTranslator()
+            // Hold the queue so no worker starts; `pending` is what is asserted.
+            translator.setScrolling(true)
+            translator.rowAppeared(id: "a", title: "A title") // the old table's row, shown while off
+            translator._enableForTesting(targetLanguageCode: "ko")
+            translator._markJustEnabledForTesting()
+            if oldRowGoesFirst {
+                translator.rowDisappeared(id: "a")
+                translator.rowAppeared(id: "a", title: "A title")
+            } else {
+                translator.rowAppeared(id: "a", title: "A title")
+                translator.rowDisappeared(id: "a")
+            }
+            #expect(translator._schedulingForTesting("a") == "pending", "old row first: \(oldRowGoesFirst)")
+            translator.rowDisappeared(id: "a")
+            #expect(translator._schedulingForTesting("a") == "none", "the last row view leaving drops the work")
+        }
+        // Outside the window a row scrolled into view still waits for the dwell.
+        let translator = ListTitleTranslator()
+        translator.setScrolling(true)
+        translator._enableForTesting(targetLanguageCode: "ko")
+        translator.rowAppeared(id: "b", title: "B title")
+        #expect(translator._schedulingForTesting("b") == "dwell")
+        translator.rowDisappeared(id: "b")
+    }
 }
