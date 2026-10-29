@@ -333,6 +333,11 @@ struct HTMLBlockList: View {
     var compactSpacing = false
 
     var body: some View {
+        #if DEBUG && os(macOS)
+        // The article's own list (the only one with a namespace): its ForEach is
+        // the reader's per-block cost.
+        let _ = anchorNamespace.map { _ in MainThreadLog.add("reader.blocks", ms: 0) }
+        #endif
         if lazy {
             LazyVStack(alignment: .leading, spacing: 0) { rows }
         } else {

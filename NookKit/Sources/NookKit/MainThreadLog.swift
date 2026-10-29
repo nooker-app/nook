@@ -120,7 +120,7 @@ public enum MainThreadLog {
             "rowHeightFlush=\(calls("list.row.height.flush"))",
             "rowMenu=\(calls("list.row.menu") + calls("list.row.swipe"))", "relTime=\(calls("relativetime.body"))",
             "rootBody=\(calls("root.body"))", "sidebarBody=\(calls("sidebar.body"))", "sidebarRow=\(calls("sidebar.row"))",
-            "readerBody=\(calls("reader.body"))", "titleBox=\(calls("list.title.box"))",
+            "readerBody=\(calls("reader.body"))", "readerBlocks=\(calls("reader.blocks"))", "titleBox=\(calls("list.title.box"))",
             "titleBoxRelease=\(calls("list.title.box.release"))",
             "frames=\(deltas.count)", "dropped=\(dropped)", "droppedPct=\(number(droppedPct))",
             "hitchMs=\(number(hitchMs))", "hitchRatio=\(number(activeMs > 0 ? hitchMs / (activeMs / 1000) : 0))",
