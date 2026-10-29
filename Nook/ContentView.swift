@@ -1846,6 +1846,16 @@ private struct ArticleListRows: View {
         }
         .id(store.listGeneration)
         .listStyle(.inset)
+        // Same contract as iOS: no new title translation starts mid-scroll (its
+        // reveal and streamed text re-measure rows), and settling drains the
+        // queue. A List replaced or removed mid-scroll never reports `.idle`.
+        .onScrollPhaseChange { _, phase in
+            #if DEBUG
+            MainThreadLog.add("list.scroll.phase", ms: 0)
+            #endif
+            titleTranslator.setScrolling(phase != .idle)
+        }
+        .onDisappear { titleTranslator.setScrolling(false) }
         #if DEBUG
         .background { PerfDisplayLinkProbe().accessibilityHidden(true) }
         #endif

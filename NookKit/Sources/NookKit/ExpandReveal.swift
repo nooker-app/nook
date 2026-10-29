@@ -88,8 +88,7 @@ private struct MacListRowHeightInvalidator: NSViewRepresentable {
     @MainActor
     final class ProbeView: NSView {
         private var tracker = ListRowHeightInvalidationTracker()
-        private var pendingInvalidation: Task<Void, Never>?
-        private var needsAttachmentRetry = false
+        fileprivate var needsAttachmentRetry = false
 
         override var isFlipped: Bool { true }
 
@@ -98,29 +97,19 @@ private struct MacListRowHeightInvalidator: NSViewRepresentable {
                 progress: progress,
                 layoutRevision: layoutRevision
             ) else { return }
-            scheduleInvalidation()
+            MacListRowHeightCoalescer.shared.enqueue(self)
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             if window != nil, needsAttachmentRetry {
-                scheduleInvalidation()
+                MacListRowHeightCoalescer.shared.enqueue(self)
             }
         }
 
-        private func scheduleInvalidation() {
-            pendingInvalidation?.cancel()
-            pendingInvalidation = Task { @MainActor [weak self] in
-                // Let SwiftUI commit this animation sample's fitting size before
-                // asking AppKit to query it. Multiple updates in one run-loop turn
-                // coalesce into the latest sample.
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                self?.invalidateEnclosingRow()
-            }
-        }
-
-        private func invalidateEnclosingRow() {
+        /// The native container this probe's row lives in, resolved now: growth
+        /// and replacement shift row indexes, so an index is never cached.
+        fileprivate func resolveTarget() -> MacListRowHeightCoalescer.Target {
             #if DEBUG
             // `noteHeightOfRows` makes AppKit re-query a row's height, and re-querying
             // one row of a table this long is not free. Counted because the field log
@@ -128,9 +117,6 @@ private struct MacListRowHeightInvalidator: NSViewRepresentable {
             // all of it beginning while an input event was being handled — which is
             // what scrolling is.
             MainThreadLog.add("list.row.height", ms: 0)
-            // Run-loop turns that invalidated any row height: one per turn is the
-            // coalescing target, so flush < rowHeight is the healthy shape.
-            MainThreadLog.addOncePerTurn("list.row.height.flush")
             #endif
             invalidateHostingHierarchy()
 
@@ -140,15 +126,10 @@ private struct MacListRowHeightInvalidator: NSViewRepresentable {
                     ?? rowAtProbe(in: tableView)
                 guard row >= 0 else {
                     needsAttachmentRetry = true
-                    return
+                    return .none
                 }
                 needsAttachmentRetry = false
-                tableView.noteHeightOfRows(
-                    withIndexesChanged: IndexSet(integer: row)
-                )
-                tableView.needsLayout = true
-                tableView.layoutSubtreeIfNeeded()
-                return
+                return .table(tableView, row)
             }
 
             // Newer SwiftUI List implementations can be collection-backed.
@@ -157,13 +138,11 @@ private struct MacListRowHeightInvalidator: NSViewRepresentable {
             // intact.
             if let collectionView = enclosingView(of: NSCollectionView.self) {
                 needsAttachmentRetry = false
-                collectionView.collectionViewLayout?.invalidateLayout()
-                collectionView.needsLayout = true
-                collectionView.layoutSubtreeIfNeeded()
-                return
+                return .collection(collectionView)
             }
 
             needsAttachmentRetry = true
+            return .none
         }
 
         private func invalidateHostingHierarchy() {
@@ -194,6 +173,78 @@ private struct MacListRowHeightInvalidator: NSViewRepresentable {
                 candidate = current.superview
             }
             return nil
+        }
+    }
+}
+
+/// Collects every row-height invalidation requested in one run-loop turn and
+/// applies it as one `noteHeightOfRows` per table (and one layout pass per
+/// container) after `Task.yield()`.
+///
+/// Each probe used to schedule its own task, so two rows streaming translations
+/// and every frame of a reveal each paid a synchronous layout of the whole table.
+/// The yield is kept so SwiftUI commits the sample's fitting size before AppKit
+/// queries it; the latest sample of a probe in a turn wins, as before. Row indexes
+/// are resolved when the batch runs, not when it is requested.
+@MainActor
+private final class MacListRowHeightCoalescer {
+    static let shared = MacListRowHeightCoalescer()
+
+    enum Target {
+        case table(NSTableView, Int)
+        case collection(NSCollectionView)
+        case none
+    }
+
+    private let pending = NSHashTable<MacListRowHeightInvalidator.ProbeView>.weakObjects()
+    private var flushTask: Task<Void, Never>?
+
+    func enqueue(_ probe: MacListRowHeightInvalidator.ProbeView) {
+        pending.add(probe)
+        guard flushTask == nil else { return }
+        flushTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.flush()
+        }
+    }
+
+    private func flush() {
+        flushTask = nil
+        let probes = pending.allObjects
+        pending.removeAllObjects()
+        guard !probes.isEmpty else { return }
+        #if DEBUG
+        // Run-loop turns that invalidated any row height: one per turn is the
+        // coalescing target, so flush < rowHeight is the healthy shape.
+        MainThreadLog.addOncePerTurn("list.row.height.flush")
+        #endif
+        var tables: [ObjectIdentifier: (view: NSTableView, rows: IndexSet)] = [:]
+        var collections: [ObjectIdentifier: NSCollectionView] = [:]
+        for probe in probes {
+            switch probe.resolveTarget() {
+            case .table(let tableView, let row):
+                tables[ObjectIdentifier(tableView), default: (tableView, IndexSet())].rows.insert(row)
+            case .collection(let collectionView):
+                collections[ObjectIdentifier(collectionView)] = collectionView
+            case .none:
+                break
+            }
+        }
+        for (tableView, rows) in tables.values {
+            let valid = rows.filteredIndexSet { $0 < tableView.numberOfRows }
+            guard !valid.isEmpty else { continue }
+            tableView.noteHeightOfRows(withIndexesChanged: valid)
+            tableView.needsLayout = true
+            // Kept, once per table per turn: dropping it would leave the new
+            // height to the next display cycle, and nothing here can show that
+            // the first layout of a cached translated row stays correct without
+            // it (see docs/perf/phase-4-implementation.md).
+            tableView.layoutSubtreeIfNeeded()
+        }
+        for collectionView in collections.values {
+            collectionView.collectionViewLayout?.invalidateLayout()
+            collectionView.needsLayout = true
+            collectionView.layoutSubtreeIfNeeded()
         }
     }
 }
