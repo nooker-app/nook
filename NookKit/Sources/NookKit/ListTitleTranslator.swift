@@ -279,6 +279,12 @@ public final class ListTitleTranslator {
         return cachedState(for: title)
     }
 
+    /// What a row for this id would show now, without interning a box: the AppKit
+    /// table asks this for every row's height, including rows never displayed.
+    public func displayedState(for id: Article.ID, title: String) -> TitleState? {
+        liveState(for: id) ?? cachedState(for: title)
+    }
+
     /// A row scrolled into view. After the dwell (if still requested), translate
     /// its title — unless it's already cached, already the target language, or in
     /// progress.

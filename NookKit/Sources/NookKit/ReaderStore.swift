@@ -1132,7 +1132,7 @@ public final class ReaderStore {
             if !result.willAnimate { self.pruneSelectionIfHidden() }
             self.listWindow.install(contents: self.displayContents, indexByID: result.indexByID,
                 rows: result.rows, feedTitles: result.feedTitles, savedIDs: result.savedIDs,
-                replacement: result.replacesList)
+                replacement: result.replacesList, animated: result.willAnimate)
             if let id = self.selectedArticleID { self.listWindow.ensureVisible(id: id) }
             #endif
         }

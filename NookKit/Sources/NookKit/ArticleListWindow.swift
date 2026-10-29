@@ -38,6 +38,22 @@ public struct ArticleRowModel: Identifiable, Equatable, Sendable {
     public let categories: [String]
     public let isSavedOffline: Bool
 
+    nonisolated public init(id: Article.ID, feedID: Feed.ID, title: String, summary: String, isRead: Bool,
+                            isStarred: Bool, publishedAt: Date, feedDisplayTitle: String?, readMinutes: Int,
+                            categories: [String], isSavedOffline: Bool) {
+        self.id = id
+        self.feedID = feedID
+        self.title = title
+        self.summary = summary
+        self.isRead = isRead
+        self.isStarred = isStarred
+        self.publishedAt = publishedAt
+        self.feedDisplayTitle = feedDisplayTitle
+        self.readMinutes = readMinutes
+        self.categories = categories
+        self.isSavedOffline = isSavedOffline
+    }
+
     nonisolated public init(_ article: Article, feedDisplayTitle: String?, isSavedOffline: Bool) {
         id = article.id
         feedID = article.feedID
@@ -53,9 +69,31 @@ public struct ArticleRowModel: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Receives every change to `ArticleListWindow.rows`, as it happens.
+///
+/// The SwiftUI `List` backend observes `rows` and diffs it; the AppKit table
+/// backend cannot afford that diff, so the window tells it what kind of change
+/// it made: a replacement (reload), an incremental install (the previous rows
+/// to diff against), growth (an appended range) or a one-row patch.
+@MainActor
+public protocol ArticleListWindowObserver: AnyObject {
+    func articleListWindow(_ window: ArticleListWindow, didChange change: ArticleListWindow.Change)
+}
+
 /// macOS rendering queue. Membership and navigation always use the complete result.
 @MainActor @Observable
 public final class ArticleListWindow {
+    public enum Change {
+        /// A new source: nothing of the previous rows carries over.
+        case replaced
+        /// A data change to the same source, with the rows it replaced.
+        case installed(previous: [ArticleRowModel], animated: Bool)
+        /// Growth or `ensureVisible`: rows appended at the end, nothing else moved.
+        case appended(Range<Int>)
+        /// One row's model changed in place.
+        case patched(Int)
+    }
+
     public private(set) var rows: [ArticleRowModel] = []
     public private(set) var totalCount = 0
     @ObservationIgnored private var full = ArticleListContents()
@@ -68,6 +106,8 @@ public final class ArticleListWindow {
     /// so per-row state owned elsewhere (title translation boxes) can be trimmed
     /// while no row view holds it.
     @ObservationIgnored public var onReplacement: (@MainActor () -> Void)?
+    /// The AppKit table backend, told of each change after `rows` holds it.
+    @ObservationIgnored public weak var observer: ArticleListWindowObserver?
 
     public init() {}
 
@@ -84,16 +124,18 @@ public final class ArticleListWindow {
                 replacement: replacement)
     }
 
-    func install(full: [Article], indexByID: [Article.ID: Int], rows: [ArticleRowModel], replacement: Bool = true) {
+    func install(full: [Article], indexByID: [Article.ID: Int], rows: [ArticleRowModel], replacement: Bool = true,
+                 animated: Bool = false) {
         install(contents: ArticleListContents(full), indexByID: indexByID, rows: rows,
-                feedTitles: [:], savedIDs: [], replacement: replacement)
+                feedTitles: [:], savedIDs: [], replacement: replacement, animated: animated)
     }
 
     /// Only a replacement invalidates pending growth. An incremental install keeps
     /// the prefix it extends, and the sentinel row that requested growth is already
     /// on screen, so its onAppear would not fire again to re-request it.
     func install(contents: ArticleListContents, indexByID: [Article.ID: Int], rows: [ArticleRowModel],
-                 feedTitles: [Feed.ID: String], savedIDs: Set<Article.ID>, replacement: Bool) {
+                 feedTitles: [Feed.ID: String], savedIDs: Set<Article.ID>, replacement: Bool,
+                 animated: Bool = false) {
         if replacement {
             generation &+= 1
             growthTask?.cancel()
@@ -105,7 +147,22 @@ public final class ArticleListWindow {
         self.feedTitles = feedTitles
         self.savedIDs = savedIDs
         if totalCount != contents.articles.count { totalCount = contents.articles.count }
+        let previous = self.rows
         self.rows = rows
+        observer?.articleListWindow(self, didChange: replacement ? .replaced : .installed(previous: previous, animated: animated))
+    }
+
+    /// `rows` read without registering an observation, for the AppKit table: it is
+    /// told of every change through `observer`, and a tracked read from inside a
+    /// SwiftUI update would re-run that update on every publish for nothing.
+    public var rowCount: Int { _rows.count }
+    public func row(at index: Int) -> ArticleRowModel { _rows[index] }
+
+    /// The row an id is displayed at, if the window holds it: the window is a
+    /// prefix of the full result, so a full-result index below `rows.count` is a row.
+    public func rowIndex(of id: Article.ID) -> Int? {
+        guard let index = indexByID[id], index < rows.count else { return nil }
+        return index
     }
 
     /// Not capped: List selection needs the selected row to exist, so a deep jump
@@ -146,7 +203,10 @@ public final class ArticleListWindow {
     func patch(_ id: Article.ID, _ mutate: (inout Article) -> Void) {
         guard let index = indexByID[id] else { return }
         mutate(&full.articles[index])
-        if index < rows.count { rows[index] = model(for: full.articles[index]) }
+        if index < rows.count {
+            rows[index] = model(for: full.articles[index])
+            observer?.articleListWindow(self, didChange: .patched(index))
+        }
     }
 
     /// Reflects one offline save or removal in its row without waiting for the
@@ -155,6 +215,7 @@ public final class ArticleListWindow {
         let changed = saved ? savedIDs.insert(id).inserted : savedIDs.remove(id) != nil
         guard changed, let index = indexByID[id], index < rows.count else { return }
         rows[index] = model(for: full.articles[index])
+        observer?.articleListWindow(self, didChange: .patched(index))
     }
 
     private func model(for article: Article) -> ArticleRowModel {
@@ -163,11 +224,13 @@ public final class ArticleListWindow {
     }
 
     private func publishPrefix(_ count: Int) {
+        let start = rows.count
         let appended = full.articles[rows.count..<count].map(model(for:))
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             rows.append(contentsOf: appended)
         }
+        if !appended.isEmpty { observer?.articleListWindow(self, didChange: .appended(start..<rows.count)) }
     }
 }
