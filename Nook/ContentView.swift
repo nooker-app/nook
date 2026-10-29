@@ -625,91 +625,19 @@ private struct FeedSidebar: View {
         #if DEBUG
         let _ = MainThreadLog.add("sidebar.body", ms: 0)
         #endif
+        // The List re-runs this body whenever the selection moves (it reads the
+        // binding), so its sections live in an equatable child: a source switch
+        // re-renders the rows whose highlight changed, not every feed row.
         List(selection: $store.feedSelection) {
-            Section("Library") {
-                ForEach(SmartSource.library) { source in
-                    smartSourceRow(source)
-                }
-            }
-
-            // The writer's publication is still an ordinary RSS feed. Keeping this
-            // as a dedicated way into that feed mirrors iOS while preserving all of
-            // the native reader's existing offline, search, and read-state behavior.
-            if let publication = URL(string: ownPublicationURL) {
-                Section {
-                    ownNookRow(publication: publication)
-                }
-            }
-
-            if !drafts.isEmpty {
-                Section("Drafts") {
-                    ForEach(drafts) { draft in
-                        draftRow(draft)
-                    }
-                }
-            }
-
-            if store.hasCategories {
-                Section("Categories") {
-                    ForEach(store.categories) { category in
-                        categorySourceRow(category)
-                    }
-                }
-            }
-
-            Section {
-                if store.feeds.isEmpty && store.feedFolders.isEmpty {
-                    Text(store.isStorageConfigured ? "Add an RSS or Atom feed." : "Choose a sync folder first.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(store.ungroupedFeeds) { feed in
-                        feedRow(feed)
-                    }
-
-                    ForEach(store.feedFolders, id: \.self) { folder in
-                        folderHeader(folder)
-
-                        if !collapsedFolders.contains(folder) {
-                            ForEach(store.feeds(inFolder: folder)) { feed in
-                                feedRow(feed)
-                                    .padding(.leading, 14)
-                            }
-                        }
-                    }
-                }
-            } header: {
-                HStack(spacing: 6) {
-                    if isTopLevelDropTargeted {
-                        Label("Move out of folder", systemImage: "tray.and.arrow.up")
-                            .foregroundStyle(Color.accentColor)
-                            .fontWeight(.semibold)
-                    } else {
-                        Text("Feeds")
-                    }
-                    Spacer()
-                }
-                .padding(.vertical, 3)
-                .padding(.horizontal, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.accentColor.opacity(isTopLevelDropTargeted ? 0.2 : 0))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.accentColor, lineWidth: isTopLevelDropTargeted ? 1.5 : 0)
-                        )
-                )
-                .contentShape(Rectangle())
-                .dropDestination(for: String.self) { droppedIDs, _ in
-                    for id in droppedIDs { store.moveFeed(id, toFolder: "") }
-                    isTopLevelDropTargeted = false
-                    return true
-                } isTargeted: { targeted in
-                    withAnimation(.easeOut(duration: 0.1)) {
-                        isTopLevelDropTargeted = targeted
-                    }
-                }
-            }
+            FeedSidebarSections(
+                sidebar: self,
+                dropTargetFolder: dropTargetFolder,
+                isTopLevelDropTargeted: isTopLevelDropTargeted,
+                collapsedFoldersData: collapsedFoldersData,
+                ownPublicationURL: ownPublicationURL,
+                drafts: drafts
+            )
+            .equatable()
         }
         .listStyle(.sidebar)
         .navigationTitle("Feeds")
@@ -778,6 +706,95 @@ private struct FeedSidebar: View {
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("Enter a new name, or leave empty to use the feed's own name.")
+        }
+    }
+
+    /// The list's sections. Built by `FeedSidebarSections`, not by `body`.
+    @ViewBuilder
+    fileprivate var sections: some View {
+        Section("Library") {
+            ForEach(SmartSource.library) { source in
+                smartSourceRow(source)
+            }
+        }
+
+        // The writer's publication is still an ordinary RSS feed. Keeping this
+        // as a dedicated way into that feed mirrors iOS while preserving all of
+        // the native reader's existing offline, search, and read-state behavior.
+        if let publication = URL(string: ownPublicationURL) {
+            Section {
+                ownNookRow(publication: publication)
+            }
+        }
+
+        if !drafts.isEmpty {
+            Section("Drafts") {
+                ForEach(drafts) { draft in
+                    draftRow(draft)
+                }
+            }
+        }
+
+        if store.hasCategories {
+            Section("Categories") {
+                ForEach(store.categories) { category in
+                    categorySourceRow(category)
+                }
+            }
+        }
+
+        Section {
+            if store.feeds.isEmpty && store.feedFolders.isEmpty {
+                Text(store.isStorageConfigured ? "Add an RSS or Atom feed." : "Choose a sync folder first.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(store.ungroupedFeeds) { feed in
+                    feedRow(feed)
+                }
+
+                ForEach(store.feedFolders, id: \.self) { folder in
+                    folderHeader(folder)
+
+                    if !collapsedFolders.contains(folder) {
+                        ForEach(store.feeds(inFolder: folder)) { feed in
+                            feedRow(feed)
+                                .padding(.leading, 14)
+                        }
+                    }
+                }
+            }
+        } header: {
+            HStack(spacing: 6) {
+                if isTopLevelDropTargeted {
+                    Label("Move out of folder", systemImage: "tray.and.arrow.up")
+                        .foregroundStyle(Color.accentColor)
+                        .fontWeight(.semibold)
+                } else {
+                    Text("Feeds")
+                }
+                Spacer()
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.accentColor.opacity(isTopLevelDropTargeted ? 0.2 : 0))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.accentColor, lineWidth: isTopLevelDropTargeted ? 1.5 : 0)
+                    )
+            )
+            .contentShape(Rectangle())
+            .dropDestination(for: String.self) { droppedIDs, _ in
+                for id in droppedIDs { store.moveFeed(id, toFolder: "") }
+                isTopLevelDropTargeted = false
+                return true
+            } isTargeted: { targeted in
+                withAnimation(.easeOut(duration: 0.1)) {
+                    isTopLevelDropTargeted = targeted
+                }
+            }
         }
     }
 
@@ -960,75 +977,77 @@ private struct FeedSidebar: View {
         nonmutating set { collapsedFoldersData = (try? JSONEncoder().encode(newValue)) ?? Data() }
     }
 
-    @ViewBuilder
     private func folderHeader(_ folder: String) -> some View {
-        let isActive = store.isFolderSelected(folder)
         let isCollapsed = collapsedFolders.contains(folder)
-        let unread = store.unreadCount(inFolder: folder)
+        return SidebarSelectionState { store.isFolderSelected(folder) } content: { isActive in
+            let unread = store.unreadCount(inFolder: folder)
 
-        HStack(spacing: 4) {
-            Button {
-                withAnimation(.snappy(duration: 0.2)) {
-                    if isCollapsed { collapsedFolders.remove(folder) } else { collapsedFolders.insert(folder) }
-                }
-            } label: {
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(isActive ? Color.white.opacity(0.9) : Color.secondary)
-                    .frame(width: 12, height: 12)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Label(folder, systemImage: "folder")
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            if unread > 0 {
-                Text(unread, format: .number)
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
-            }
-        }
-        .contentShape(Rectangle())
-        .foregroundStyle((isActive && dropTargetFolder != folder) ? Color.white : Color.primary)
-        .onTapGesture {
-            store.selectFolder(folder)
-        }
-        .listRowBackground(folderRowBackground(folder: folder, isActive: isActive))
-        .dropDestination(for: String.self) { droppedIDs, _ in
-            for id in droppedIDs { store.moveFeed(id, toFolder: folder) }
-            dropTargetFolder = nil
-            return true
-        } isTargeted: { targeted in
-            withAnimation(.easeOut(duration: 0.1)) {
-                if targeted {
-                    dropTargetFolder = folder
-                } else if dropTargetFolder == folder {
-                    dropTargetFolder = nil
-                }
-            }
-        }
-        .contextMenu {
-            Button {
-                renameFolderName = folder
-                folderPendingRename = folder
-            } label: {
-                Text("Rename Folder…")
-            }
-            Button(role: .destructive) {
-                folderPendingDeletion = folder
-            } label: {
-                Text("Remove Folder")
-            }
-            if store.feedFolders.count > 1 {
-                Divider()
+            HStack(spacing: 4) {
                 Button {
-                    isManagingFolders = true
+                    withAnimation(.snappy(duration: 0.2)) {
+                        if isCollapsed { collapsedFolders.remove(folder) } else { collapsedFolders.insert(folder) }
+                    }
                 } label: {
-                    Text("Delete Multiple Folders…")
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(isActive ? Color.white.opacity(0.9) : Color.secondary)
+                        .frame(width: 12, height: 12)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Label(folder, systemImage: "folder")
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                if unread > 0 {
+                    Text(unread, format: .number)
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+            .foregroundStyle((isActive && dropTargetFolder != folder) ? Color.white : Color.primary)
+            .onTapGesture {
+                store.selectFolder(folder)
+            }
+            .listRowBackground(folderRowBackground(folder: folder, isActive: isActive))
+            .dropDestination(for: String.self) { droppedIDs, _ in
+                for id in droppedIDs { store.moveFeed(id, toFolder: folder) }
+                dropTargetFolder = nil
+                return true
+            } isTargeted: { targeted in
+                withAnimation(.easeOut(duration: 0.1)) {
+                    if targeted {
+                        dropTargetFolder = folder
+                    } else if dropTargetFolder == folder {
+                        dropTargetFolder = nil
+                    }
+                }
+            }
+            .contextMenu {
+                DeferredMenuContent {
+                    Button {
+                        renameFolderName = folder
+                        folderPendingRename = folder
+                    } label: {
+                        Text("Rename Folder…")
+                    }
+                    Button(role: .destructive) {
+                        folderPendingDeletion = folder
+                    } label: {
+                        Text("Remove Folder")
+                    }
+                    if store.feedFolders.count > 1 {
+                        Divider()
+                        Button {
+                            isManagingFolders = true
+                        } label: {
+                            Text("Delete Multiple Folders…")
+                        }
+                    }
                 }
             }
         }
@@ -1068,7 +1087,7 @@ private struct FeedSidebar: View {
         .tag(feed.id)
         .draggable(feed.id)
         .contextMenu {
-            feedContextMenu(feed)
+            DeferredMenuContent { feedContextMenu(feed) }
         }
     }
 
@@ -1077,34 +1096,35 @@ private struct FeedSidebar: View {
     @ViewBuilder
     private var downloadedSourceRow: some View {
         if store.hasOfflineArticles {
-            let isActive = store.feedSelection.isEmpty && store.smartSelection == .offline
             Divider()
-            Button {
-                store.selectSmartSource(.offline)
-            } label: {
-                HStack(spacing: 8) {
-                    Label(SmartSource.offline.title, systemImage: SmartSource.offline.systemImage)
-                        .font(.callout)
-                    Spacer(minLength: 8)
-                    let count = store.count(for: .offline)
-                    if count > 0 {
-                        Text(count, format: .number)
-                            .font(.caption)
-                            .monospacedDigit()
-                            .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
+            SidebarSelectionState { store.feedSelection.isEmpty && store.smartSelection == .offline } content: { isActive in
+                Button {
+                    store.selectSmartSource(.offline)
+                } label: {
+                    HStack(spacing: 8) {
+                        Label(SmartSource.offline.title, systemImage: SmartSource.offline.systemImage)
+                            .font(.callout)
+                        Spacer(minLength: 8)
+                        let count = store.count(for: .offline)
+                        if count > 0 {
+                            Text(count, format: .number)
+                                .font(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
+                        }
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(isActive ? Color.white : Color.secondary)
+                    .background(
+                        isActive
+                            ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 8)
+                            : nil
+                    )
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-                .foregroundStyle(isActive ? Color.white : Color.secondary)
-                .background(
-                    isActive
-                        ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 8)
-                        : nil
-                )
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -1114,16 +1134,47 @@ private struct FeedSidebar: View {
     @ViewBuilder
     private var filteredSourceRow: some View {
         if store.hasFilters {
-            let isActive = store.feedSelection.isEmpty && store.smartSelection == .filtered
             Divider()
+            SidebarSelectionState { store.feedSelection.isEmpty && store.smartSelection == .filtered } content: { isActive in
+                Button {
+                    store.selectSmartSource(.filtered)
+                } label: {
+                    HStack(spacing: 8) {
+                        Label(SmartSource.filtered.title, systemImage: SmartSource.filtered.systemImage)
+                            .font(.callout)
+                        Spacer(minLength: 8)
+                        let count = store.count(for: .filtered)
+                        if count > 0 {
+                            Text(count, format: .number)
+                                .font(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(isActive ? Color.white : Color.secondary)
+                    .background(
+                        isActive
+                            ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 8)
+                            : nil
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func smartSourceRow(_ source: SmartSource) -> some View {
+        SidebarSelectionState { store.feedSelection.isEmpty && store.smartSelection == source } content: { isActive in
             Button {
-                store.selectSmartSource(.filtered)
+                store.selectSmartSource(source)
             } label: {
                 HStack(spacing: 8) {
-                    Label(SmartSource.filtered.title, systemImage: SmartSource.filtered.systemImage)
-                        .font(.callout)
+                    Label(source.title, systemImage: source.systemImage)
                     Spacer(minLength: 8)
-                    let count = store.count(for: .filtered)
+                    let count = store.count(for: source)
                     if count > 0 {
                         Text(count, format: .number)
                             .font(.caption)
@@ -1131,78 +1182,48 @@ private struct FeedSidebar: View {
                             .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
                 .contentShape(Rectangle())
-                .foregroundStyle(isActive ? Color.white : Color.secondary)
-                .background(
-                    isActive
-                        ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 8)
-                        : nil
-                )
             }
             .buttonStyle(.plain)
+            .foregroundStyle(isActive ? Color.white : Color.primary)
+            .listRowBackground(
+                isActive
+                    ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 6)
+                    : nil
+            )
         }
     }
 
-    @ViewBuilder
-    private func smartSourceRow(_ source: SmartSource) -> some View {
-        let isActive = store.feedSelection.isEmpty && store.smartSelection == source
-        Button {
-            store.selectSmartSource(source)
-        } label: {
-            HStack(spacing: 8) {
-                Label(source.title, systemImage: source.systemImage)
-                Spacer(minLength: 8)
-                let count = store.count(for: source)
-                if count > 0 {
-                    Text(count, format: .number)
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isActive ? Color.white : Color.primary)
-        .listRowBackground(
-            isActive
-                ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 6)
-                : nil
-        )
-    }
-
-    @ViewBuilder
     private func categorySourceRow(_ category: ArticleCategory) -> some View {
-        let isActive = store.feedSelection.isEmpty && store.categorySelection == category.id
-        Button {
-            store.selectCategory(category.id)
-        } label: {
-            HStack(spacing: 8) {
-                Label {
-                    Text(category.name.isEmpty ? String(localized: "Untitled") : category.name)
-                } icon: {
-                    Circle().fill(Color(nookHex: category.colorHex)).frame(width: 10, height: 10)
+        SidebarSelectionState { store.feedSelection.isEmpty && store.categorySelection == category.id } content: { isActive in
+            Button {
+                store.selectCategory(category.id)
+            } label: {
+                HStack(spacing: 8) {
+                    Label {
+                        Text(category.name.isEmpty ? String(localized: "Untitled") : category.name)
+                    } icon: {
+                        Circle().fill(Color(nookHex: category.colorHex)).frame(width: 10, height: 10)
+                    }
+                    Spacer(minLength: 8)
+                    let count = store.count(forCategory: category.id)
+                    if count > 0 {
+                        Text(count, format: .number)
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
+                    }
                 }
-                Spacer(minLength: 8)
-                let count = store.count(forCategory: category.id)
-                if count > 0 {
-                    Text(count, format: .number)
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(isActive ? Color.white.opacity(0.85) : Color.secondary)
-                }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .foregroundStyle(isActive ? Color.white : Color.primary)
+            .listRowBackground(
+                isActive
+                    ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 6)
+                    : nil
+            )
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(isActive ? Color.white : Color.primary)
-        .listRowBackground(
-            isActive
-                ? RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.accentColor).padding(.horizontal, 6)
-                : nil
-        )
     }
 
     /// Acts on the whole feed selection when the right-clicked feed is part of
@@ -1288,6 +1309,57 @@ private struct FeedSidebar: View {
                 Text(title)
             }
         }
+    }
+}
+
+/// The sidebar List's sections, compared by the values they draw from the
+/// sidebar's own state. Store data they render is observed in this body, and
+/// the selection highlight in each row's `SidebarSelectionState`; the sidebar's
+/// closures and remaining state are only written by actions, so they are left
+/// out of the comparison (a held copy writes the same `@State` storage).
+private struct FeedSidebarSections: View, Equatable {
+    let sidebar: FeedSidebar
+    let dropTargetFolder: String?
+    let isTopLevelDropTargeted: Bool
+    let collapsedFoldersData: Data
+    let ownPublicationURL: String
+    let drafts: [PlusDraft]
+
+    nonisolated static func == (lhs: FeedSidebarSections, rhs: FeedSidebarSections) -> Bool {
+        lhs.dropTargetFolder == rhs.dropTargetFolder
+            && lhs.isTopLevelDropTargeted == rhs.isTopLevelDropTargeted
+            && lhs.collapsedFoldersData == rhs.collapsedFoldersData
+            && lhs.ownPublicationURL == rhs.ownPublicationURL
+            && lhs.drafts == rhs.drafts
+    }
+
+    var body: some View {
+        sidebar.sections
+    }
+}
+
+/// Evaluates a sidebar row's "is this the current source" in its own body.
+///
+/// The sidebar's body builds every feed row, so a selection read there re-ran all
+/// of them (and their menus) on every source switch. Reading it here confines that
+/// observation to the one row whose highlight it decides.
+private struct SidebarSelectionState<Content: View>: View {
+    let isActive: () -> Bool
+    @ViewBuilder let content: (Bool) -> Content
+
+    var body: some View {
+        content(isActive())
+    }
+}
+
+/// A context menu's items as a child view, built when the menu needs them rather
+/// than with the row (same reason as `ArticleRowMenu`): the feed menu sorts the
+/// folder list and reads the feed selection.
+private struct DeferredMenuContent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
     }
 }
 
