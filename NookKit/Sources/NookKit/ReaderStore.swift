@@ -1078,30 +1078,31 @@ public final class ReaderStore {
             ArticleRowModel($0, feedDisplayTitle: oldFeedTitles[$0.feedID], isSavedOffline: oldSavedIDs.contains($0.id))
                 == ArticleRowModel($1, feedDisplayTitle: feedTitles[$1.feedID], isSavedOffline: savedIDs.contains($1.id))
         }
-        let oldSet = Set(oldIDs)
-        let newSet = Set(newIDs)
-        let reordered = oldIDs.filter(newSet.contains) != newIDs.filter(oldSet.contains)
         // A sort toggle is part of the source. A data reorder keeps the grown window,
-        // which is still a prefix of the new full result, and only suppresses animation.
+        // which is still a prefix of the new full result, and only suppresses animation
+        // (shouldAnimateDisplay's relative-order check).
         let replacement = !sameIDs && replacesList
+        #if os(macOS)
         let length = ArticleListWindow.length(total: result.count, previousTotal: old.count,
             previousLength: previousLength, replacement: replacement,
             selectedIndex: selectedID.flatMap { indexByID[$0] })
         let rows = rowModels(result.prefix(length), feedTitles: feedTitles, savedIDs: savedIDs)
-        #if os(macOS)
         // The AppKit table's row heights need these widths; measured here, off the
         // main thread on the filter executor, the install finds them cached.
         if ArticleRowTextWidths.prefillEnabled.load(ordering: .relaxed) {
             ArticleRowTextWidths.shared.trim(keeping: indexByID)
             ArticleRowTextWidths.shared.prefill(rows)
         }
+        #else
+        // iOS lists render `displayedArticles` directly; the window is macOS-only.
+        let rows: [ArticleRowModel] = []
         #endif
         return DisplayResult(full: result, indexByID: indexByID,
             rows: rows,
             feedTitles: feedTitles, savedIDs: savedIDs, identical: identical,
             replacesList: replacement,
             willAnimate: shouldAnimateDisplay(oldIDs: oldIDs, newIDs: newIDs, animated: animated,
-                replacesList: replacesList || reordered, isBulkImporting: bulk, isBatchRefreshing: batch))
+                replacesList: replacesList, isBulkImporting: bulk, isBatchRefreshing: batch))
     }
 
     nonisolated static func rowModels(_ articles: ArraySlice<Article>, feedTitles: [Feed.ID: String],
@@ -1169,10 +1170,12 @@ public final class ReaderStore {
 
     nonisolated static func shouldAnimateDisplay(oldIDs: [Article.ID], newIDs: [Article.ID],
         animated: Bool, replacesList: Bool, isBulkImporting: Bool, isBatchRefreshing: Bool) -> Bool {
+        // The flag checks first: a source switch never pays for the sets.
+        guard animated, !replacesList, !isBulkImporting, !isBatchRefreshing,
+              !oldIDs.isEmpty, oldIDs != newIDs else { return false }
         let oldSet = Set(oldIDs)
         let newSet = Set(newIDs)
-        return animated && !replacesList && !isBulkImporting && !isBatchRefreshing
-            && oldIDs != newIDs && !oldSet.isEmpty && !oldSet.isDisjoint(with: newIDs)
+        return !oldSet.isDisjoint(with: newIDs)
             && oldSet.symmetricDifference(newSet).count <= Self.maxAnimatedRowDelta
             && oldIDs.filter(newSet.contains) == newIDs.filter(oldSet.contains)
     }
