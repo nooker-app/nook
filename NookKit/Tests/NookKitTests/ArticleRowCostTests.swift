@@ -90,10 +90,18 @@ struct ArticleRowCostTests {
         func saved(_ id: Article.ID) -> Bool? { store.listWindow.rows.first { $0.id == id }?.isSavedOffline }
         store.listWindow.setSavedOffline("row-3", true)
         store.listWindow.setSavedOffline("row-4", true)
+        store.listWindow.setSavedOffline("row-250", true) // beyond the 200-row window
         #expect(saved("row-3") == true)
-        store.offlineCopiesRemoved(["row-3"])
+        var purgedAge: TimeInterval?
+        store.purgeExpiredOffline(maxAge: 1_209_600) { maxAge, _ in
+            purgedAge = maxAge
+            return ["row-3", "row-250"]
+        }
+        #expect(purgedAge == 1_209_600)
         #expect(saved("row-3") == false)
         #expect(saved("row-4") == true)
+        store.listWindow.ensureVisible(id: "row-250")
+        #expect(saved("row-250") == false, "a purged row built later by growth carries no badge")
     }
     #endif
 

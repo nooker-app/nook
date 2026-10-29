@@ -3419,7 +3419,13 @@ public final class ReaderStore {
     public func purgeExpiredOffline() {
         OfflineArticleStore.shared.loadIfNeeded()
         guard let maxAge = offlineExpiry.maxAge else { return }
-        offlineCopiesRemoved(OfflineArticleStore.shared.purge(olderThan: maxAge, now: Date()))
+        purgeExpiredOffline(maxAge: maxAge) { OfflineArticleStore.shared.purge(olderThan: $0, now: $1) }
+    }
+
+    /// The purge with its store call injected, so a test can drive the real
+    /// forwarding without touching the shared offline store on disk.
+    func purgeExpiredOffline(maxAge: TimeInterval, purge: (TimeInterval, Date) -> [Article.ID]) {
+        offlineCopiesRemoved(purge(maxAge, Date()))
     }
 
     /// Copies removed in bulk (expiry). Rows carry their offline flag in their
