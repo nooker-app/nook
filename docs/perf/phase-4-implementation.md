@@ -183,3 +183,75 @@ main `ea35ab6` 기준. 이번에는 워크트리에서 `make perf-build`와 `too
   - 사이드바 하이라이트, 폴더 접기, 드래그 앤 드롭 대상 표시.
   - 피드와 폴더 컨텍스트 메뉴의 내용(다중 선택 라벨 포함).
   - reader에서 next/previous를 빠르게 두 번 눌렀을 때 push 전환이 보이는지.
+
+## Fix round 2
+
+main `53e39c7` 기준. 측정은 이 worktree의 `make perf-build`와 `tools/perf/run.sh`로 했다. push는 하지 않았다.
+
+### 결론
+
+- **T4 회귀의 원인은 행의 지역화 문자열 조회였다.** 행 메타데이터 줄의 `Text("·")` 2개와 `Text("\(n) min")`이 새 행이 나타날 때마다 키를 environment locale로 해석했다. macOS에서는 이 경로(`localizedAttributedStringForKey:` → `_copyStringTable` → plist 파싱)가 매번 string table을 다시 읽는다. 등속 스크롤 13 s 동안 메인 스레드 샘플 3,685개 중 645개(약 17%, 새 행당 약 4 ms)가 여기에 쓰였다. 문자열을 한 번만 해석해 verbatim으로 그리도록 바꿨다. 이 비용은 p2f2에도 있었다. 수정 후 T4는 p2f2보다 낫다.
+- **스크롤 중 rowcontent 증가는 회귀가 아니었다.** T4만 단독으로 실행하는 스크립트(T3 종료 상태에 의존하지 않음)로 재면 rowcontent가 p2f2, a94b0e9, HEAD 모두 829–833으로 같다. 코디네이터 표의 262 대 474 차이는 T3가 끝난 위치(선택 행과 윈도 길이)가 달라서 생긴다. growth stall에서 `rowcontent x436`도 p2f2에 있던 동작이다(p2f2 growth stall에도 `list.rowcontentx1682`, `x1414`가 있다). closure 실행은 값 하나를 감쌀 뿐이라 싸다. stall의 실제 비용은 보이는 행의 높이 측정이다.
+- **f27c9d0(plain row)는 CPU를 늘리지 않았다.** bisect에서 hitch가 a94b0e9→f27c9d0 사이에서 올라 보였다(T4 단독 평균 43→60). 하지만 Time Profiler로 보면 plain row와 translating row의 T4 메인 스레드 작업량은 같다(3,685 대 3,844 샘플). hitch 지표는 실행마다 ±15 정도 흔들린다. 다른 worktree의 빌드와 실행이 같은 머신에서 돌았기 때문으로 보인다. plain row는 그대로 두었다.
+- 사이드바 MEDIUM, 번역 토글 LOW, NIT 2개는 모두 수정했다. A14(약 200 ms, breadcrumb 툴바 재배치)는 손대지 않았다.
+
+### 커밋
+
+| 커밋 | 내용 |
+|---|---|
+| fix: redraw the sidebar's My Nook row while following it | 리뷰 MEDIUM. `FeedSidebarSections`가 `isFollowingOwnFeed`를 필드로 갖고 `==`에서 비교한다. 타입 문서에 규칙을 적었다: `sections`가 읽는 `FeedSidebar`의 모든 `@State`/`@AppStorage`는 비교 필드여야 한다. 감사 결과 나머지 state는 action에서만 쓰이거나 `body` modifier(alert, sheet, action bar)에서만 읽힌다. 소스 guard `sidebarSectionsCompareReadState`를 추가했다. action 전용 allowlist에 없는 state가 섹션 필드와 `==`에 없으면 실패한다 |
+| perf: resolve list row metadata strings once | T4 회귀. `ArticleRowStrings`가 `·`, `Unknown Feed`, `%lld min`(값별 캐시, `AppLanguage.formattingLocale`)을 한 번만 해석한다. UI 언어는 재실행할 때만 바뀌므로 캐시가 낡지 않는다. 문자열 카탈로그 키는 그대로다 |
+| fix: translate on-screen list titles as soon as translation turns on | 리뷰 LOW. 리뷰의 (b)안에 순서 문제 대응을 더했다. ① `ListTitleTranslator`가 id마다 보이는 행 뷰 수를 센다. 교체 중에는 이전 테이블과 새 테이블의 행이 함께 보이므로, 마지막 행 뷰가 사라질 때만 작업을 취소한다. AppKit이 appear와 disappear 중 무엇을 먼저 부르든 결과가 같다. ② 켠 뒤(또는 언어·provider 변경 뒤) 1 s 안에 나타난 행은 dwell을 건너뛴다. `finish`의 재스케줄은 카운트를 올리지 않도록 `scheduleTranslation`을 직접 부른다. 테스트 `enableRebuildTranslatesAtOnce`가 두 순서를 모두 검사하고, 창 밖 행은 여전히 dwell을 기다리는지도 검사한다 |
+| fix: keep an animated publish's hidden-selection clear outside its spring | NIT. install 안의 prune은 `!result.willAnimate`일 때만 한다. 애니메이션 in-place publish는 전처럼 install 뒤에 prune한다. 전환(A14)은 애니메이션이 없으므로 install 안에서 prune한다 |
+| test: drive the offline badge purge test through purgeExpiredOffline | NIT. `purgeExpiredOffline(maxAge:purge:)`로 store 호출을 주입한다. 테스트가 실제 전달 경로를 거치고, 공유 오프라인 저장소(디스크)는 건드리지 않는다. 윈도 밖 행(row-250)이 나중에 growth로 만들어질 때 badge가 없는지도 검사한다 |
+
+### T4 bisect (T4 단독 스크립트, translation off, hitchRatio)
+
+스크립트는 `{"setup": selectSmart all, "action": constantScroll 1500 px/s × 12 s}`이다. rowcontent는 모든 빌드에서 829–833, worstStall은 0이다.
+
+| 빌드 | hitchRatio (실행별) |
+|---|---|
+| p2f2 `2668222` | 49.6, 47.3, 36.1 |
+| a94b0e9 | 40.3, 41.3, 48.6 |
+| f27c9d0 | 60.1, 49.7, 69.0 |
+| HEAD 이전(`0b64bb1`, p4f1+사이드바) | 67.6, 59.0, 65.1 |
+| 같은 빌드, `onScrollPhaseChange` 제거(실험) | 65.2, 61.5, 58.2, 77.5 (`T3,T4` 실행) |
+| 같은 빌드, 항상 translating row(실험) | 25.3, 56.9, 38.7 |
+| **문자열 수정 후 (`3e34996`)** | **32.2, 29.0, 30.4, 26.5** |
+
+Time Profiler(T4 구간, 메인 스레드)의 결과는 다음과 같다.
+- 수정 전에는 `NSTableRowData _doAutomaticRowHeightForRowView` 1,387샘플 중 `LocalizedStringKey.resolve` 645, `_copyStringTable` 459, plist 파싱 353이었다.
+- 수정 후에는 `_doAutomaticRowHeightForRowView` 1,221샘플이고, 지역화 관련 샘플은 0이다.
+- 남은 행 비용은 SwiftUI 텍스트 레이아웃(`NSStringDrawingEngine`, 약 600)과 stack layout이다.
+
+### 측정 (코디네이터 방식, before = `53e39c7`/`0b64bb1`, after = `3e34996`/`911de1b`)
+
+| 시나리오 | 지표 | before | after |
+|---|---|---|---|
+| T4 off (`--only T3,T4`) | hitchRatio (실행별) | 71.9, 64.2, 73.6, 87.7, 85.2, 69.1 | 27.1, 33.8, 46.6 |
+| T4 off | worstStall | 0 ×5, 177(growth) ×1 | 0, 0, 0 |
+| T3 off | worstStall / stalls100 | 288–717 (중앙값 435) / 3–16 | 222, 177, 169 / 6, 4, 5 |
+| T4 on (`--only T3,T4`) | hitchRatio / worstStall | 81.0 / 0, 68.4 / 181 | 43.9 / 0, 51.4 / 0 |
+| T3 on | worstStall / stalls100 | 273 / 6, 565 / 15 | 324 / 8, 200 / 7 |
+| A1 (warm 중앙값, 2회) | worstStall / ttfr | 128 / 202, 131 / 196 | 125 / 195, 122 / 185 |
+| A14 (warm 중앙값, 2회) | worstStall / ttfr | 206 / 246, 201 / 245 | 200 / 242, 200 / 243 |
+
+A1과 A14의 after는 `911de1b`(최종 HEAD)에서, T4 off의 after는 `3e34996`에서 쟀다. 이후 커밋은 번역기 visibility 카운트, prune 위치, 테스트뿐이며 번역 off 스크롤 경로를 바꾸지 않는다.
+
+### 남은 것
+
+- **A 게이트(<100 ms)와 A14**: 그대로다. A1의 남은 stall 약 120 ms는 전환 1회에 보이는 행 35개의 자동 높이 측정(텍스트 레이아웃)과 첫 렌더다. A14에는 breadcrumb 재배치 약 30 ms와 reader 처리가 더해진다. 문자열 수정이 행 생성 비용을 조금 줄였지만(A1 ttfr 약 −10 ms) 게이트에는 닿지 않는다. fix round 1의 판단은 그대로다. 고정 또는 캐시된 행 높이와 셀 재사용이 필요하고, 이는 Phase 5 범위다.
+- **growth stall**: growth는 ForEach closure를 윈도 전체에 대해 다시 실행한다(p2f2와 같다). stall이 될 때의 비용은 같은 턴에 다시 측정되는 보이는 행이다. 이번 after 실행에서는 T4에서 growth stall이 재현되지 않았다(T4 on 1회에서 growth가 있었지만 stall은 50 ms 미만). 근본 처리는 Phase 5 범위다.
+- **A그룹 hitchRatio 상승**: 이번 A1과 A14의 before/after는 같은 범위(420–890)였다. T4에서 확인했듯 이 지표는 머신 부하에 따라 ±15% 흔들린다. 같은 시점에 같은 머신에서 다시 재야 비교할 수 있다.
+- **수동 확인**:
+  - 번역을 켰을 때 화면 행이 1.5 s를 기다리지 않고 바로 번역되는지.
+  - My Nook을 처음 팔로우할 때 spinner가 나타났다가 사라지는지, 버튼이 비활성화되는지.
+  - 행 메타데이터 줄(`·`, "n min")이 ja/ko/zh-Hans에서 이전과 같은지.
+
+### 검증
+
+- 커밋마다 `make build` 통과. `git diff --check` 통과.
+- `swift test --package-path NookKit --filter "ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness"`(600 s 제한): 63개 통과.
+- 전체 suite와 iOS 빌드는 실행하지 않았다. 공용 코드에서 바뀐 것은 다음과 같다.
+  - `ListTitleTranslator`의 visibility 카운트. iOS도 같은 rowAppeared/rowDisappeared 쌍을 부르므로 동작이 같다.
+  - `ReaderStore`의 macOS 블록 안 prune 조건과 `purgeExpiredOffline` 분리.
