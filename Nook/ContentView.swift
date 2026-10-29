@@ -2895,7 +2895,9 @@ private struct ReaderDetailView: View {
     private func navigateReader(forward: Bool) {
         readerNavForward = forward
         withAnimation(.easeInOut(duration: 0.3)) {
-            if forward { store.selectNextArticle() } else { store.selectPreviousArticle() }
+            store.readerSelection.passingThrough {
+                if forward { store.selectNextArticle() } else { store.selectPreviousArticle() }
+            }
         }
     }
 

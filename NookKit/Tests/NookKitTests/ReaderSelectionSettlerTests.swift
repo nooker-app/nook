@@ -37,6 +37,19 @@ struct ReaderSelectionSettlerTests {
         #expect(settler.settledID == nil, "the cancelled hold does not land afterwards")
     }
 
+    @Test("Reader navigation passes through a hold so it lands in the caller's transaction")
+    func navigationPassesThrough() {
+        let clock = Clock()
+        let settler = ReaderSelectionSettler(settle: .milliseconds(40), now: { clock.now })
+        settler.selectionChanged(to: "a")
+        clock.advance(.milliseconds(10))
+        settler.passingThrough { settler.selectionChanged(to: "b") }
+        #expect(settler.settledID == "b", "a quick second next/previous is not held")
+        clock.advance(.milliseconds(10))
+        settler.selectionChanged(to: "c")
+        #expect(settler.settledID == "b", "list repeats are still held afterwards")
+    }
+
     #if os(macOS)
     @Test("The store's reader article follows the selection through the settler")
     func storeReaderArticle() {

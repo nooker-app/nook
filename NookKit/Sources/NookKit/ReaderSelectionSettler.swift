@@ -21,6 +21,7 @@ public final class ReaderSelectionSettler {
     @ObservationIgnored private var lastChange: ContinuousClock.Instant?
     @ObservationIgnored private var pendingID: Article.ID?
     @ObservationIgnored private var pendingTask: Task<Void, Never>?
+    @ObservationIgnored private var passesThrough = false
 
     public init(settle: Duration = .milliseconds(150),
                 now: @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }) {
@@ -28,11 +29,21 @@ public final class ReaderSelectionSettler {
         self.now = now
     }
 
+    /// Applies the selection changes `body` makes without holding them, so they
+    /// land in the caller's transaction. Reader-pane next/previous is one
+    /// deliberate step per action with its own push transition, however quickly
+    /// the next one follows; only list key repeat is coalesced.
+    public func passingThrough(_ body: () -> Void) {
+        passesThrough = true
+        defer { passesThrough = false }
+        body()
+    }
+
     public func selectionChanged(to id: Article.ID?) {
         let instant = now()
         defer { lastChange = instant }
         let isRepeat = lastChange.map { instant - $0 < settle } ?? false
-        guard id != nil, isRepeat else {
+        guard id != nil, isRepeat, !passesThrough else {
             pendingTask?.cancel()
             pendingTask = nil
             pendingID = nil
