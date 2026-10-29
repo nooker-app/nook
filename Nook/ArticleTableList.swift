@@ -344,11 +344,16 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     private func cell(_ cell: ArticleTableCellView, reportedHeight height: CGFloat) {
         guard let model = cell.model, let row = window.rowIndex(of: model.id),
               tableView.view(atColumn: 0, row: row, makeIfNecessary: false) === cell else { return }
-        guard heights.record(height, for: model, width: column.width, translation: translation(for: model)) else {
+        let translation = translation(for: model)
+        #if DEBUG
+        let given = heights.height(for: model, width: column.width, translation: translation)
+        #endif
+        guard heights.record(height, for: model, width: column.width, translation: translation) else {
             return
         }
         #if DEBUG
         MainThreadLog.add("list.row.height", ms: 0)
+        MainThreadLog.note("list.table.height.fix", extra: "row=\(row) given=\(given) laidOut=\(height) width=\(column.width) translated=\(translation != nil) titleChars=\(model.title.count) summaryChars=\(model.summary.count)")
         #endif
         pendingHeightIDs.insert(model.id)
         guard heightFlushTask == nil else { return }
@@ -421,7 +426,8 @@ final class ArticleTableView: NSTableView {
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76
-        if isReturn, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty, onReturn?() == true {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
+        if isReturn, modifiers.isEmpty, onReturn?() == true {
             return
         }
         super.keyDown(with: event)

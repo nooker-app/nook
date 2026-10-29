@@ -135,6 +135,7 @@ public final class ArticleTableRowHeights {
         let isRead: Bool
         let isStarred: Bool
         let isSavedOffline: Bool
+        let hasCategories: Bool
         let translation: String?
     }
 
@@ -143,6 +144,17 @@ public final class ArticleTableRowHeights {
     private var widths: [Article.ID: TextWidths] = [:]
     private var measured: [Article.ID: (key: HeightKey, height: CGFloat)] = [:]
     private var translationWidths: [String: CGFloat] = [:]
+    /// What category chips and a translated-title block do to a row's height
+    /// beyond the calibrated parts, learned from the first row of each kind that
+    /// reports its height. The calibration row has neither: chips resolve their
+    /// names from the live category definitions and a block needs a live
+    /// translation. Both lay out within a point of the estimate (a chip line is
+    /// half a point shorter than the invisible chip that reserves it).
+    private var adjustments: [Int: CGFloat] = [:]
+
+    private static func adjustmentKind(_ model: ArticleRowModel, _ translation: String?) -> Int {
+        (model.categories.isEmpty ? 0 : 1) | (translation == nil ? 0 : 2)
+    }
     /// Title/summary fonts the widths were measured with: a different system font
     /// size (never expected on macOS) drops every cached width.
     private let titleRegular: NSFont
@@ -172,7 +184,7 @@ public final class ArticleTableRowHeights {
     public func height(for model: ArticleRowModel, width: CGFloat, translation: String?) -> CGFloat {
         let key = HeightKey(width: width, title: model.title, summary: model.summary, isRead: model.isRead,
                             isStarred: model.isStarred, isSavedOffline: model.isSavedOffline,
-                            translation: translation)
+                            hasCategories: !model.categories.isEmpty, translation: translation)
         if let entry = measured[model.id], entry.key == key { return entry.height }
         return estimate(for: model, width: width, translation: translation)
     }
@@ -183,10 +195,17 @@ public final class ArticleTableRowHeights {
     public func record(_ height: CGFloat, for model: ArticleRowModel, width: CGFloat, translation: String?) -> Bool {
         let key = HeightKey(width: width, title: model.title, summary: model.summary, isRead: model.isRead,
                             isStarred: model.isStarred, isSavedOffline: model.isSavedOffline,
-                            translation: translation)
+                            hasCategories: !model.categories.isEmpty, translation: translation)
         let previous = measured[model.id].flatMap { $0.key == key ? $0.height : nil }
             ?? estimate(for: model, width: width, translation: translation)
         measured[model.id] = (key, height)
+        let kind = Self.adjustmentKind(model, translation)
+        if kind != 0 {
+            let delta = height - (estimate(for: model, width: width, translation: translation) - (adjustments[kind] ?? 0))
+            // Only a sub-line difference; anything larger is a line count the
+            // estimate got wrong for this row alone (or a reveal in progress).
+            if abs(delta) < 2 { adjustments[kind] = delta }
+        }
         return abs(previous - height) > 0.25
     }
 
@@ -201,6 +220,7 @@ public final class ArticleTableRowHeights {
         let titleLines = text.titleBreaks || text.titleWidth > titleWidth ? 2 : 1
         let summaryLines = model.summary.isEmpty ? 0 : (text.summaryBreaks || text.summaryWidth > textWidth ? 2 : 1)
         var height = metrics.rows[titleLines - 1][summaryLines]
+        height += adjustments[Self.adjustmentKind(model, translation)] ?? 0
         if let translation {
             let available = textWidth - metrics.translationInset
             let lines = translation.isEmpty ? 1

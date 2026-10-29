@@ -125,10 +125,10 @@ struct ArticleTableModelTests {
     }
 
     private func model(_ id: String, title: String, summary: String = "s", read: Bool = false,
-                       starred: Bool = false) -> ArticleRowModel {
+                       starred: Bool = false, categories: [String] = []) -> ArticleRowModel {
         ArticleRowModel(id: id, feedID: "a", title: title, summary: summary, isRead: read, isStarred: starred,
                         publishedAt: Date(timeIntervalSince1970: 0), feedDisplayTitle: nil, readMinutes: 1,
-                        categories: [], isSavedOffline: false)
+                        categories: categories, isSavedOffline: false)
     }
 
     @Test("Heights follow line counts per width, from text widths measured once")
@@ -173,6 +173,28 @@ struct ArticleTableModelTests {
                                translation: nil) == 90)
         heights.forgetMeasured()
         #expect(heights.height(for: row, width: 400, translation: nil) == 74)
+    }
+
+    @Test("The first row of a kind teaches every other row of it its sub-point height")
+    func categoryChipsLearnTheirHeight() {
+        let heights = ArticleTableRowHeights(metrics: metrics)
+        let first = model("a", title: "x", categories: ["c"])
+        let second = model("b", title: "y", categories: ["c"])
+        #expect(heights.height(for: second, width: 400, translation: nil) == 74)
+        #expect(heights.record(73.5, for: first, width: 400, translation: nil) == true)
+        #expect(heights.height(for: second, width: 400, translation: nil) == 73.5)
+        // Untagged rows keep the calibrated height, and a wrong line count is not learned.
+        #expect(heights.height(for: model("c", title: "z"), width: 400, translation: nil) == 74)
+        heights.record(90, for: model("d", title: "w", categories: ["c"]), width: 400, translation: nil)
+        #expect(heights.height(for: second, width: 400, translation: nil) == 73.5)
+        // A translated row learns separately from an untranslated one.
+        #expect(heights.height(for: second, width: 400, translation: "t") == CGFloat(101))
+        heights.record(101.5, for: first, width: 400, translation: "t")
+        #expect(heights.height(for: second, width: 400, translation: "t") == CGFloat(101.5))
+        #expect(heights.height(for: second, width: 400, translation: nil) == 73.5)
+        // Losing its chips is a different height: the reported one no longer applies.
+        heights.record(73.5, for: first, width: 400, translation: nil)
+        #expect(heights.height(for: model("a", title: "x"), width: 400, translation: nil) == 74)
     }
 }
 #endif
