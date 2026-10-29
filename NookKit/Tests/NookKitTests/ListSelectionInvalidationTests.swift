@@ -15,7 +15,16 @@ import Testing
 @Suite("List selection invalidation", .serialized)
 @MainActor
 struct ListSelectionInvalidationTests {
-    final class Counter { var count = 0; func bump() { count += 1 } }
+    final class Counter {
+        var count = 0
+        /// Row values the closure was handed, so a test can tell the snapshot
+        /// child received new data and not merely ran again.
+        var seen: Set<Int> = []
+        func bump(_ row: Int? = nil) {
+            count += 1
+            if let row { seen.insert(row) }
+        }
+    }
 
     @Observable final class Model {
         var selection: Int?
@@ -68,7 +77,7 @@ struct ListSelectionInvalidationTests {
         let counter: Counter
         var body: some View {
             ForEach(rows, id: \.self) { row in
-                let _ = counter.bump()
+                let _ = counter.bump(row)
                 Text("Row \(row)").tag(row)
             }
         }
@@ -182,6 +191,22 @@ struct ListSelectionInvalidationTests {
             await Self.settle(host)
         }
         #expect(counter.count == 0)
+
+        // Rows alone (growth, ensureVisible, an incremental install, a patch)
+        // change without a generation bump: the snapshot must still be re-cut and
+        // reach the ForEach, not stay pinned to the first window.
+        counter.count = 0
+        counter.seen = []
+        model.rows.append(500)
+        await Self.settle(host)
+        #expect(counter.count > 0, "an appended row did not re-run the snapshot child")
+        #expect(counter.seen.contains(500), "the ForEach never received the appended row")
+        counter.count = 0
+        counter.seen = []
+        model.rows[0] = 900
+        await Self.settle(host)
+        #expect(counter.count > 0, "a patched row did not re-run the snapshot child")
+        #expect(counter.seen.contains(900), "the ForEach never received the patched row")
     }
 
     @Test("a separately observed rows child under a replaced parent costs twice a fresh List")
@@ -210,10 +235,19 @@ struct ListSelectionInvalidationTests {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let source = try String(contentsOf: root.appendingPathComponent("Nook/ContentView.swift"), encoding: .utf8)
-        let rootView = try #require(source.components(separatedBy: "private extension ContentView").first)
-        let reads = rootView.components(separatedBy: "store.selectedArticle").dropFirst()
-            .filter { !$0.hasPrefix("ID") }
-        #expect(reads.isEmpty)
+        // The root struct and its extensions, up to the first leaf view: computed
+        // views in an extension (`browserGrabber`, `browserOverlay`) run inside the
+        // root body just the same. Only event handlers may resolve the selection.
+        let rootStart = try #require(source.range(of: "struct ContentView: View {"))
+        let rootEnd = try #require(source.range(of: "\nprivate struct ", range: rootStart.upperBound..<source.endIndex))
+        let rootSource = String(source[rootStart.lowerBound..<rootEnd.lowerBound])
+        let eventOnly: Set<String> = ["resolvePresentedBrowserMode"]
+        let readers = Self.declarations(in: rootSource).filter { _, text in
+            text.components(separatedBy: "store.selectedArticle").dropFirst().contains { !$0.hasPrefix("ID") }
+        }.map(\.name)
+        #expect(!readers.isEmpty || !rootSource.contains("resolvePresentedBrowserMode"),
+                "the guard no longer sees the event handler it allows; its scan is broken")
+        #expect(Set(readers).isSubset(of: eventOnly), "selection read in root body path: \(readers)")
         let listOuter = try #require(source.components(separatedBy: "private struct ArticleListView: View").last?
             .components(separatedBy: "private struct ArticleListRows: View").first)
         #expect(!listOuter.contains(".id(store.listGeneration)"))
@@ -227,6 +261,43 @@ struct ListSelectionInvalidationTests {
             .components(separatedBy: "private struct ArticleRowMenu: View").first)
         #expect(contents.contains("ForEach(rows)"))
         #expect(!contents.contains("store.listWindow.rows"))
+    }
+
+    @Test("Rows are built from their model and the reader follows the settled selection")
+    func rowAndReaderSourceGuard() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("Nook/ContentView.swift"), encoding: .utf8)
+        func section(_ start: String, _ end: String) throws -> String {
+            try #require(source.components(separatedBy: start).last?.components(separatedBy: end).first)
+        }
+        // The per-row closure runs for the whole window on every rows change.
+        let contents = try section("private struct ArticleListRowContents: View", "private struct ArticleRowMenu: View")
+        for lookup in ["store.feed(for:", "titleTranslator.box(", "OfflineArticleStore", "categories(for"] {
+            #expect(!contents.contains(lookup), "per-row closure resolves \(lookup)")
+        }
+        #expect(contents.contains("ArticleRowMenu(store: store, id: row.id)"))
+        #expect(contents.contains("ArticleRowSwipeActions(store: store, id: row.id)"))
+        let row = try section("private struct ArticleRow: View, Equatable", "private struct ArticleRowCategoryBadges: View")
+        for lookup in ["store.feed(for:", "OfflineArticleStore", "categories(for", "ListTitleTranslationBlock("] {
+            #expect(!row.contains(lookup), "row body resolves \(lookup)")
+        }
+        #expect(row.contains("RelativeTimeText(model.publishedAt)"))
+        #expect(row.contains("ListTitleTranslationSlot("))
+        let reader = try section("private struct ReaderDetailView: View", "private struct TranslationBanner: View")
+        #expect(reader.contains("store.readerArticle"))
+        #expect(!reader.contains("store.selectedArticle"))
+    }
+
+    /// Splits a type's source into member declarations (`func`/`var` at member
+    /// indentation, any modifiers or attributes before them), each with its text.
+    private static func declarations(in source: String) -> [(name: String, text: String)] {
+        let pattern = /\n    (?:@[A-Za-z]+(?:\([^)]*\))?\s+)*(?:(?:private|fileprivate|static|nonisolated|mutating)\s+)*(?:func|var)\s+([A-Za-z_][A-Za-z0-9_]*)/
+        let matches = source.matches(of: pattern)
+        return matches.enumerated().map { index, match in
+            let end = index + 1 < matches.count ? matches[index + 1].range.lowerBound : source.endIndex
+            return (String(match.output.1), String(source[match.range.lowerBound..<end]))
+        }
     }
 
     /// The control: when the body holding the `ForEach` observes the selection,
