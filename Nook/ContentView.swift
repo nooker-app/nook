@@ -1841,7 +1841,7 @@ private struct ArticleListView: View {
             } else if store.listWindow.totalCount == 0 {
                 ArticleListEmptyState(store: store)
             } else {
-                ArticleListRows(store: store, titleTranslator: titleTranslator)
+                ArticleListRows(store: store, titleTranslator: titleTranslator, translatesTitles: translateListTitles)
             }
         }
         // The source is shown by the toolbar breadcrumb instead, so no column
@@ -1910,13 +1910,19 @@ private struct ArticleListView: View {
 private struct ArticleListRows: View {
     @Bindable var store: ReaderStore
     let titleTranslator: ListTitleTranslator
+    let translatesTitles: Bool
 
     var body: some View {
         let rows = store.listWindow.rows
         List(selection: $store.selectedArticleID) {
-            ArticleListRowContents(rows: rows, store: store, titleTranslator: titleTranslator)
+            ArticleListRowContents(rows: rows, store: store, titleTranslator: titleTranslator,
+                                   translatesTitles: translatesTitles)
         }
-        .id(store.listGeneration)
+        // Toggling title translation swaps every row between the plain and the
+        // translating layout. A fresh table measures them from scratch: a row
+        // whose cached translation appears with the swap is the case the native
+        // list keeps the old height for (see `synchronizeNativeListRowHeight`).
+        .id(ArticleListIdentity(generation: store.listGeneration, translatesTitles: translatesTitles))
         .listStyle(.inset)
         // Same contract as iOS: no new title translation starts mid-scroll (its
         // reveal and streamed text re-measure rows), and settling drains the
@@ -1941,10 +1947,16 @@ private struct ArticleListRows: View {
     }
 }
 
+private struct ArticleListIdentity: Hashable {
+    let generation: Int
+    let translatesTitles: Bool
+}
+
 private struct ArticleListRowContents: View {
     let rows: [ArticleRowModel]
     let store: ReaderStore
     let titleTranslator: ListTitleTranslator
+    let translatesTitles: Bool
 
     var body: some View {
         #if DEBUG
@@ -1958,12 +1970,17 @@ private struct ArticleListRowContents: View {
             // the row's own body.
             let _ = MainThreadLog.add("list.rowcontent", ms: 0)
             #endif
-            ArticleRow(model: row, titleTranslator: titleTranslator)
+            ArticleRow(model: row, titleTranslator: titleTranslator, translatesTitles: translatesTitles)
                 .equatable()
                 .tag(row.id)
-                .onAppear { titleTranslator.rowAppeared(id: row.id, title: row.title) }
+                // One appearance hook each: the translator tracks visible rows
+                // even while translation is off, so turning it on translates
+                // what is on screen.
+                .onAppear {
+                    titleTranslator.rowAppeared(id: row.id, title: row.title)
+                    store.listWindow.rowAppeared(id: row.id)
+                }
                 .onDisappear { titleTranslator.rowDisappeared(id: row.id) }
-                .onAppear { store.listWindow.rowAppeared(id: row.id) }
                 // One view value each, not a tree each. Both closures are
                 // re-run whenever this row's content is re-evaluated —
                 // measured at 8,865 times in half a minute of scrolling,
@@ -2061,30 +2078,81 @@ private struct ArticleRowSwipeActions: View {
 /// category chips (resolved live, so a rename shows) are built only for a row
 /// that has categories. Equatable on the model: a pass over the list that hands
 /// a row the same model leaves its body alone.
+///
+/// With list-title translation off, the row is the plain layout: no translation
+/// box, slot, reveal preference or native row-height probe. The probe alone is an
+/// AppKit view inside every row's hosting view, and each of these is set up for
+/// every row that scrolls into view whether or not a title ever translates.
 private struct ArticleRow: View, Equatable {
+    let model: ArticleRowModel
+    let titleTranslator: ListTitleTranslator
+    let translatesTitles: Bool
+
+    nonisolated static func == (lhs: ArticleRow, rhs: ArticleRow) -> Bool {
+        lhs.model == rhs.model && lhs.titleTranslator === rhs.titleTranslator
+            && lhs.translatesTitles == rhs.translatesTitles
+    }
+
+    var body: some View {
+        #if DEBUG
+        // Counted, not logged: the article list is a thousand rows, and the
+        // question a stall raises is how many of them were re-evaluated, which a
+        // line each would answer unreadably.
+        let _ = MainThreadLog.add("list.row", ms: 0)
+        #endif
+        if translatesTitles {
+            TranslatingArticleRow(model: model, titleTranslator: titleTranslator)
+        } else {
+            ArticleRowLayout(model: model) { EmptyView() }
+        }
+    }
+}
+
+/// A row while list-title translation is on: the layout plus the title's
+/// translation slot, and the native row-height sync that the slot's reveal needs.
+private struct TranslatingArticleRow: View {
     let model: ArticleRowModel
     let titleTranslator: ListTitleTranslator
     /// Reveal progress of the translated-title block, used only to detect that
     /// the row height moved. Badges never move it — they live inline in the
     /// metadata line, so their arrival costs no height.
     @State private var rowRevealProgress: CGFloat = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    nonisolated static func == (lhs: ArticleRow, rhs: ArticleRow) -> Bool {
-        lhs.model == rhs.model && lhs.titleTranslator === rhs.titleTranslator
-    }
 
     var body: some View {
         // Interned on the row's first body, never ahead of it for the whole
         // window: rows that never come into view never get a box.
         let translationBox = titleTranslator.box(for: model.id, title: model.title)
+        ArticleRowLayout(model: model) {
+            ListTitleTranslationSlot(
+                title: model.title,
+                box: translationBox,
+                translator: titleTranslator
+            )
+        }
+        .onPreferenceChange(
+            NativeListRowRevealProgressKey.self
+        ) { rowRevealProgress = $0 }
+        // Observe the per-title revision at the row root. macOS native lists can
+        // otherwise keep the height measured when a freshly inserted article had
+        // no translation block, even though the child view later grows correctly.
+        // (Categories no longer feed this: their line's height is reserved up
+        // front, so a badge arriving never changes the row height.)
+        .synchronizeNativeListRowHeight(
+            progress: rowRevealProgress,
+            layoutRevision: translationBox.layoutRevision
+        )
+    }
+}
+
+/// The row's content. `translation` sits under the title line, inside the
+/// zero-spacing title group.
+private struct ArticleRowLayout<Translation: View>: View {
+    let model: ArticleRowModel
+    @ViewBuilder let translation: () -> Translation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            #if DEBUG
-            // Counted, not logged: the article list is a thousand rows, and the
-            // question a stall raises is how many of them were re-evaluated, which a
-            // line each would answer unreadably.
-            let _ = MainThreadLog.add("list.row", ms: 0)
-            #endif
             Circle()
                 .fill(model.isRead ? Color.clear : Color.accentColor)
                 .frame(width: 8, height: 8)
@@ -2116,11 +2184,7 @@ private struct ArticleRow: View, Equatable {
                         }
                     }
 
-                    ListTitleTranslationSlot(
-                        title: model.title,
-                        box: translationBox,
-                        translator: titleTranslator
-                    )
+                    translation()
                 }
 
                 Text(model.summary)
@@ -2166,20 +2230,7 @@ private struct ArticleRow: View, Equatable {
             }
         }
         .padding(.vertical, 8)
-        .onPreferenceChange(
-            NativeListRowRevealProgressKey.self
-        ) { rowRevealProgress = $0 }
-        // Observe the per-title revision at the row root. macOS native lists can
-        // otherwise keep the height measured when a freshly inserted article had
-        // no translation block, even though the child view later grows correctly.
-        // (Categories no longer feed this: their line's height is reserved up
-        // front, so a badge arriving never changes the row height.)
-        .synchronizeNativeListRowHeight(
-            progress: rowRevealProgress,
-            layoutRevision: translationBox.layoutRevision
-        )
     }
-
 }
 
 /// A row's category chips, resolved from the live definitions so a rename or

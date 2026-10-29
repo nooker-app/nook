@@ -250,13 +250,13 @@ struct ListSelectionInvalidationTests {
         #expect(Set(readers).isSubset(of: eventOnly), "selection read in root body path: \(readers)")
         let listOuter = try #require(source.components(separatedBy: "private struct ArticleListView: View").last?
             .components(separatedBy: "private struct ArticleListRows: View").first)
-        #expect(!listOuter.contains(".id(store.listGeneration)"))
+        #expect(!listOuter.contains("generation: store.listGeneration"))
         #expect(!listOuter.contains("ForEach(store.listWindow.rows)"))
         let rowsOwner = try #require(source.components(separatedBy: "private struct ArticleListRows: View").last?
             .components(separatedBy: "private struct ArticleListRowContents: View").first)
         #expect(rowsOwner.contains("let rows = store.listWindow.rows"))
         #expect(rowsOwner.contains("ArticleListRowContents(rows: rows,"))
-        #expect(rowsOwner.contains(".id(store.listGeneration)"))
+        #expect(rowsOwner.contains(".id(ArticleListIdentity(generation: store.listGeneration,"))
         let contents = try #require(source.components(separatedBy: "private struct ArticleListRowContents: View").last?
             .components(separatedBy: "private struct ArticleRowMenu: View").first)
         #expect(contents.contains("ForEach(rows)"))
