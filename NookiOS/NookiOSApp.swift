@@ -32,6 +32,9 @@ final class NookiOSDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             }
             Task { await BackgroundRefresh.handle(refreshTask) }
         }
+        #if DEBUG
+        IOSPerfDriver.startIfRequested()
+        #endif
         return true
     }
 
