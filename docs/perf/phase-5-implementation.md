@@ -134,3 +134,53 @@ T는 1회 실행이라 잡음이 크다. 이전 실행(`p5a`, 이 보고서의 �
 - `swift test --package-path NookKit --filter "ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness|ArticleTableModel"`: 72개 통과. 신규 `ArticleTableModelTests` 9개(교체/growth/패치 매핑, 증분 diff, body-only 무변경, 자동 선택 없음, 폭별 높이, 보고 높이 무효화, 종류별 보정 학습, prefill 일치, growth prefill).
 - `git diff --check`, `plutil -lint Nook.xcodeproj/project.pbxproj Nook/Nook.entitlements` 통과.
 - 개발 중 발견한 교착: 폰트를 `NSFont.preferredFont`로 만들면 filter 스레드와 메인 스레드가 같은 static 초기화에서 서로 기다렸다(테스트에서 재현). 고정 크기 system font로 바꿨다.
+
+## Fix round 1
+
+main `1cf6234` 기준. 리뷰(review-p5) 7건을 고쳤고, C3/T3·A14의 남은 stall은 원인을 확인했지만 줄이지 못했다. 측정은 이 worktree에서 `make perf-build` + `tools/perf/run.sh`로 했다(lib-5k, warm 5회 median/worst ms, T는 1회).
+
+### 고친 것
+
+| # | 문제 | 수정 |
+|---|---|---|
+| 1 | growth나 교체 install이 먼저 행을 선택하면 store의 선택(⌘↓, 위젯 딥링크, openArticle)이 화면 밖에 남음 | 선택 동기화를 NookKit `ArticleTableSelectionSync`로 옮겼다. store가 바꾼 선택은 `pendingScrollID`로 기억하고, 그 행이 생기는 첫 `follow`에서(이미 선택돼 있어도) `scrollRowToVisible`한다. 사용자가 고른 선택은 스크롤하지 않는다 |
+| 2 | `reloadData`/`insertRows`/`removeRows`/이동으로 테이블 선택이 빠지면 store에 nil을 써 reader가 닫힘 | 모든 테이블 변경을 `selection.mutate { }`로 감싼다. 그 안의 selection 변경은 store로 가지 않고, 끝나면 store 선택을 다시 맞춘다 |
+| 3 | 재사용·패치된 셀은 레이아웃 높이가 같으면 보고하지 않아 틀린 추정이 남음 | 셀이 구성될 때마다 `version`을 올리고 `onGeometryChange(for: HeightReport(version, height))`로 보고한다. 같은 높이여도 구성마다 한 번 보고된다(독립 AppKit 하네스로 확인: 버전 없는 보고는 재사용 때 0회, 버전 보고는 1회) |
+| 4 | 테이블이 사라질 때 화면 행의 translator visibility가 남음 | 컨트롤러가 `didAdd`/`didRemove`로 화면 id 개수를 세고, `dismantle`에서 남은 개수만큼 `rowDisappeared`를 부른다 |
+| 5 | 애니메이션 없는 갱신·`noteHeightOfRows`가 0초 context 밖에서 돌았음 | `willAnimate`가 아닌 insert/remove/move, `refresh`·리사이즈·보정의 `noteHeightOfRows`를 모두 `withoutAnimation`(duration 0, implicit animation off)에서 실행한다 |
+| 6 | `rowIndex(of:)`가 `rows.count`를 tracked read | `_rows.count` |
+| 7 | 폭·높이 캐시가 계속 커짐 | `ArticleRowTextWidths`는 filter executor에서 prefill 전에 `max(10_000, 결과 크기)`를 넘으면 설치할 결과의 id만 남긴다(off-main). `ArticleTableRowHeights.measured`는 소스 교체 때 2,000개를 넘으면 새 전체 결과에 있는 id만 남긴다 |
+
+- 추가로 찾은 교착: `+[NSFont initialize]`가 prefill 작업 스레드에서 처음 돌면 메인 스레드를 기다리는 알림을 보내고, 그동안 메인이 그 스레드를 기다리면 멈춘다. 테스트 묶음 실행에서 재현됐다(`ListSelectionInvalidationTests` 레이아웃 중 메인 대기). 앱은 시작 때 메인에서 NSFont를 이미 만들지만, `ArticleRowTextWidths.prepareFonts()`를 메인에서 prefill을 켜기 전에 부르게 했다(앱 시작, 테스트 suite init).
+- 테스트: 실제 `NSTableView`(view-based) 하네스로 3개를 더했다. growth가 먼저 선택한 store 선택의 스크롤, 설치 전에 선택된 딥링크의 스크롤, 선택 행 이동·교체 뒤 행 수를 넘는 선택에서 store에 쓰지 않음과 사용자 선택은 store로 감. 그리고 캐시 상한 테스트 1개. 수정을 되돌리면 앞의 3개가 실패한다(store에 `nil`이 써지고, `scrolledTo == []`).
+
+### 측정 (before = 코디네이터 측정 `1cf6234`, after = 이 라운드)
+
+| 시나리오 | before | after | 게이트 |
+|---|---|---|---|
+| A1–A13 worstStall | 0 (A8/A9 worst 56–60) | 0 (A2/A8 worst 46/58) | <100 PASS |
+| A1–A13 ttfr | 43–85 (worst ≤117) | 35–80 (worst ≤96) | ≤150 PASS |
+| A14 worstStall / ttfr | 92/110, 137/149 | 92/101, 143/155 (최종 트리) | <100 경계 |
+| C1 worstStall / hitchRatio | 0, 3 | 0/0, 5.1/30 | PASS |
+| C3 worstStall / stalls100 | 123/1 | 106/124, 1/1 | stalls100 = 0 FAIL |
+| T3 번역 on / off worstStall (stalls100) | 104 / 115 | 107 (1) / 115 (3) | |
+| T1 on/off, T2, T4 | stall 0 | stall 0 | PASS |
+
+- 스위치·스크롤·T 실행은 `36d14bb`(아래 툴바 실험 포함)에서, A14 최종값은 실험을 뺀 최종 트리 `1a77627`에서 쟀다. B1/B2는 이번 라운드에 다시 돌리지 않았다(테이블 변경 경로만 바뀜).
+- A14 setup(All에서 499번째 선택)에는 0.17–0.25 s stall이 있다. before도 같은 자리에 reader 첫 렌더로 0.17–0.22 s가 있었고, 지금은 선택 행으로 스크롤하는 비용(growth + `heightOfRow` 101회)이 더해졌다. 이게 수정 1의 올바른 동작이다. 측정 구간 밖이다.
+
+### 남은 것
+
+- **C3/T3 (단일 ~105–125 ms)**: STALL은 모두 `reader.body` 1–2회이며, 행은 5–8개다(`list.row`). 키 반복이 끝난 뒤 settle된 선택으로 reader가 처음 렌더되는 턴이다. 테이블 쪽 비용은 아니고 reader 첫 렌더를 줄여야 한다. 이번 라운드에서는 안전하게 할 방법을 찾지 못했다.
+- **A14 (~90–100 ms)**: A14 Time Profiler에서 메인 스레드 busy 샘플의 20%가 툴바다. `-[NSToolbarView layout]` 632, `updateToolbarBridge`(preferencesDidChange) 162, `NSToolbarItemViewer dealloc` 31이고, 이것이 setup과 전환마다 한 번씩 난다. 두 가지를 시험했다.
+  - 선택이 없을 때 Share 항목을 지우지 않고 disabled로 두기: 툴바 비율 19.8%, A14 89/119로 차이가 없었다.
+  - breadcrumb(principal)를 고정 폭 520으로: A14 72/86으로 내려갔지만, 툴바 샘플 비율은 20.0%로 그대로라 잡음 범위다. 게다가 시각 변경(좁은 창의 overflow, 가운데 정렬)이라 검증 없이 넣을 수 없다.
+  - 그래서 둘 다 넣지 않았다. 다음 후보는 breadcrumb의 폭 변화를 막는 것이다. 툴바 재구성의 실제 trigger(어떤 항목의 preference 변화인지)를 SwiftUI 쪽에서 더 좁혀야 한다.
+- **A6 hitchRatio 이상값(worst 1729)**: 4번 실행한 worst가 256 / 0 / 842 / 763, median은 0–215다. 측정 구간의 frame이 1–2개뿐이라, frame 하나가 늦으면 수백이 된다. 잡음이다. worstStall은 4번 모두 0(worst ≤60)이다.
+- 수동 확인: 위젯 딥링크·⌘↓로 깊은 글을 열 때 행이 보이는지(수정 1). 정렬이 바뀌는 새로고침에서 reader가 닫히지 않는지(수정 2). 대체 폰트 제목이 재사용 셀에서 잘리지 않는지(수정 3).
+
+### 검증
+
+- `make build` 통과, iOS `NookiOS` Release(generic iOS, `CODE_SIGNING_ALLOWED=NO`) 통과.
+- `swift test --package-path NookKit --filter "ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness|ArticleTableModel"`: 76개 통과, 3회 연속. 폰트 수정 전에는 이 묶음이 교착으로 멈췄다.
+- `git diff --check` 통과.
