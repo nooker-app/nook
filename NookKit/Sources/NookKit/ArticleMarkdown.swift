@@ -562,6 +562,9 @@ public struct ArticleShareMenu<MenuLabel: View>: View {
 
     @State private var isExporting = false
     @State private var copied = false
+    /// Which copy the checkmark belongs to; bumped by each copy and by a change of
+    /// article, so an earlier timer cannot clear a later checkmark.
+    @State private var copiedRun = 0
     @State private var exportDocument: MarkdownDocument?
     @State private var exportError: String?
 
@@ -591,6 +594,12 @@ public struct ArticleShareMenu<MenuLabel: View>: View {
             }
         } label: {
             label(copied)
+        }
+        // A reader that keeps this menu across articles (the macOS reader updates in
+        // place) must not show one article's "copied" on the next.
+        .onChange(of: articleURL) { _, _ in
+            copiedRun &+= 1
+            if copied { copied = false }
         }
         .fileExporter(
             isPresented: $isExporting,
@@ -639,9 +648,12 @@ public struct ArticleShareMenu<MenuLabel: View>: View {
         #endif
 
         copied = true
+        copiedRun &+= 1
+        let run = copiedRun
         Task {
             try? await Task.sleep(for: .seconds(1.5))
-            copied = false
+            // Only this copy's checkmark: a later copy, or another article, owns it now.
+            if copiedRun == run { copied = false }
         }
     }
 

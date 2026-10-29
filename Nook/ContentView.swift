@@ -2822,17 +2822,15 @@ private struct ReaderDetailView: View {
     // Translation (Apple Intelligence). Rich (contentHTML) articles stream an
     // in-place translation preserving markup; plain-body articles fall back to a
     // whole-body translation.
-    @State private var nativeTranslator = NativeArticleTranslator()
-    @State private var detectedLanguage: String?
-    @State private var translatedTitle: String?
-    @State private var translatedBody: [String]?
-    @State private var isTranslated = false
-    @State private var isTranslating = false
-    @State private var isShowingTranslation = false
-    @State private var confirmingDelete = false
-    @State private var summaryController = ArticleSummaryController()
+    //
+    // The reader is updated in place across articles (see `readerPushID`), so this
+    // state outlives the article. The session keeps it tagged with its article and
+    // reads it only for that article: a new article's first body sees a clean
+    // reader, not the previous article's translation or summary.
+    @State private var session = ReaderArticleSession()
+    /// The article the delete confirmation was raised for.
+    @State private var pendingDeleteID: Article.ID?
     @State private var summaryRequestedArticleID: String?
-    @State private var summaryArticleID: String?
     @State private var summaryGenerationID = 0
 
     private var targetLanguage: Locale.Language {
@@ -2855,7 +2853,7 @@ private struct ReaderDetailView: View {
     /// to the system Translation overlay (so the button matches iOS and never
     /// silently disappears when Apple Intelligence is off/unsupported).
     private func canTranslate(_ article: Article) -> Bool {
-        guard let detected = detectedLanguage,
+        guard let detected = session.detectedLanguage(for: article.id),
               let target = targetLanguage.languageCode?.identifier else { return false }
         let detectedBase = Locale.Language(identifier: detected).languageCode?.identifier ?? detected
         return detectedBase != target
@@ -2886,65 +2884,55 @@ private struct ReaderDetailView: View {
     }
 
     private func translationActive(_ article: Article) -> Bool {
-        renderedReaderHTML(for: article) != nil ? nativeTranslator.isActive : isTranslated
-    }
-
-    private var translationBusy: Bool {
-        nativeTranslator.isTranslating || isTranslating
+        if renderedReaderHTML(for: article) != nil {
+            return session.translator(for: article.id)?.isActive ?? false
+        }
+        return session.plainTranslation(for: article.id) != nil
     }
 
     private func displayTitle(_ article: Article) -> String {
         if renderedReaderHTML(for: article) != nil {
-            return nativeTranslator.isActive ? (nativeTranslator.translatedTitle ?? article.title) : article.title
+            guard let translator = session.translator(for: article.id), translator.isActive else { return article.title }
+            return translator.translatedTitle ?? article.title
         }
-        return isTranslated ? (translatedTitle ?? article.title) : article.title
+        return session.plainTranslation(for: article.id)?.title ?? article.title
     }
 
     /// Toggles translation: rich articles stream in place; plain-body articles
     /// translate the whole body once. A length guard keeps an "answered"
     /// imperative title from replacing the real one.
     private func toggleTranslation(_ article: Article) {
+        session.begin(articleID: article.id)
         if let html = renderedReaderHTML(for: article) {
-            if nativeTranslator.isActive {
-                nativeTranslator.stop()
+            let translator = session.translator
+            if translator.isActive {
+                translator.stop()
             } else if NaturalTranslator.isAvailable(for: TranslationSettings.readerProvider()) {
-                nativeTranslator.start(html: html, baseURL: article.url, title: article.title, into: targetLanguageName)
+                translator.start(html: html, baseURL: article.url, title: article.title, into: targetLanguageName)
             } else {
-                isShowingTranslation = true
+                session.setShowingSystemTranslation(true, for: article.id)
             }
             return
         }
 
-        if isTranslated {
-            isTranslated = false
+        if session.plainTranslation(for: article.id) != nil {
+            session.setPlainTranslationShown(false, for: article.id)
             return
         }
-        if translatedBody != nil {
-            isTranslated = true
+        if session.hasPlainTranslation(for: article.id) {
+            session.setPlainTranslationShown(true, for: article.id)
             return
         }
         guard NaturalTranslator.isAvailable(for: TranslationSettings.readerProvider()) else {
-            isShowingTranslation = true
+            session.setShowingSystemTranslation(true, for: article.id)
             return
         }
-        isTranslating = true
-        let body = article.bodyParagraphs
-        let title = article.title
         let language = targetLanguageName
         let provider = TranslationSettings.readerProvider()
-        Task {
-            defer { isTranslating = false }
-            guard
-                let titleText = try? await NaturalTranslator.translate(title, into: language, provider: provider),
-                let bodyText = try? await NaturalTranslator.translate(body.joined(separator: "\n\n"), into: language, provider: provider)
-            else { return }
-            let cleanedTitle = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
-            translatedTitle = cleanedTitle.count <= max(120, title.count * 4) ? cleanedTitle : title
-            translatedBody = bodyText
-                .components(separatedBy: "\n\n")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            isTranslated = true
+        // Tagged with the article inside the session: a result that returns after
+        // the reader moved to another article is dropped, not shown there.
+        session.translatePlainBody(articleID: article.id, title: article.title, paragraphs: article.bodyParagraphs) { text in
+            try await NaturalTranslator.translate(text, into: language, provider: provider)
         }
     }
 
@@ -2989,10 +2977,12 @@ private struct ReaderDetailView: View {
     /// a one-paragraph article (worst 114), 0 in place (readerTTFR 116 → 51). It was
     /// the single long turn left in ↓ key repeat. The subviews that hold per-article
     /// state (summary, `HTMLContentView`, comments) keep their own `.id(article.id)`,
-    /// and the scroll position is put back at the top explicitly. The footer's Share
-    /// menu does not: rebuilding its pop-up button alone cost ~35 ms a change, and
-    /// its only state is the 1.5 s "copied" checkmark and a save sheet that blocks
-    /// the window while it is open.
+    /// and the scroll position is put back at the top explicitly. The reader's own
+    /// translation and summary state lives in `session`, which is read only for the
+    /// article it is bound to. The footer's Share menu keeps no id either: rebuilding
+    /// its pop-up button alone cost ~35 ms a change. It clears its "copied" checkmark
+    /// itself when the article's URL changes; its save sheet blocks the window while
+    /// it is open.
     @State private var readerPushID = 0
     @State private var readerScrollPosition = ScrollPosition(edge: .top)
 
@@ -3013,8 +3003,9 @@ private struct ReaderDetailView: View {
                 articleHeader(article)
 
                 if summariesEnabled {
+                    let summaryController = session.summary(for: article.id)
                     Group {
-                        if let summary = summaryController.summary {
+                        if let summaryController, let summary = summaryController.summary {
                             ArticleSummaryCard(
                                 summary: summary,
                                 style: summaryController.style,
@@ -3023,8 +3014,8 @@ private struct ReaderDetailView: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         } else {
                             ArticleSummaryActionButton(
-                                isLoading: summaryController.isLoading,
-                                issue: summaryController.issue
+                                isLoading: summaryController?.isLoading ?? false,
+                                issue: summaryController?.issue
                             ) {
                                 requestSummary(for: article)
                             }
@@ -3046,7 +3037,7 @@ private struct ReaderDetailView: View {
                     Divider()
                     ReaderCommentsSection(
                         thread: comments, baseURL: article.url, typography: readerTypography,
-                        translator: nativeTranslator, translationLanguage: targetLanguageName)
+                        translator: session.translator(for: article.id), translationLanguage: targetLanguageName)
                     .id(article.id)
                 }
 
@@ -3061,7 +3052,7 @@ private struct ReaderDetailView: View {
                         articleURL: article.url,
                         title: article.title,
                         markdown: {
-                            nativeTranslator.translatedMarkdown
+                            session.translator(for: article.id)?.translatedMarkdown
                                 ?? store.nativeReaderMarkdown(for: article)
                         }
                     ) { copied in
@@ -3071,7 +3062,7 @@ private struct ReaderDetailView: View {
                     Spacer()
 
                     Button(role: .destructive) {
-                        confirmingDelete = true
+                        pendingDeleteID = article.id
                     } label: {
                         Label("Delete Article", systemImage: "trash")
                     }
@@ -3084,54 +3075,74 @@ private struct ReaderDetailView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .scrollPosition($readerScrollPosition)
-        // A new article opens at its top, as it did when each article was a new
-        // scroll view.
-        .onChange(of: article.id) { _, _ in
-            readerScrollPosition.scrollTo(edge: .top)
+        .onChange(of: article.id, initial: true) { oldID, newID in
+            // Hand the per-article state to the new article. Its first body already
+            // read the session as empty; this clears what the old article left.
+            if session.begin(articleID: newID) {
+                summaryRequestedArticleID = nil
+            }
+            // The confirmation was for the article that just left.
+            pendingDeleteID = nil
+            // A new article opens at its top, as it did when each article was a new
+            // scroll view. Every `scrollTo` is a new request, unequal to the last
+            // even for the same edge, so this applies when the binding still reads
+            // `.top` from the previous article but an anchor jump moved the view.
+            if oldID != newID {
+                readerScrollPosition.scrollTo(edge: .top)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor))
         .confirmationDialog(
             "Delete this article?",
-            isPresented: $confirmingDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Article", role: .destructive) { store.deleteArticle(articleID: article.id) }
+            isPresented: Binding(
+                get: { pendingDeleteID != nil },
+                set: { if !$0 { pendingDeleteID = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDeleteID
+        ) { articleID in
+            // The article the dialog was raised for, not whichever is current now.
+            Button("Delete Article", role: .destructive) { store.deleteArticle(articleID: articleID) }
             Button("Cancel", role: .cancel) {}
-        } message: {
+        } message: { _ in
             Text("It's removed from your list on all your devices. This can't be undone.")
         }
         .overlay(alignment: .top) {
-            if translationBusy {
+            if session.isTranslating(for: article.id) {
                 TranslationBanner()
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: SameArticleFlag(articleID: article.id, isOn: translationBusy))
-        .translationPresentation(isPresented: $isShowingTranslation, text: Self.translationText(for: article))
+        .animation(.easeInOut(duration: 0.2), value: SameArticleFlag(articleID: article.id, isOn: session.isTranslating(for: article.id)))
+        .translationPresentation(
+            isPresented: Binding(
+                get: { session.isShowingSystemTranslation(for: article.id) },
+                set: { session.setShowingSystemTranslation($0, for: article.id) }
+            ),
+            text: Self.translationText(for: article)
+        )
         .task(id: article.id) {
-            // Reset any prior translation and re-detect the language so the
-            // Translate action is offered only when it differs from the target.
-            nativeTranslator.stop()
-            isTranslated = false
-            translatedTitle = nil
-            translatedBody = nil
-            isShowingTranslation = false
-            detectedLanguage = nil
+            // The change handler has normally bound the article already; binding
+            // here too keeps the language detection below from being dropped.
+            if session.begin(articleID: article.id) {
+                summaryRequestedArticleID = nil
+            }
             // Start reader-mode extraction first so it isn't delayed behind
             // language detection.
             store.ensureReaderContent(for: article)
             // Detect the language off the main actor so the recognizer doesn't
             // run on the transition frame.
             let detected = await Task.detached { Self.detectLanguage(for: article) }.value
-            if !Task.isCancelled { detectedLanguage = detected }
+            // Re-detected per article so the Translate action is offered only when
+            // the language differs from the target.
+            if !Task.isCancelled { session.setDetectedLanguage(detected, for: article.id) }
             await markReadAfterDwell(article)
         }
         .task(id: summaryTaskKey(for: article)) {
-            if summaryArticleID != article.id {
-                summaryController.reset()
+            if session.begin(articleID: article.id) {
                 summaryRequestedArticleID = nil
-                summaryArticleID = article.id
             }
+            let summaryController = session.summary
             let manuallyRequested = summaryRequestedArticleID == article.id
             guard ArticleSummarySettings.shouldGenerate(
                 isEnabled: summariesEnabled,
@@ -3162,13 +3173,14 @@ private struct ReaderDetailView: View {
             // Only this article's extraction finishing; a different article is a
             // new reader, whose translation the article task has already reset.
             guard oldValue.articleID == newValue.articleID else { return }
-            guard nativeTranslator.isActive, case .ready(let extracted) = newValue.state else { return }
-            nativeTranslator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
+            guard let translator = session.translator(for: article.id), translator.isActive,
+                  case .ready(let extracted) = newValue.state else { return }
+            translator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
         }
         .onChange(of: summariesEnabled) { _, enabled in
             guard !enabled else { return }
             summaryRequestedArticleID = nil
-            summaryController.reset()
+            session.summary.reset()
         }
         // Pull past the bottom for the next article, past the top for the
         // previous one. The web reader keeps its own bottom-only affordance.
@@ -3247,9 +3259,9 @@ private struct ReaderDetailView: View {
     }
 
     private func requestSummary(for article: Article) {
-        summaryController.reset()
-        summaryController.beginLoading()
-        summaryArticleID = article.id
+        session.begin(articleID: article.id)
+        session.summary.reset()
+        session.summary.beginLoading()
         summaryRequestedArticleID = article.id
         summaryGenerationID += 1
     }
@@ -3269,7 +3281,7 @@ private struct ReaderDetailView: View {
                             count: store.droppedEmbedCount(for: article),
                             onUseReadability: { store.setReaderParser(.readability, for: article) })
                     }
-                    HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
+                    HTMLContentView(html: html, baseURL: article.url, translator: session.translator(for: article.id), typography: readerTypography)
                         .id(article.id)
                 }
             case .gone:
@@ -3311,11 +3323,11 @@ private struct ReaderDetailView: View {
     @ViewBuilder
     private func originalArticleBody(_ article: Article) -> some View {
         if let html = article.contentHTML {
-            HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
+            HTMLContentView(html: html, baseURL: article.url, translator: session.translator(for: article.id), typography: readerTypography)
                 .id(article.id)
-        } else if isTranslated, let translatedBody {
+        } else if let translation = session.plainTranslation(for: article.id) {
             VStack(alignment: .leading, spacing: 16) {
-                ForEach(Array(translatedBody.enumerated()), id: \.offset) { _, paragraph in
+                ForEach(Array(translation.paragraphs.enumerated()), id: \.offset) { _, paragraph in
                     Text(paragraph)
                         .font(.system(size: readerTypography.bodySize, design: readerTypography.fontDesign))
                         .kerning(readerTypography.kern)
@@ -3486,7 +3498,7 @@ private struct ReaderDetailView: View {
                             systemImage: translationActive(article) ? "character.bubble.fill" : "character.bubble"
                         )
                     }
-                    .disabled(translationBusy)
+                    .disabled(session.isTranslating(for: article.id))
                 }
 
                 Menu {
