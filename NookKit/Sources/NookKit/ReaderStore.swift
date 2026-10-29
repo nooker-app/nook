@@ -1126,8 +1126,10 @@ public final class ReaderStore {
             self.displayedSavedIDs = result.savedIDs
             #if os(macOS)
             // In the same transaction as the new rows: a selection cleared after
-            // the install reached the replaced List as a change of its own.
-            self.pruneSelectionIfHidden()
+            // the install reached the replaced List as a change of its own. Not
+            // inside an animated in-place publish, whose spring would carry the
+            // reader's push transition; that one is cleared after, as before.
+            if !result.willAnimate { self.pruneSelectionIfHidden() }
             self.listWindow.install(contents: self.displayContents, indexByID: result.indexByID,
                 rows: result.rows, feedTitles: result.feedTitles, savedIDs: result.savedIDs,
                 replacement: result.replacesList)
