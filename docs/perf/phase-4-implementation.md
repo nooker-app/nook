@@ -214,17 +214,17 @@ main `53e39c7` 기준. 측정은 이 worktree의 `make perf-build`와 `tools/per
 | p2f2 `2668222` | 49.6, 47.3, 36.1 |
 | a94b0e9 | 40.3, 41.3, 48.6 |
 | f27c9d0 | 60.1, 49.7, 69.0 |
-| HEAD 이전(`0b64bb1`, p4f1+사이드바) | 67.6, 59.0, 65.1 |
+| HEAD 이전(`6383aa8`, p4f1+사이드바) | 67.6, 59.0, 65.1 |
 | 같은 빌드, `onScrollPhaseChange` 제거(실험) | 65.2, 61.5, 58.2, 77.5 (`T3,T4` 실행) |
 | 같은 빌드, 항상 translating row(실험) | 25.3, 56.9, 38.7 |
-| **문자열 수정 후 (`3e34996`)** | **32.2, 29.0, 30.4, 26.5** |
+| **문자열 수정 후 (`dee71b3`)** | **32.2, 29.0, 30.4, 26.5** |
 
 Time Profiler(T4 구간, 메인 스레드)의 결과는 다음과 같다.
 - 수정 전에는 `NSTableRowData _doAutomaticRowHeightForRowView` 1,387샘플 중 `LocalizedStringKey.resolve` 645, `_copyStringTable` 459, plist 파싱 353이었다.
 - 수정 후에는 `_doAutomaticRowHeightForRowView` 1,221샘플이고, 지역화 관련 샘플은 0이다.
 - 남은 행 비용은 SwiftUI 텍스트 레이아웃(`NSStringDrawingEngine`, 약 600)과 stack layout이다.
 
-### 측정 (코디네이터 방식, before = `53e39c7`/`0b64bb1`, after = `3e34996`/`911de1b`)
+### 측정 (코디네이터 방식, before = `53e39c7`/`6383aa8`, after = `dee71b3`/`9832bc0`)
 
 | 시나리오 | 지표 | before | after |
 |---|---|---|---|
@@ -236,7 +236,7 @@ Time Profiler(T4 구간, 메인 스레드)의 결과는 다음과 같다.
 | A1 (warm 중앙값, 2회) | worstStall / ttfr | 128 / 202, 131 / 196 | 125 / 195, 122 / 185 |
 | A14 (warm 중앙값, 2회) | worstStall / ttfr | 206 / 246, 201 / 245 | 200 / 242, 200 / 243 |
 
-A1과 A14의 after는 `911de1b`(최종 HEAD)에서, T4 off의 after는 `3e34996`에서 쟀다. 이후 커밋은 번역기 visibility 카운트, prune 위치, 테스트뿐이며 번역 off 스크롤 경로를 바꾸지 않는다.
+A1과 A14의 after는 `9832bc0`(최종 HEAD)에서, T4 off의 after는 `dee71b3`에서 쟀다. 이후 커밋은 번역기 visibility 카운트, prune 위치, 테스트뿐이며 번역 off 스크롤 경로를 바꾸지 않는다.
 
 ### 남은 것
 
