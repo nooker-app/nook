@@ -3409,11 +3409,23 @@ public final class ReaderStore {
         }
     }
 
-    /// Removes offline copies older than the configured expiry. Run at launch.
+    /// Removes offline copies older than the configured expiry. Run at launch and
+    /// when the expiry setting changes.
     public func purgeExpiredOffline() {
         OfflineArticleStore.shared.loadIfNeeded()
         guard let maxAge = offlineExpiry.maxAge else { return }
-        OfflineArticleStore.shared.purge(olderThan: maxAge, now: Date())
+        offlineCopiesRemoved(OfflineArticleStore.shared.purge(olderThan: maxAge, now: Date()))
+    }
+
+    /// Copies removed in bulk (expiry). Rows carry their offline flag in their
+    /// model, so the badge clears only through the window; the refilter fixes
+    /// Downloaded membership.
+    func offlineCopiesRemoved(_ ids: [Article.ID]) {
+        guard !ids.isEmpty else { return }
+        #if os(macOS)
+        for id in ids { listWindow.setSavedOffline(id, false) }
+        #endif
+        scheduleArticleFilter()
     }
 
     private func performSaveOffline(_ article: Article, refreshList: Bool = true) async {

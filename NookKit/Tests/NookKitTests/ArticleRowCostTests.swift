@@ -77,6 +77,26 @@ struct ArticleRowCostTests {
         #expect(window.article(withID: "row-900")?.id == "row-900")
     }
 
+    #if os(macOS)
+    @Test("Copies removed by the expiry purge clear their rows' offline badge at once")
+    func purgeClearsOfflineBadge() async throws {
+        let store = ReaderStore._makeForTesting()
+        store.feeds = [Fixture.feed("a")]
+        store.articles = articles(300)
+        store.selectSmartSource(.all)
+        for _ in 0..<200 where store.listWindow.rows.count != 200 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        func saved(_ id: Article.ID) -> Bool? { store.listWindow.rows.first { $0.id == id }?.isSavedOffline }
+        store.listWindow.setSavedOffline("row-3", true)
+        store.listWindow.setSavedOffline("row-4", true)
+        #expect(saved("row-3") == true)
+        store.offlineCopiesRemoved(["row-3"])
+        #expect(saved("row-3") == false)
+        #expect(saved("row-4") == true)
+    }
+    #endif
+
     @Test("Only a replacing install runs the replacement hook")
     func replacementHook() {
         let window = ArticleListWindow()
