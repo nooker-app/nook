@@ -2212,11 +2212,11 @@ private struct ArticleRowLayout<Translation: View>: View {
                 // swipe-action rendering from then on; a reserved badge line
                 // put a visible gap under every untagged row.)
                 HStack(spacing: 6) {
-                    Text(model.feedDisplayTitle ?? String(localized: "Unknown Feed"))
-                    Text("·")
+                    Text(model.feedDisplayTitle ?? ArticleRowStrings.unknownFeed)
+                    Text(verbatim: ArticleRowStrings.separator)
                     RelativeTimeText(model.publishedAt)
-                    Text("·")
-                    Text("\(model.readMinutes) min")
+                    Text(verbatim: ArticleRowStrings.separator)
+                    Text(verbatim: ArticleRowStrings.readMinutes(model.readMinutes))
 
                     if !model.categories.isEmpty {
                         ArticleRowCategoryBadges(ids: model.categories)
@@ -2239,6 +2239,28 @@ private struct ArticleRowLayout<Translation: View>: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+/// The metadata line's localized strings, resolved once instead of per row.
+///
+/// A `Text` built from a localized key resolves it against the environment's
+/// locale, and on macOS that lookup re-reads and re-parses the app's string table
+/// each time (`_copyStringTable` under `localizedAttributedStringForKey`). The
+/// row's three keys cost about 4 ms of every row entering view while scrolling,
+/// a sixth of the main thread's work in a constant scroll. The UI language only
+/// changes with a relaunch, so the resolved strings never go stale.
+@MainActor
+private enum ArticleRowStrings {
+    static let separator = String(localized: "·")
+    static let unknownFeed = String(localized: "Unknown Feed")
+    private static var minutes: [Int: String] = [:]
+
+    static func readMinutes(_ count: Int) -> String {
+        if let cached = minutes[count] { return cached }
+        let string = String(localized: "\(count) min", locale: AppLanguage.formattingLocale)
+        minutes[count] = string
+        return string
     }
 }
 
