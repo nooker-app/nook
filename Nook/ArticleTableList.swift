@@ -4,16 +4,16 @@ import SwiftUI
 
 /// Which control draws the macOS article list. Read once at launch.
 ///
-/// `table` is an AppKit `NSTableView` the app drives directly; `list` is the
-/// SwiftUI `List` it replaced, kept so both can be measured and the old one
-/// restored without a build: `defaults write com.tim.nook macListBackend list`,
+/// `table` (the default) is an AppKit `NSTableView` the app drives directly;
+/// `list` is the SwiftUI `List` it replaced, kept so both can be measured and the
+/// old one restored without a build: `defaults write com.tim.nook macListBackend list`,
 /// or `-macListBackend list` as a launch argument (perf runs).
 enum MacListBackend: String {
     case table
     case list
 
     static let defaultsKey = "macListBackend"
-    static let current = MacListBackend(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .list
+    static let current = MacListBackend(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .table
 }
 
 /// The article list column as an AppKit table.
