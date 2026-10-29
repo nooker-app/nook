@@ -184,3 +184,73 @@ main `1cf6234` 기준. 리뷰(review-p5) 7건을 고쳤고, C3/T3·A14의 남은
 - `make build` 통과, iOS `NookiOS` Release(generic iOS, `CODE_SIGNING_ALLOWED=NO`) 통과.
 - `swift test --package-path NookKit --filter "ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness|ArticleTableModel"`: 76개 통과, 3회 연속. 폰트 수정 전에는 이 묶음이 교착으로 멈췄다.
 - `git diff --check` 통과.
+
+## Fix round 2
+
+main `dec200e` 기준. 남은 두 stall(C3/T3의 키 반복, A14의 선택 있는 전환)을 없앴다. 원인은 둘 다 목록 밖이었다. 하나는 선택이 바뀔 때마다 SwiftUI가 툴바 항목을 전부 다시 만드는 것이고, 다른 하나는 글이 바뀔 때마다 reader 뷰 전체를 새로 만드는 것이다. 측정은 이 worktree에서 `make perf-build` + `tools/perf/run.sh`로 했다(lib-5k, warm median/worst ms, A/B/C/D/R은 5–7회, T는 1회). before는 같은 머신에서 `dec200e`를 다시 빌드해 잰 값이다. 이번 라운드 이전 값은 코디네이터 측정이다.
+
+### 1. 툴바: breadcrumb 격리, Share는 지우지 않고 비활성 (`2577220`)
+
+- C3 Time Profiler에서 메인 스레드 샘플의 12.7%가 `AppKitWindowController.updateToolbarBridge`였고, 9.4%가 그 안의 `ToolbarBridge.makeStorage` → `AppKitToolbarItem.makeGroupItem`이었다. 이 경로는 ↓ 한 번마다 툴바 항목을 새로 만든다.
+- trigger를 실험으로 좁혔다.
+  - Star/Mark Read/Share 버튼이 선택을 읽지 않게 상수로 바꿨다: 12.7% 그대로였다. 이 버튼들은 원인이 아니다.
+  - breadcrumb(principal 항목)가 선택 글을 읽지 않게 바꿨다: 0.4%로 떨어졌다. breadcrumb의 글 제목·피드 segment가 바뀌면 SwiftUI는 툴바 항목 목록이 바뀐 것으로 보고 전부 다시 만든다.
+- 수정: `WindowBreadcrumbToolbarHost`(NSViewRepresentable)가 `WindowBreadcrumb`를 자기 `NSHostingView`에 담는다. 툴바 항목의 SwiftUI 내용은 이제 바뀌지 않는다. breadcrumb는 store를 직접 관찰하고, 바뀐 크기만 intrinsic size로 툴바에 전한다. 폭은 전처럼 내용을 따라 늘고 줄며 최대 520이다.
+- A14에서는 선택이 비워질 때 Share 항목이 툴바에서 사라지는 것도 같은 재구성을 일으켰다(`NSToolbarItemViewer dealloc`, `updateToolbarBridge` 약 6%). 그래서 Share를 Star·Mark Read처럼 남겨 두고, 선택이 없으면 비활성으로 둔다. fix round 1에서는 이것만 따로 시험해 차이가 없었는데, breadcrumb가 매번 재구성을 일으키고 있었기 때문이다.
+
+**시각 변화** (`docs/perf/phase-5-fix2-toolbar.png`, 위에서부터 before/after 쌍. 전체 글 + 선택, feed-big + 선택, 안 읽음 + 선택 없음. perf 빌드 창을 `screencapture -l`로 찍었다)
+
+- 글이 선택돼 있을 때: breadcrumb와 버튼 모양·위치가 before와 같다.
+- 선택이 없을 때: 툴바에 비활성 Share 버튼(`square.and.arrow.up` + 화살표)이 보인다. before에는 Share가 없었다. 그 폭만큼 오른쪽 검색 필드가 좁아지고 버튼 묶음이 왼쪽으로 옮겨진다.
+- breadcrumb가 별도 hosting view라 툴바의 SwiftUI environment는 상속하지 않는다. 쓰는 것은 `.font(.callout)`과 foreground style뿐이라 화면상 차이는 없었다. hover 펼침(MiddleCrumbSegment)은 hosting view 안에서 그대로 동작한다. 다만 자동 측정이 없으므로 수동 확인이 필요하다.
+
+### 2. reader를 글마다 새로 만들지 않고 제자리 갱신 (`5965233`)
+
+- lib-5k 글은 HTML 없이 짧은 문단 하나다. 그런데도 reader 렌더 한 턴이 70–120 ms였다. 비용은 본문이 아니었다. 글이 바뀔 때마다 `articleReader`의 `.id(article.id)`가 reader 그래프 전체를 새로 만들었다. 다시 만들어지는 것은 버튼·메뉴(AppKit pop-up), confirmationDialog, translationPresentation, swipe 모니터, overlay다.
+- 실험 R1(글 0 → 1 선택, 7회): 그대로는 worstStall 108/114, readerTTFR 116이었다. 머리말만 렌더하면 71이었다. `.id`를 빼면 0/53, readerTTFR 51이었다.
+- 수정:
+  - reader의 identity는 `readerPushID`이고, reader 이전/다음(`navigateReader`)에서만 바뀐다. push 전환(`.transition(.push)`)은 이전/다음에서만 보이던 것이므로 그대로다. 목록 클릭·키·메뉴 명령은 애니메이션이 없어 전에도 전환이 보이지 않았다. 이제 이런 변경은 제자리 갱신이다.
+  - 스크롤: `ScrollPosition`을 두고 `onChange(of: article.id)`에서 `scrollTo(edge: .top)`. 임시 계측으로 확인했다. reader를 아래로 스크롤한 뒤 다른 글(문서 788 pt > 화면 692 pt)을 고르면 첫 프레임부터 offset이 맨 위(-52, 툴바 inset)였고, 같은 NSScrollView가 재사용됐다.
+  - 글별 `@State`가 있는 하위 뷰만 `.id(article.id)`를 단다: 요약 카드/버튼(`isExpanded`), `HTMLContentView` 두 곳(anchor namespace, flash), 댓글(`showsAll`). 본문 전체(`readerBody`)에 id를 달면 방문한 글(“더 이상 온라인에 없음” 알림)로 바꿀 때 64/77이 남아서 `HTMLContentView`에만 달았다.
+  - 하단 Share 메뉴(`ArticleShareMenu`)에는 id를 달지 않는다. pop-up 버튼 재생성만으로 한 번에 약 35 ms였다(R2 readerTTFR 78 → 40). 이 메뉴의 상태는 1.5초짜리 "copied" 체크 표시와, 열려 있는 동안 창을 막는 저장 sheet뿐이다. 따라서 복사 직후 1.5초 안에 다른 글로 바꾸면 체크 표시가 새 글의 Share 버튼에 남았다가 꺼진다. 받아들인 차이다.
+  - 제자리 갱신이라 글이 바뀌는 것 자체가 애니메이션되면 안 된다. `.animation(value: translationBusy/isReparsing)`은 `SameArticleFlag`(같은 글에서 값이 바뀔 때만 다름)로 바꿨다. 추출 완료 시 번역을 다시 시작하는 `onChange`는 같은 글의 상태 변화에서만 동작한다(`ReaderContentChange`).
+  - `.task(id: article.id)`(번역 리셋, 언어 감지, 읽음 dwell), 요약 task, typography(AppStorage)는 그대로다. reader에는 find 기능이 없다. iOS 코드는 바꾸지 않았다.
+
+### 측정 (before = `dec200e` 같은 머신, after = `5965233`)
+
+| 시나리오 | before | after | 게이트 |
+|---|---|---|---|
+| C3 ↓ 30 Hz worstStall / stalls100 | 111/123, 1/1 | **0/72, 0/0** | stalls100 = 0 PASS |
+| T3 번역 on worstStall (stalls100) | 120/136 (1), 코디네이터 | **50 (0)** | PASS |
+| T3 번역 off | 88/117, 코디네이터 | **0 (0)** | PASS |
+| A14 worstStall / ttfr | 96/109, 145/160 | **65/69, 111/113** (다른 실행 0/0, 93/110) | <100 / ≤150 PASS |
+| A1–A13 worstStall / ttfr | 0, 70–80 | 0 (A2/A12 worst 43/46), 38–80 (worst ≤92) | PASS |
+| D5 이전/다음 20회 worstStall / readerTTFR | 107/118, 274/307 | **0/0, 206/216** | |
+| R2 방문한 글로 선택 worstStall / readerTTFR (신규 스크립트) | 97/123, 99/129 | **0/58, 49/60** | |
+| C1 worstStall / hitchRatio | 0, 3 (코디네이터) | 0/0, 8/49 | |
+| B1 / B2 worstStall | 0 / 0 | 0 / 0 | PASS |
+| T1/T2/T4 on·off | stall 0 | stall 0 | PASS |
+
+- 툴바 수정만 넣은 중간 빌드에서는 C3가 115/118로 그대로였다. 툴바는 키마다 일어나던 일이지만 stall 턴의 주인은 reader였다. 툴바만으로 줄어든 것은 A14다(0/0, ttfr 93/110).
+- C3 stall 턴은 키 반복이 끝난 뒤가 아니라 시작에서 났다. 첫 ↓는 settler를 그대로 통과해 reader를 즉시 렌더한다. 같은 턴에 이어지는 키 3–4개와 행 6개가 붙어 110–125 ms가 됐다. 끝의 settle 렌더는 70–120 ms였다. 둘 다 reader 재생성 비용이라 2번으로 함께 사라졌다.
+- R2 스크립트(전체 → 1·0을 차례로 방문 → 1 선택)는 scratchpad의 `r2.json`이다. 저장소에는 넣지 않았다.
+- A의 hitchRatio(수백)는 before에서도 같은 크기다(A1 236/425 → 287/345, A14 601/716 → 502/554). 측정 구간의 frame이 1–2개라 생기는 잡음이다(fix round 1 참고).
+
+### 남은 것
+
+- C3 worst 72, R2 worst 58: 남은 reader 갱신 턴의 비용은 SwiftUI 레이아웃이다(`ScrollViewLayoutComputer` 27%, AppKit 버튼 intrinsic size 12%). 게이트 안이라 더 손대지 않았다.
+- 수동 확인:
+  - breadcrumb hover 펼침과 피드 segment 클릭
+  - 좁은 창에서 breadcrumb가 줄어들고 overflow되는 모양
+  - 선택이 없을 때 비활성 Share의 모양
+  - reader 이전/다음(풀 제스처, 메뉴 명령)의 push 전환 방향
+  - 글을 바꾸면 맨 위에서 시작하는지(긴 HTML 글)
+  - HTML 글의 각주 anchor 이동·flash
+  - 요약 켜짐 상태에서 글을 바꿀 때 요약 카드가 리셋되는지
+  - 번역 중에 글을 바꿀 때 배너와 애니메이션
+
+### 검증
+
+- `make build` 통과, iOS `NookiOS` Release(generic iOS, `CODE_SIGNING_ALLOWED=NO`) 통과.
+- `swift test --package-path NookKit --filter "ReaderSelectionSettler|ArticleRowCost|ArticleListWindow|ListSelectionInvalidation|ReaderStorePhaseOne|ListTitleTranslat|ExpandReveal|ListRowMenuEagerness|ArticleTableModel"`(600 s 제한): 76개 통과. 바뀐 코드는 앱 타깃의 `ContentView`뿐이라 새 단위 테스트는 없다.
+- `git diff --check`, `plutil -lint` 통과.
