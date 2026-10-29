@@ -2980,10 +2980,27 @@ private struct ReaderDetailView: View {
     /// transition direction so previous/next slide the natural way.
     @State private var readerNavForward = true
 
+    /// The reader's identity. It changes only for reader-pane previous/next, whose
+    /// push transition needs the old article to leave and the new one to arrive.
+    ///
+    /// Any other article change updates the reader in place. Keyed by the article,
+    /// every change built the whole reader again — its controls, menus, dialogs and
+    /// gestures — and that, not the article's text, was the cost: 108 ms a change on
+    /// a one-paragraph article (worst 114), 0 in place (readerTTFR 116 → 51). It was
+    /// the single long turn left in ↓ key repeat. The subviews that hold per-article
+    /// state (summary, `HTMLContentView`, comments) keep their own `.id(article.id)`,
+    /// and the scroll position is put back at the top explicitly. The footer's Share
+    /// menu does not: rebuilding its pop-up button alone cost ~35 ms a change, and
+    /// its only state is the 1.5 s "copied" checkmark and a save sheet that blocks
+    /// the window while it is open.
+    @State private var readerPushID = 0
+    @State private var readerScrollPosition = ScrollPosition(edge: .top)
+
     /// Navigates to the adjacent article with a directional push animation.
     private func navigateReader(forward: Bool) {
         readerNavForward = forward
         withAnimation(.easeInOut(duration: 0.3)) {
+            readerPushID &+= 1
             store.readerSelection.passingThrough {
                 if forward { store.selectNextArticle() } else { store.selectPreviousArticle() }
             }
@@ -2996,25 +3013,30 @@ private struct ReaderDetailView: View {
                 articleHeader(article)
 
                 if summariesEnabled {
-                    if let summary = summaryController.summary {
-                        ArticleSummaryCard(
-                            summary: summary,
-                            style: summaryController.style,
-                            provider: summaryController.provider
-                        )
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    } else {
-                        ArticleSummaryActionButton(
-                            isLoading: summaryController.isLoading,
-                            issue: summaryController.issue
-                        ) {
-                            requestSummary(for: article)
+                    Group {
+                        if let summary = summaryController.summary {
+                            ArticleSummaryCard(
+                                summary: summary,
+                                style: summaryController.style,
+                                provider: summaryController.provider
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        } else {
+                            ArticleSummaryActionButton(
+                                isLoading: summaryController.isLoading,
+                                issue: summaryController.issue
+                            ) {
+                                requestSummary(for: article)
+                            }
                         }
                     }
+                    .id(article.id)
                 }
 
                 Divider()
 
+                // In-document anchors and their flash are per-document state, so
+                // each `HTMLContentView` carries the article's id itself.
                 readerBody(article)
 
                 // The page's own discussion, under the article it belongs to. Only
@@ -3025,6 +3047,7 @@ private struct ReaderDetailView: View {
                     ReaderCommentsSection(
                         thread: comments, baseURL: article.url, typography: readerTypography,
                         translator: nativeTranslator, translationLanguage: targetLanguageName)
+                    .id(article.id)
                 }
 
                 Divider()
@@ -3060,6 +3083,12 @@ private struct ReaderDetailView: View {
             .frame(maxWidth: 720, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+        .scrollPosition($readerScrollPosition)
+        // A new article opens at its top, as it did when each article was a new
+        // scroll view.
+        .onChange(of: article.id) { _, _ in
+            readerScrollPosition.scrollTo(edge: .top)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor))
         .confirmationDialog(
@@ -3077,7 +3106,7 @@ private struct ReaderDetailView: View {
                 TranslationBanner()
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: translationBusy)
+        .animation(.easeInOut(duration: 0.2), value: SameArticleFlag(articleID: article.id, isOn: translationBusy))
         .translationPresentation(isPresented: $isShowingTranslation, text: Self.translationText(for: article))
         .task(id: article.id) {
             // Reset any prior translation and re-detect the language so the
@@ -3129,8 +3158,11 @@ private struct ReaderDetailView: View {
         // If reader-mode content finishes extracting AFTER translation was turned
         // on, restart the translator against the now-rendered extracted HTML so
         // its per-block overrides line up with what's shown.
-        .onChange(of: store.readerContentState(for: article)) { _, newValue in
-            guard nativeTranslator.isActive, case .ready(let extracted) = newValue else { return }
+        .onChange(of: ReaderContentChange(articleID: article.id, state: store.readerContentState(for: article))) { oldValue, newValue in
+            // Only this article's extraction finishing; a different article is a
+            // new reader, whose translation the article task has already reset.
+            guard oldValue.articleID == newValue.articleID else { return }
+            guard nativeTranslator.isActive, case .ready(let extracted) = newValue.state else { return }
             nativeTranslator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
         }
         .onChange(of: summariesEnabled) { _, enabled in
@@ -3154,9 +3186,29 @@ private struct ReaderDetailView: View {
                     .padding(.top, 10)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: store.isReparsing(article))
-        .id(article.id)
+        .animation(.easeInOut(duration: 0.2), value: SameArticleFlag(articleID: article.id, isOn: store.isReparsing(article)))
+        .id(readerPushID)
         .transition(.push(from: readerNavForward ? .bottom : .top))
+    }
+
+    /// The article's reader-content state, tagged with the article so a change of
+    /// article can be told apart from that article's extraction finishing.
+    private struct ReaderContentChange: Equatable {
+        let articleID: Article.ID
+        let state: ReaderStore.ReaderContentState?
+    }
+
+    /// An `.animation(_:value:)` value that changes only when the flag changes for
+    /// the same article. With the reader updated in place, opening another article
+    /// whose flag differs (one still re-parsing, say) must not animate the article
+    /// swap; before, the new article was a new view and nothing animated it.
+    private struct SameArticleFlag: Equatable {
+        let articleID: Article.ID
+        let isOn: Bool
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.articleID != rhs.articleID || lhs.isOn == rhs.isOn
+        }
     }
 
     /// Summaries consume exactly the Markdown represented by the visible native
@@ -3218,6 +3270,7 @@ private struct ReaderDetailView: View {
                             onUseReadability: { store.setReaderParser(.readability, for: article) })
                     }
                     HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
+                        .id(article.id)
                 }
             case .gone:
                 VStack(alignment: .leading, spacing: 16) {
@@ -3259,6 +3312,7 @@ private struct ReaderDetailView: View {
     private func originalArticleBody(_ article: Article) -> some View {
         if let html = article.contentHTML {
             HTMLContentView(html: html, baseURL: article.url, translator: nativeTranslator, typography: readerTypography)
+                .id(article.id)
         } else if isTranslated, let translatedBody {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(Array(translatedBody.enumerated()), id: \.offset) { _, paragraph in
