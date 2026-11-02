@@ -67,9 +67,14 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         tableView: tableView, window: window,
         storeSelection: { [store] in store.selectedArticleID },
         setStoreSelection: { [store] in store.selectedArticleID = $0 })
-    /// Ids of the row views on screen, as the translator was told of them, so a
+    /// The rows inside the visible rect, as the translator was told of them, so a
     /// table torn down with rows showing releases their visibility.
-    private var displayedIDs: [Article.ID: Int] = [:]
+    private var visibleRows = VisibleRowSet()
+    private var visibilityTask: Task<Void, Never>?
+    /// Clip-view speed: translations wait while rows are only passing through.
+    private var motion = ScrollMotionGate()
+    private var liveScrolling = false
+    private var motionSettleTask: Task<Void, Never>?
     private var columnWidth: CGFloat = 0
     private var pendingHeightIDs: Set<Article.ID> = []
     private var heightFlushTask: Task<Void, Never>?
@@ -113,13 +118,20 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         scrollObservers = [
             center.addObserver(forName: NSScrollView.willStartLiveScrollNotification, object: scrollView,
                                queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.setScrolling(true) }
+                MainActor.assumeIsolated { self?.liveScrolling = true; self?.updateScrolling() }
             },
             center.addObserver(forName: NSScrollView.didEndLiveScrollNotification, object: scrollView,
                                queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.setScrolling(false) }
+                MainActor.assumeIsolated { self?.liveScrolling = false; self?.updateScrolling() }
+            },
+            // Every kind of scroll (wheel, momentum, keys, scroller, programmatic)
+            // moves the clip view: its speed and the rows now inside it.
+            center.addObserver(forName: NSView.boundsDidChangeNotification, object: scrollView.contentView,
+                               queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.clipBoundsChanged() }
             },
         ]
+        scrollView.contentView.postsBoundsChangedNotifications = true
 
         window.observer = self
         _ = selection
@@ -142,21 +154,90 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         scrollObservers.forEach(NotificationCenter.default.removeObserver)
         scrollObservers = []
         heightFlushTask?.cancel()
-        // Removing the table from its window removes no row views, so the rows
-        // on screen would count as visible to the translator for good.
-        for (id, count) in displayedIDs {
-            for _ in 0..<count { translator.rowDisappeared(id: id) }
-        }
-        displayedIDs = [:]
+        visibilityTask?.cancel()
+        visibilityTask = nil
+        motionSettleTask?.cancel()
+        motionSettleTask = nil
+        // The rows on screen would otherwise count as visible to the translator
+        // for good.
+        for id in visibleRows.removeAll() { translator.rowDisappeared(id: id) }
         // A table removed mid-scroll never reports the scroll's end.
+        liveScrolling = false
+        translator.prefersNewestPending = false
         translator.setScrolling(false)
     }
 
-    private func setScrolling(_ scrolling: Bool) {
+    // MARK: Scrolling and visibility
+
+    private func clipBoundsChanged() {
+        let now = ProcessInfo.processInfo.systemUptime
+        motion.record(y: scrollView.contentView.bounds.minY, at: now)
+        updateScrolling()
+        scheduleVisibilityUpdate()
+    }
+
+    /// Scrolling, for the translator, is a live scroll (trackpad drag and its
+    /// momentum, the existing contract) or fast clip-view motion of any kind.
+    /// Fast motion ends `settleDelay` after its last fast sample; the check is
+    /// re-armed then, since a stopped list posts no further bounds changes.
+    private func updateScrolling() {
+        let now = ProcessInfo.processInfo.systemUptime
+        let fast = motion.isFast(at: now)
+        let scrolling = liveScrolling || fast
         #if DEBUG
-        MainThreadLog.add("list.scroll.phase", ms: 0)
+        if scrolling != isScrollingForTranslator { MainThreadLog.add("list.scroll.phase", ms: 0) }
         #endif
-        translator.setScrolling(scrolling)
+        isScrollingForTranslator = scrolling
+        // Newest-first while the list has moved in the last second.
+        translator.prefersNewestPending = motion.movedRecently(at: now, window: 1)
+        if scrolling {
+            // Rows that left were dropped on the way; the ones on screen must
+            // still be the right ones before the queue drains on settle.
+            translator.setScrolling(true)
+        } else {
+            scheduleVisibilityUpdate()
+            translator.setScrolling(false)
+        }
+        motionSettleTask?.cancel()
+        motionSettleTask = nil
+        guard fast || translator.prefersNewestPending else { return }
+        let wait = fast ? motion.settleDelay : 1.0
+        motionSettleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled, let self else { return }
+            self.motionSettleTask = nil
+            self.updateScrolling()
+        }
+    }
+    private var isScrollingForTranslator = false
+
+    /// Once per run-loop turn: which rows are inside the visible rect now.
+    private func scheduleVisibilityUpdate() {
+        guard visibilityTask == nil else { return }
+        visibilityTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, !Task.isCancelled else { return }
+            self.visibilityTask = nil
+            self.updateVisibleRows()
+        }
+    }
+
+    private func updateVisibleRows() {
+        let range = tableView.rows(in: scrollView.contentView.documentVisibleRect)
+        var rows: [(id: Article.ID, title: String)] = []
+        if range.location != NSNotFound, range.length > 0 {
+            let upper = min(NSMaxRange(range), window.rowCount)
+            if range.location < upper {
+                rows.reserveCapacity(upper - range.location)
+                for index in range.location..<upper {
+                    let model = window.row(at: index)
+                    rows.append((model.id, model.title))
+                }
+            }
+        }
+        let diff = visibleRows.update(rows)
+        for id in diff.disappeared { translator.rowDisappeared(id: id) }
+        for row in diff.appeared { translator.rowAppeared(id: row.id, title: row.title) }
     }
 
     // MARK: Window changes
@@ -170,8 +251,8 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
             apply(.reload)
         case .appended(let range):
             apply(range.isEmpty ? .none : .insert(IndexSet(integersIn: range)))
-        case .patched(let index):
-            apply(.reloadRows(IndexSet(integer: index)))
+        case .patched(let indexes):
+            apply(.reloadRows(indexes))
         }
     }
 
@@ -180,6 +261,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         let started = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("list.table.update", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000) }
         #endif
+        defer { if update != .none { scheduleVisibilityUpdate() } }
         switch update {
         case .none:
             return
@@ -228,6 +310,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         defer { MainThreadLog.add("list.table.reload", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000) }
         #endif
         pendingHeightIDs.removeAll()
+        scheduleVisibilityUpdate()
         if scrollToTop { heights.trim(keeping: window.contains) }
         selection.mutate {
             tableView.reloadData()
@@ -264,7 +347,9 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
             MainThreadLog.add("list.table.noteHeights.rows", ms: Double(rows.count))
         }
         #endif
-        withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: rows) }
+        ArticleTableScrollAnchor.preservingVisibleRows(of: tableView, changing: rows) {
+            withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: rows) }
+        }
     }
 
     // MARK: Selection
@@ -338,16 +423,9 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         MainThreadLog.add("list.table.add", ms: 0)
         if !tableView.visibleRect.intersects(tableView.rect(ofRow: row)) { MainThreadLog.add("list.table.addOffscreen", ms: 0) }
         #endif
-        displayedIDs[model.id, default: 0] += 1
-        translator.rowAppeared(id: model.id, title: model.title)
+        // Growth looks ahead, so prepared rows count. The translator does not:
+        // it follows the visible rect (`updateVisibleRows`).
         window.rowAppeared(id: model.id)
-    }
-
-    func tableView(_ tableView: NSTableView, didRemove rowView: NSTableRowView, forRow row: Int) {
-        guard let model = (rowView.view(atColumn: 0) as? ArticleTableCellView)?.model,
-              let count = displayedIDs[model.id] else { return }
-        displayedIDs[model.id] = count > 1 ? count - 1 : nil
-        translator.rowDisappeared(id: model.id)
     }
 
     func tableViewColumnDidResize(_ notification: Notification) {

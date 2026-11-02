@@ -216,6 +216,12 @@ public final class ListTitleTranslator {
 
     /// Called by the list on scroll phase changes. Ending a scroll drains any
     /// translations that queued up while it was in motion.
+    /// While the list is moving, the newest queued row is started first: rows
+    /// enter at the edge the list moves towards, so the newest one stays on
+    /// screen longest and the oldest is about to leave (and be cancelled). At
+    /// rest the queue is FIFO, top to bottom as rows were seen.
+    public var prefersNewestPending = false
+
     public func setScrolling(_ scrolling: Bool) {
         guard isScrolling != scrolling else { return }
         isScrolling = scrolling
@@ -374,7 +380,7 @@ public final class ListTitleTranslator {
         // re-check below then serves cached titles without a model request.
         guard !isScrolling, cacheLoadTask == nil else { return }
         while activeTasks.count < maxConcurrent, !pending.isEmpty {
-            let next = pending.removeFirst()
+            let next = prefersNewestPending ? pending.removeLast() : pending.removeFirst()
             // The disk cache (or another row's completion) may have landed after
             // this row was enqueued.
             let key = cacheKey(for: next.title)

@@ -27,8 +27,9 @@ public enum ArticleTableUpdate: Equatable {
             return .reload
         case .appended(let range):
             return range.isEmpty ? .none : .insert(IndexSet(integersIn: range))
-        case .patched(let index):
-            return index < rows.count ? .reloadRows(IndexSet(integer: index)) : .none
+        case .patched(let indexes):
+            let valid = indexes.filteredIndexSet { $0 < rows.count }
+            return valid.isEmpty ? .none : .reloadRows(valid)
         case .installed(let previous, let animated):
             return plan(old: previous, new: rows, animated: animated)
         }

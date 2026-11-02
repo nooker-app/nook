@@ -93,8 +93,8 @@ public final class ArticleListWindow {
         case installed(previous: [ArticleRowModel], animated: Bool)
         /// Growth or `ensureVisible`: rows appended at the end, nothing else moved.
         case appended(Range<Int>)
-        /// One row's model changed in place.
-        case patched(Int)
+        /// Rows' models changed in place, by window index (only rows in the window).
+        case patched(IndexSet)
     }
 
     public private(set) var rows: [ArticleRowModel] = []
@@ -217,12 +217,27 @@ public final class ArticleListWindow {
     }
 
     func patch(_ id: Article.ID, _ mutate: (inout Article) -> Void) {
-        guard let index = indexByID[id] else { return }
-        mutate(&full.articles[index])
-        if index < rows.count {
-            rows[index] = model(for: full.articles[index])
-            observer?.articleListWindow(self, didChange: .patched(index))
+        withoutActuallyEscaping(mutate) { patch([(id, $0)]) }
+    }
+
+    /// Patches several articles, then tells the table once.
+    func patch(_ updates: [(Article.ID, (inout Article) -> Void)]) {
+        var patched = IndexSet()
+        var models: [(Int, ArticleRowModel)] = []
+        for (id, mutate) in updates {
+            guard let index = indexByID[id] else { continue }
+            mutate(&full.articles[index])
+            if index < rows.count {
+                models.append((index, model(for: full.articles[index])))
+                patched.insert(index)
+            }
         }
+        guard !models.isEmpty else { return }
+        // One write of the observed array, not one per row.
+        var updated = rows
+        for (index, model) in models { updated[index] = model }
+        rows = updated
+        observer?.articleListWindow(self, didChange: .patched(patched))
     }
 
     /// Reflects one offline save or removal in its row without waiting for the
@@ -231,7 +246,7 @@ public final class ArticleListWindow {
         let changed = saved ? savedIDs.insert(id).inserted : savedIDs.remove(id) != nil
         guard changed, let index = indexByID[id], index < rows.count else { return }
         rows[index] = model(for: full.articles[index])
-        observer?.articleListWindow(self, didChange: .patched(index))
+        observer?.articleListWindow(self, didChange: .patched(IndexSet(integer: index)))
     }
 
     private func model(for article: Article) -> ArticleRowModel {

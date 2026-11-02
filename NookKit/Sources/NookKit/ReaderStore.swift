@@ -2321,26 +2321,7 @@ public final class ReaderStore {
 
         func flush() {
             guard !pending.isEmpty else { return }
-            var updated = articles
-            let indexByID = articleIndexByID
-            for (id, cats) in pending {
-                if let index = indexByID[id] {
-                    let previous = updated[index].categories
-                    guard previous != cats else { continue }
-                    updated[index].categories = cats
-                    recordArticleCategories(id, from: previous, to: cats)
-                } else {
-                    // Left the library mid-pass; recorded additively so the
-                    // assignment still syncs if it comes back.
-                    recordArticleCategories(id, from: [], to: cats)
-                }
-            }
-            #if DEBUG && os(macOS)
-            let flushStarted = ProcessInfo.processInfo.systemUptime
-            defer { MainThreadLog.add("store.ai.flush", ms: (ProcessInfo.processInfo.systemUptime - flushStarted) * 1000) }
-            #endif
-            articles = updated
-            scheduleShardSave()
+            applyCategoryAssignments(pending)
             pending.removeAll(keepingCapacity: true)
         }
 
@@ -2353,6 +2334,72 @@ public final class ReaderStore {
             if pending.count >= flushEvery { flush() }
         }
         flush()
+    }
+
+    /// Whether a category assignment can change which articles a list shows: a
+    /// hidden category filters its articles everywhere, and a category list
+    /// (without a feed selection) lists only its own. Otherwise categories are
+    /// only drawn (badges) and counted (sidebar), never filtered or sorted on.
+    private var categoriesDecideMembership: Bool {
+        (categorySelection != nil && feedSelection.isEmpty) || categories.contains(where: \.hidden)
+    }
+
+    /// Writes a batch of category assignments (AI flush, migration flush). Every
+    /// changed assignment is recorded in this device's shard, as before.
+    ///
+    /// Assignments arrive in batches every second or so for minutes while new
+    /// articles are classified, usually while the user scrolls. Through the
+    /// `articles` didSet each batch rebuilt the id index, reclassified hidden
+    /// articles, recounted everything and refiltered + re-diffed the list: ~10 ms
+    /// of main thread per batch, a dropped frame or two at 60 Hz mid-scroll.
+    /// When categories cannot change membership, none of that can change: the
+    /// batch is one `articles` write (readers still see it), an unread-per-
+    /// category delta, and one in-place patch of the listed copies, which
+    /// reconfigures only the rows on screen.
+    private func applyCategoryAssignments(_ assignments: [Article.ID: [String]]) {
+        #if DEBUG && os(macOS)
+        let flushStarted = ProcessInfo.processInfo.systemUptime
+        defer { MainThreadLog.add("store.ai.flush", ms: (ProcessInfo.processInfo.systemUptime - flushStarted) * 1000) }
+        #endif
+        var updated = articles
+        var changed: [(id: Article.ID, previous: [String], next: [String])] = []
+        for (id, cats) in assignments {
+            if let index = articleIndexByID[id] {
+                let previous = updated[index].categories
+                guard previous != cats else { continue }
+                updated[index].categories = cats
+                changed.append((id, previous, cats))
+                recordArticleCategories(id, from: previous, to: cats)
+            } else {
+                // Left the library mid-pass; recorded additively so the
+                // assignment still syncs if it comes back.
+                recordArticleCategories(id, from: [], to: cats)
+            }
+        }
+        scheduleShardSave()
+        guard !changed.isEmpty else { return }
+        guard !categoriesDecideMembership else {
+            articles = updated          // one didSet → one recompute for the batch
+            return
+        }
+        suppressArticlesDidSet = true
+        articles = updated
+        suppressArticlesDidSet = false
+        // Mirrors recomputeCounts: filtered articles never count, and only
+        // unread ones count per category. Positions and filtering are unchanged.
+        var byCategory = unreadByCategory
+        for change in changed where !filteredArticleIDs.contains(change.id) {
+            guard let index = articleIndexByID[change.id], !updated[index].isRead else { continue }
+            for categoryID in change.previous {
+                let count = (byCategory[categoryID] ?? 0) - 1
+                byCategory[categoryID] = count <= 0 ? nil : count
+            }
+            for categoryID in change.next { byCategory[categoryID, default: 0] += 1 }
+        }
+        if byCategory != unreadByCategory { unreadByCategory = byCategory }
+        updateDisplayedArticlesInPlace(changed.map { change in
+            (change.id, { (article: inout Article) in article.categories = change.next })
+        })
     }
 
     /// Classifies one article with AI and merges the result onto its existing
@@ -2440,28 +2487,18 @@ public final class ReaderStore {
         }.value
         guard !batchIDs.isEmpty, !isPreparingLocalReset, !isBulkCategorizing else { return }
 
-        // Keyword rules first (cheap, local): one batched articles write.
-        var updated = articles
-        let indexByID = Dictionary(updated.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var keywordChanged = false
+        // Keyword rules first (cheap, local): one batched write.
+        var keywordAssignments: [Article.ID: [String]] = [:]
+        var untagged: [Article.ID] = []
         for id in batchIDs {
-            guard let index = indexByID[id], updated[index].categories.isEmpty else { continue }
-            let cats = keywordAutoCategories(for: updated[index])
-            guard !cats.isEmpty else { continue }
-            updated[index].categories = cats
-            recordArticleCategories(id, from: [], to: cats)
-            keywordChanged = true
+            guard let article = article(withID: id), article.categories.isEmpty else { continue }
+            let cats = keywordAutoCategories(for: article)
+            if cats.isEmpty { untagged.append(id) } else { keywordAssignments[id] = cats }
         }
-        if keywordChanged {
-            articles = updated          // one didSet → one recompute for the batch
-            scheduleShardSave()
-        }
+        if !keywordAssignments.isEmpty { applyCategoryAssignments(keywordAssignments) }
 
         // AI fills in what keywords didn't (serial queue; no-op when AI is off).
-        for id in batchIDs {
-            guard let index = indexByID[id], updated[index].categories.isEmpty else { continue }
-            enqueueAICategorization(id)
-        }
+        for id in untagged { enqueueAICategorization(id) }
         try? replicaStore.markClassificationAttempted(batchIDs)
     }
 
@@ -2521,21 +2558,7 @@ public final class ReaderStore {
 
         func flush() {
             guard !pending.isEmpty else { return }
-            var updated = articles
-            let indexByID = Dictionary(updated.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
-            for (id, cats) in pending {
-                if let index = indexByID[id] {
-                    let previous = updated[index].categories
-                    updated[index].categories = cats
-                    recordArticleCategories(id, from: previous, to: cats)
-                } else {
-                    // The article left the library mid-pass; record additively so
-                    // the assignment still syncs if it resurfaces.
-                    recordArticleCategories(id, from: [], to: cats)
-                }
-            }
-            articles = updated          // one didSet → one recompute for the batch
-            scheduleShardSave()
+            applyCategoryAssignments(pending)
             pending.removeAll(keepingCapacity: true)
         }
 
@@ -4270,6 +4293,25 @@ public final class ReaderStore {
         return true
     }
 
+    /// `updateDisplayedArticleInPlace` for a batch: one window patch (one table
+    /// update) and one republish for all of them.
+    private func updateDisplayedArticlesInPlace(_ updates: [(Article.ID, (inout Article) -> Void)]) {
+        #if DEBUG && os(macOS)
+        let updateStarted = ProcessInfo.processInfo.systemUptime
+        defer { MainThreadLog.add("store.updateInPlace", ms: (ProcessInfo.processInfo.systemUptime - updateStarted) * 1000) }
+        #endif
+        let displayed = updates.filter { displayedIndexByID[$0.0] != nil }
+        guard !displayed.isEmpty else { return }
+        #if os(macOS)
+        listWindow.patch(displayed)
+        #else
+        for (id, mutate) in displayed {
+            if let index = displayedIndexByID[id] { mutate(&displayContents.articles[index]) }
+        }
+        #endif
+        displayRevision &+= 1
+    }
+
     public func markSelectedRead() {
         guard let selectedArticleID else { return }
         setRead(articleID: selectedArticleID, isRead: true)
@@ -5075,6 +5117,17 @@ public final class ReaderStore {
     }
 
     func _beginBatchFilteringForTesting() { beginBatchFiltering() }
+    func _applyCategoryAssignmentsForTesting(_ assignments: [Article.ID: [String]]) {
+        applyCategoryAssignments(assignments)
+    }
+    /// The counts a full pass would produce, without publishing them.
+    func _recountedUnreadByCategoryForTesting() -> [String: Int] {
+        let current = unreadByCategory
+        recomputeCounts()
+        let recounted = unreadByCategory
+        unreadByCategory = current
+        return recounted
+    }
     func _endBatchFilteringForTesting() { isBatchRefreshing = false }
     func _applyPrecomputedForTesting(_ library: ReaderLibrary) {
         apply(library, precomputed: Self.precomputeFilterState(
