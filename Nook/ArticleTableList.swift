@@ -333,6 +333,11 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     // dwell, and growth when a row near the end of the window comes into view.
     func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
         guard let model = (rowView.view(atColumn: 0) as? ArticleTableCellView)?.model else { return }
+        #if DEBUG
+        // AppKit prepares rows past the visible rect too (overdraw); count those.
+        MainThreadLog.add("list.table.add", ms: 0)
+        if !tableView.visibleRect.intersects(tableView.rect(ofRow: row)) { MainThreadLog.add("list.table.addOffscreen", ms: 0) }
+        #endif
         displayedIDs[model.id, default: 0] += 1
         translator.rowAppeared(id: model.id, title: model.title)
         window.rowAppeared(id: model.id)

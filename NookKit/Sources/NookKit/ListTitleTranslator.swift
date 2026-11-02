@@ -341,6 +341,11 @@ public final class ListTitleTranslator {
         }
         visibleCounts[id] = nil
         visibleTitles[id] = nil
+        #if DEBUG && os(macOS)
+        if dwellTasks[id] != nil { MainThreadLog.add("list.title.dwellCancel", ms: 0) }
+        if pending.contains(where: { $0.id == id }) { MainThreadLog.add("list.title.queueCancel", ms: 0) }
+        if activeTasks[id] != nil { MainThreadLog.add("list.title.cancel", ms: 0) }
+        #endif
         dwellTasks[id]?.cancel()
         dwellTasks[id] = nil
         pending.removeAll { $0.id == id }
@@ -383,6 +388,9 @@ public final class ListTitleTranslator {
     }
 
     private func startTranslate(id: Article.ID, title: String) {
+        #if DEBUG && os(macOS)
+        MainThreadLog.add("list.title.start", ms: 0)
+        #endif
         let key = cacheKey(for: title)
         let name = targetLanguageName
         let code = targetLanguageCode
@@ -433,6 +441,9 @@ public final class ListTitleTranslator {
                 case .partial(let partial, let eventProvider):
                     self.setState(.translating(partial, provider: eventProvider), for: id)
                 case .completed(let final, let eventProvider):
+                    #if DEBUG && os(macOS)
+                    MainThreadLog.add("list.title.done", ms: 0)
+                    #endif
                     self.rememberTranslation(key, final)
                     self.setState(.translated(final, provider: eventProvider), for: id)
                 case .failed:

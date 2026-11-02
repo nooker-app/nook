@@ -142,6 +142,10 @@ public enum MainThreadLog {
             "noteHeights=\(calls("list.table.noteHeights"))", "noteHeightsMs=\(number(total("list.table.noteHeights")))",
             "noteHeightsRows=\(Int(total("list.table.noteHeights.rows")))",
             "titleState=\(calls("list.title.state"))",
+            "titleStart=\(calls("list.title.start"))", "titleDone=\(calls("list.title.done"))",
+            "titleCancel=\(calls("list.title.cancel"))", "titleQueueCancel=\(calls("list.title.queueCancel"))",
+            "titleDwellCancel=\(calls("list.title.dwellCancel"))",
+            "rowAddOffscreen=\(calls("list.table.addOffscreen"))", "rowAdd=\(calls("list.table.add"))",
         ]
         fields += current.extras.map { "\($0.key)=\($0.value)" }
         raw(fields.joined(separator: " "))
