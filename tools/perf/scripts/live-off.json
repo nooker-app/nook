@@ -1,0 +1,73 @@
+{
+  "repetitions": 1,
+  "coldFirst": false,
+  "launchArgs": [],
+  "steps": [
+    {
+      "id": "L1",
+      "action": {
+        "type": "constantScroll",
+        "rate": 1500,
+        "duration": 20,
+        "categorize": 600
+      }
+    },
+    {
+      "id": "L2",
+      "action": {
+        "type": "constantScroll",
+        "rate": 1500,
+        "duration": 20
+      }
+    },
+    {
+      "id": "L3",
+      "action": {
+        "type": "constantScroll",
+        "rate": 1500,
+        "duration": 20,
+        "categorize": 600
+      }
+    },
+    {
+      "id": "L4",
+      "action": {
+        "type": "fling",
+        "count": 8,
+        "categorize": 600
+      }
+    },
+    {
+      "id": "L5",
+      "setup": [
+        {
+          "type": "selectIndex",
+          "index": 0
+        }
+      ],
+      "action": {
+        "type": "keyRepeat",
+        "rate": 30,
+        "duration": 8,
+        "categorize": 600
+      }
+    },
+    {
+      "id": "L6",
+      "action": {
+        "type": "wait",
+        "duration": 20,
+        "categorize": 600
+      }
+    },
+    {
+      "id": "L7",
+      "action": {
+        "type": "constantScroll",
+        "rate": 120,
+        "duration": 20,
+        "categorize": 600
+      }
+    }
+  ]
+}

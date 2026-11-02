@@ -1,0 +1,26 @@
+{
+  "repetitions": 1,
+  "coldFirst": false,
+  "launchArgs": [
+    "-translateListTitles",
+    "YES",
+    "-appLanguage",
+    "ja",
+    "-NookFakeTranslator",
+    "15",
+    "-NookFakeTranslatorJitter",
+    "60",
+    "-NookFakeTranslatorLong",
+    "YES"
+  ],
+  "steps": [
+    {
+      "id": "L2",
+      "action": {
+        "type": "constantScroll",
+        "rate": 1500,
+        "duration": 20
+      }
+    }
+  ]
+}

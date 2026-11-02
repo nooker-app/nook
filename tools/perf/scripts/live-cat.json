@@ -1,0 +1,19 @@
+{
+  "repetitions": 1,
+  "coldFirst": false,
+  "launchArgs": [
+    "-NookFakeCategorizer",
+    "40"
+  ],
+  "steps": [
+    {
+      "id": "L1",
+      "action": {
+        "type": "constantScroll",
+        "rate": 1500,
+        "duration": 20,
+        "categorize": 600
+      }
+    }
+  ]
+}

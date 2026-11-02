@@ -19,7 +19,8 @@ import ObjectiveC
 /// selectCategory/search/refreshAll/refreshFeed/refreshActivation/selectIndex/
 /// setRead/toggleStar/nextArticle/fling/thumbDrag/constantScroll/keyRepeat/
 /// classifyAll/wait/noop. Optional action fields are `target`, `ids`, `value`,
-/// `index`, `count`, `rate`, and `duration` (seconds). `coldFirst` adds a rep 0
+/// `index`, `count`, `rate`, `duration` (seconds), and `categorize` (queue that
+/// many listed articles for the `-NookFakeCategorizer` fake as the action starts). `coldFirst` adds a rep 0
 /// recorded as `cold=1`; set it only on the step that really runs first after
 /// launch. The first step that runs (after any `-NookPerfOnly` filter) and does
 /// not state `coldFirst` gets a rep 0 marked `cold=1 warmup=1`, which perfreport
@@ -89,6 +90,9 @@ final class PerfDriver {
         var count: Int?
         var rate: Double?
         var duration: Double?
+        /// Live AI categorization alongside the action: this many listed articles
+        /// (display order) are queued for the fake categorizer as it starts.
+        var categorize: Int?
     }
 
     func runIfRequested(store: ReaderStore) async {
@@ -184,6 +188,10 @@ final class PerfDriver {
     }
 
     private func perform(_ action: Action, adapter: PerfStoreAdapter) async throws {
+        if let limit = action.categorize {
+            let queued = adapter.liveCategorize(limit: limit)
+            MainThreadLog.scenarioValue("aiQueued", queued)
+        }
         switch action.type {
         case "selectSmart": adapter.selectSmart(action.target ?? "all")
         case "selectFeed": adapter.selectFeeds([action.target ?? "feed-small"])
@@ -520,6 +528,7 @@ private struct PerfStoreAdapter {
         store.selectNextArticle()
     }
     func classifyAll() { store.classifyAllExisting(provider: .appleIntelligence) }
+    func liveCategorize(limit: Int) -> Int { store.perfEnqueueAICategorization(limit: limit) }
 
     private func invalid(_ kind: String, _ target: String) {
         MainThreadLog.note("perf.driver.error", extra: "\(kind)=\(target.replacingOccurrences(of: " ", with: "_")) reason=not_found")

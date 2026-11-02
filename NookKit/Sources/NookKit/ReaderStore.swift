@@ -1870,6 +1870,10 @@ public final class ReaderStore {
     /// the `articles` didSet so the cached values stay exact without the sidebar
     /// re-scanning all articles per badge, per render.
     private func recomputeCounts() {
+        #if DEBUG && os(macOS)
+        let countsStarted = ProcessInfo.processInfo.systemUptime
+        defer { MainThreadLog.add("store.counts", ms: (ProcessInfo.processInfo.systemUptime - countsStarted) * 1000) }
+        #endif
         var byFeed: [Feed.ID: Int] = [:]
         var byCategory: [String: Int] = [:]
         var total = 0
@@ -2284,9 +2288,11 @@ public final class ReaderStore {
 
     /// Enqueues an article for background AI categorization (no-op unless AI is
     /// enabled and usable). Keyword categories are applied separately, up front.
-    private func enqueueAICategorization(_ id: Article.ID) {
+    private func enqueueAICategorization(_ id: Article.ID, perfDriven: Bool = false) {
         #if DEBUG
-        if debugLaunchFlagIsDisabled("-NookAICategorize") { return }
+        // Perf runs keep the automatic paths (refresh, sweep) off; only the
+        // driver's `liveCategorize` feeds the queue, at a scenario's start.
+        if !perfDriven, debugLaunchFlagIsDisabled("-NookAICategorize") { return }
         #endif
         guard isAICategorizationActive else { return }
         if !aiCategorizeQueue.contains(id) { aiCategorizeQueue.append(id) }
@@ -2329,6 +2335,10 @@ public final class ReaderStore {
                     recordArticleCategories(id, from: [], to: cats)
                 }
             }
+            #if DEBUG && os(macOS)
+            let flushStarted = ProcessInfo.processInfo.systemUptime
+            defer { MainThreadLog.add("store.ai.flush", ms: (ProcessInfo.processInfo.systemUptime - flushStarted) * 1000) }
+            #endif
             articles = updated
             scheduleShardSave()
             pending.removeAll(keepingCapacity: true)
@@ -2454,6 +2464,24 @@ public final class ReaderStore {
         }
         try? replicaStore.markClassificationAttempted(batchIDs)
     }
+
+    #if DEBUG
+    /// Perf driver: queues the first `limit` listed articles (display order, so
+    /// the rows on screen and just below are tagged first) for the real AI
+    /// categorization path — the same queue, 25-per-flush batching and
+    /// `articles` write a sync's new articles take. Answers come from the
+    /// `-NookFakeCategorizer` fake; without it this does nothing.
+    public func perfEnqueueAICategorization(limit: Int) -> Int {
+        guard TranslationSettings.fakeCategorizerDelay != nil else { return 0 }
+        var queued = 0
+        for article in displayedArticles where article.categories.count < ArticleCategory.maxPerArticle {
+            guard queued < limit else { break }
+            enqueueAICategorization(article.id, perfDriven: true)
+            queued += 1
+        }
+        return queued
+    }
+    #endif
 
     // MARK: - Migration (classify existing articles)
 
@@ -3033,7 +3061,10 @@ public final class ReaderStore {
     /// Whether AI categorization is on AND its provider is actually usable
     /// (on-device model available, or a Gemini key stored).
     public var isAICategorizationActive: Bool {
-        UserDefaults.standard.bool(forKey: Self.aiCategorizationEnabledKey)
+        #if DEBUG
+        if TranslationSettings.fakeCategorizerDelay != nil { return true }
+        #endif
+        return UserDefaults.standard.bool(forKey: Self.aiCategorizationEnabledKey)
             && NaturalTranslator.isAvailable(for: TranslationSettings.categoryProvider())
     }
 

@@ -85,10 +85,23 @@ actor ListTitleTranslationWorker {
     ) async throws -> String? {
         #if DEBUG
         if let delay = TranslationSettings.fakeTranslatorDelay {
-            let result = "[\(request.languageName)] \(request.source)"
+            let jitter = TranslationSettings.fakeTranslatorJitter
+            // A long fake wraps to more lines than the source, so landing it
+            // changes the row's height the way a verbose real translation does.
+            let result = TranslationSettings.fakeTranslatorLong
+                ? "[\(request.languageName)] \(request.source) — \(request.source)"
+                : "[\(request.languageName)] \(request.source)"
+            // Deterministic per title (FNV-1a), so runs stay comparable.
+            var seed: UInt64 = 0xcbf2_9ce4_8422_2325
+            for byte in request.source.utf8 { seed = (seed ^ UInt64(byte)) &* 0x100_0000_01b3 }
             var partial = ""
             for character in result {
-                try await Task.sleep(for: .milliseconds(delay))
+                var wait = delay
+                if jitter > 0 {
+                    seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                    wait += Int((seed >> 33) % UInt64(jitter))
+                }
+                try await Task.sleep(for: .milliseconds(wait))
                 try Task.checkCancellation()
                 partial.append(character)
                 await onPartial(partial)

@@ -133,6 +133,15 @@ public enum MainThreadLog {
             "updateInPlaceMs=\(number(total("store.updateInPlace")))",
             "updateInPlaceMaxMs=\(number(maximum("store.updateInPlace")))", "grow=\(calls("list.window.grow"))",
             "growMaxMs=\(number(maximum("list.window.grow")))",
+            // Live updates (AI badges, streamed title translations).
+            "aiFlush=\(calls("store.ai.flush"))", "aiFlushMs=\(number(total("store.ai.flush")))",
+            "aiFlushMaxMs=\(number(maximum("store.ai.flush")))",
+            "counts=\(calls("store.counts"))", "countsMs=\(number(total("store.counts")))",
+            "tableUpdate=\(calls("list.table.update"))", "tableUpdateMs=\(number(total("list.table.update")))",
+            "tableUpdateMaxMs=\(number(maximum("list.table.update")))",
+            "noteHeights=\(calls("list.table.noteHeights"))", "noteHeightsMs=\(number(total("list.table.noteHeights")))",
+            "noteHeightsRows=\(Int(total("list.table.noteHeights.rows")))",
+            "titleState=\(calls("list.title.state"))",
         ]
         fields += current.extras.map { "\($0.key)=\($0.value)" }
         raw(fields.joined(separator: " "))
@@ -401,7 +410,9 @@ private final class MainThreadProbe: @unchecked Sendable {
     /// Labels whose per-call distribution a scenario reports (p95/max). Everything
     /// else keeps only running totals, so per-row counters cost O(1) memory however
     /// long a Debug session runs.
-    private static let distributionLabels: Set<String> = ["store.merge", "store.updateInPlace", "list.window.grow"]
+    private static let distributionLabels: Set<String> = [
+        "store.merge", "store.updateInPlace", "list.window.grow", "store.ai.flush", "list.table.update",
+    ]
 
     private let lock = NSLock()
     private var heartbeat = ProcessInfo.processInfo.systemUptime

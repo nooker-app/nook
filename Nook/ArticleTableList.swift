@@ -251,7 +251,20 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
                 configure(cell, row: row)
             }
         }
-        withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: valid) }
+        noteHeights(valid)
+    }
+
+    /// Every row-height re-query goes through here, so a perf run can count them.
+    private func noteHeights(_ rows: IndexSet) {
+        #if DEBUG
+        let started = ProcessInfo.processInfo.systemUptime
+        defer {
+            MainThreadLog.add("list.table.noteHeights", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000)
+            // Not a duration: the total of this label is the number of rows re-queried.
+            MainThreadLog.add("list.table.noteHeights.rows", ms: Double(rows.count))
+        }
+        #endif
+        withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: rows) }
     }
 
     // MARK: Selection
@@ -385,7 +398,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         #if DEBUG
         MainThreadLog.addOncePerTurn("list.row.height.flush")
         #endif
-        withoutAnimation { tableView.noteHeightOfRows(withIndexesChanged: rows) }
+        noteHeights(rows)
     }
 
     // MARK: Menu and swipe

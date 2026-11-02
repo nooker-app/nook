@@ -21,6 +21,29 @@ public enum TranslationSettings {
               arguments.indices.contains(index + 1) else { return nil }
         return Int(arguments[index + 1]).map { max(0, $0) }
     }
+
+    /// Extra per-character latency (0..<jitter ms, deterministic per title) for
+    /// the fake translator, so a perf run's translations keep landing at uneven
+    /// times for many seconds instead of finishing in one burst. Perf runs only.
+    public static var fakeTranslatorJitter: Int {
+        guard PerfLaunch.isActive, let value = PerfLaunch.value(for: "-NookFakeTranslatorJitter") else { return 0 }
+        return max(0, Int(value) ?? 0)
+    }
+
+    /// The fake translator returns a title about twice as long as the source,
+    /// so the translated block wraps and changes the row's height. Perf runs only.
+    public static var fakeTranslatorLong: Bool {
+        guard PerfLaunch.isActive, let value = PerfLaunch.value(for: "-NookFakeTranslatorLong") else { return false }
+        return ["yes", "true", "1"].contains(value.lowercased())
+    }
+
+    /// `-NookFakeCategorizer <ms>`: AI categorization answers from a
+    /// deterministic local fake after `ms` per article instead of calling Apple
+    /// Intelligence or Gemini. Only a perf run (`PerfLaunch.isActive`) honours it.
+    public static var fakeCategorizerDelay: Int? {
+        guard PerfLaunch.isActive, let value = PerfLaunch.value(for: "-NookFakeCategorizer") else { return nil }
+        return Int(value).map { max(0, $0) }
+    }
     #endif
     /// Provider for the full-article reader translation.
     public static let readerProviderKey = "readerTranslationProvider"

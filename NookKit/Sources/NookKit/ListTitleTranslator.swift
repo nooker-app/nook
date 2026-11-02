@@ -57,6 +57,9 @@ public final class ListTitleTranslator {
 
         func setState(_ newState: TitleState?) {
             guard state != newState else { return }
+            #if DEBUG && os(macOS)
+            MainThreadLog.add("list.title.state", ms: 0)
+            #endif
             state = newState
             layoutRevision &+= 1
         }

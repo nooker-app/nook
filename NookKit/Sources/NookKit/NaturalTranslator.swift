@@ -218,6 +218,11 @@ public enum NaturalTranslator {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         guard !names.isEmpty else { return [] }
+        #if DEBUG
+        if let delay = TranslationSettings.fakeCategorizerDelay {
+            return await fakeClassification(title: title, into: names, delay: delay)
+        }
+        #endif
 
         let instructions = categoryClassificationInstructions(for: names)
         let sample = String((title + "\n\n" + summary).prefix(1500))
@@ -248,6 +253,20 @@ public enum NaturalTranslator {
         guard let raw else { return [] }
         return parseCategoryClassification(raw, allowedNames: names)
     }
+
+    #if DEBUG
+    /// The perf fake for `classify`: waits `delay` ms off the caller's actor, then
+    /// picks one or two of `names` from a stable hash of the title (FNV-1a, so
+    /// every run tags the same articles the same way). No model, no network.
+    static func fakeClassification(title: String, into names: [String], delay: Int) async -> [String] {
+        if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in title.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+        let first = Int(hash % UInt64(names.count))
+        guard names.count > 1, (hash >> 32) % 3 == 0 else { return [names[first]] }
+        return [names[first], names[(first + 1 + Int((hash >> 40) % UInt64(names.count - 1))) % names.count]]
+    }
+    #endif
 
     static func categoryClassificationInstructions(for names: [String]) -> String {
         let numbered = names.map { "- \($0)" }.joined(separator: "\n")
