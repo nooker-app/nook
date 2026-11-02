@@ -289,28 +289,17 @@ struct ListSelectionInvalidationTests {
         #expect(!reader.contains("store.selectedArticle"))
     }
 
-    @Test("Sidebar sections compare every piece of sidebar state they read")
-    func sidebarSectionsCompareReadState() throws {
+    @Test("Sidebar sections sit directly in the sidebar List")
+    func sidebarSectionsAreNotWrapped() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let source = try String(contentsOf: root.appendingPathComponent("Nook/ContentView.swift"), encoding: .utf8)
         let sidebar = try #require(source.components(separatedBy: "private struct FeedSidebar: View {").last?
             .components(separatedBy: "\nprivate struct ").first)
-        let sections = try #require(source.components(separatedBy: "private struct FeedSidebarSections: View, Equatable {").last?
-            .components(separatedBy: "\nprivate struct ").first)
-        let state = sidebar.matches(of: /@(?:State|AppStorage)[^\n]*?var ([A-Za-z_][A-Za-z0-9_]*)/).map { String($0.output.1) }
-        #expect(state.count >= 10, "the state scan is broken")
-        // Only set by actions or read by `body`'s own modifiers (alerts, sheets,
-        // the action bar), never while building a section row. A new piece of
-        // state must be added here or compared by `FeedSidebarSections`.
-        let actionOnly: Set<String> = [
-            "isCreatingFolder", "newFolderName", "folderPendingDeletion", "isManagingFolders",
-            "folderPendingRename", "renameFolderName", "feedPendingRename", "renameFeedName", "actionFeedback",
-        ]
-        for name in state where !actionOnly.contains(name) {
-            #expect(sections.contains("let \(name):"), "FeedSidebarSections does not hold \(name)")
-            #expect(sections.contains("lhs.\(name) == rhs.\(name)"), "FeedSidebarSections == skips \(name)")
-        }
+        // An equatable child holding the sections made the macOS sidebar List draw
+        // them as one row: only the section headers were visible.
+        #expect(sidebar.contains("List(selection: $store.feedSelection) {\n            sections\n        }"))
+        #expect(!source.contains("FeedSidebarSections"))
     }
 
     /// Splits a type's source into member declarations (`func`/`var` at member

@@ -630,20 +630,12 @@ private struct FeedSidebar: View {
         #if DEBUG
         let _ = MainThreadLog.add("sidebar.body", ms: 0)
         #endif
-        // The List re-runs this body whenever the selection moves (it reads the
-        // binding), so its sections live in an equatable child: a source switch
-        // re-renders the rows whose highlight changed, not every feed row.
+        // The sections sit directly in the List. Wrapping them in one equatable
+        // child view collapsed every section into a single row on macOS (only the
+        // headers showed), so selection highlights stay cheap through each row's
+        // `SidebarSelectionState` instead.
         List(selection: $store.feedSelection) {
-            FeedSidebarSections(
-                sidebar: self,
-                dropTargetFolder: dropTargetFolder,
-                isTopLevelDropTargeted: isTopLevelDropTargeted,
-                collapsedFoldersData: collapsedFoldersData,
-                ownPublicationURL: ownPublicationURL,
-                isFollowingOwnFeed: isFollowingOwnFeed,
-                drafts: drafts
-            )
-            .equatable()
+            sections
         }
         .listStyle(.sidebar)
         .navigationTitle("Feeds")
@@ -715,9 +707,8 @@ private struct FeedSidebar: View {
         }
     }
 
-    /// The list's sections. Built by `FeedSidebarSections`, not by `body`.
     @ViewBuilder
-    fileprivate var sections: some View {
+    private var sections: some View {
         Section("Library") {
             ForEach(SmartSource.library) { source in
                 smartSourceRow(source)
@@ -1315,40 +1306,6 @@ private struct FeedSidebar: View {
                 Text(title)
             }
         }
-    }
-}
-
-/// The sidebar List's sections, compared by the values they draw from the
-/// sidebar's own state. Store data they render is observed in this body, and
-/// the selection highlight in each row's `SidebarSelectionState`; the sidebar's
-/// closures and remaining state are only written by actions, so they are left
-/// out of the comparison (a held copy writes the same `@State` storage).
-///
-/// Rule: every `@State`/`@AppStorage` of `FeedSidebar` that `sections` (or a row
-/// it builds) *reads* must be a field here and in `==`. Reading it through the
-/// held `sidebar` registers no dependency on this child, so a value left out
-/// never redraws: My Nook's follow spinner stayed stuck that way.
-/// `ListSelectionInvalidationTests.sidebarSectionsCompareReadState` enforces it.
-private struct FeedSidebarSections: View, Equatable {
-    let sidebar: FeedSidebar
-    let dropTargetFolder: String?
-    let isTopLevelDropTargeted: Bool
-    let collapsedFoldersData: Data
-    let ownPublicationURL: String
-    let isFollowingOwnFeed: Bool
-    let drafts: [PlusDraft]
-
-    nonisolated static func == (lhs: FeedSidebarSections, rhs: FeedSidebarSections) -> Bool {
-        lhs.dropTargetFolder == rhs.dropTargetFolder
-            && lhs.isTopLevelDropTargeted == rhs.isTopLevelDropTargeted
-            && lhs.collapsedFoldersData == rhs.collapsedFoldersData
-            && lhs.ownPublicationURL == rhs.ownPublicationURL
-            && lhs.isFollowingOwnFeed == rhs.isFollowingOwnFeed
-            && lhs.drafts == rhs.drafts
-    }
-
-    var body: some View {
-        sidebar.sections
     }
 }
 
