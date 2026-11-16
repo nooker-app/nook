@@ -7,11 +7,12 @@ import SwiftUI
 public struct BetaStudioView: View {
     @Bindable private var store: PlusStore
     @Binding private var session: BetaDraftSession?
-    @Environment(\.openSettings) private var openSettings
+    private let openSettings: () -> Void
 
-    public init(store: PlusStore, session: Binding<BetaDraftSession?>) {
+    public init(store: PlusStore, session: Binding<BetaDraftSession?>, openSettings: @escaping () -> Void) {
         self.store = store
         _session = session
+        self.openSettings = openSettings
     }
 
     public var body: some View {

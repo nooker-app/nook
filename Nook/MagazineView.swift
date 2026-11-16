@@ -192,7 +192,8 @@ struct MagazineView: View {
         switch tab {
         case .magazine: magazine
         case .library: library
-        case .studio: BetaStudioView(store: plus, session: $draftSession)
+        case .studio:
+            BetaStudioView(store: plus, session: $draftSession) { openWindow(id: "settings") }
         }
     }
 
