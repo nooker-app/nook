@@ -25,7 +25,7 @@ struct MagazineView: View {
     @Namespace private var navigationSelection
     @State private var scrollPosition = ScrollPosition(edge: .top)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("showUnreadBadge") private var showUnreadBadge = true
     @AppStorage("autoRefreshEnabled") private var autoRefresh = true
     @AppStorage(MagazineRecommendationController.enabledKey) private var recommendationsEnabled = true
@@ -98,7 +98,7 @@ struct MagazineView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Refresh All", systemImage: "arrow.clockwise") { store.refreshAll() }
                     .disabled(store.isRefreshing || store.feeds.isEmpty)
-                Button("Settings", systemImage: "gearshape") { openSettings() }
+                Button("Settings", systemImage: "gearshape") { openWindow(id: "settings") }
             }
         }
         .sheet(isPresented: $addingFeed) {

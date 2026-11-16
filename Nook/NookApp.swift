@@ -37,6 +37,9 @@ struct NookApp: App {
             SidebarCommands()
             TextEditingCommands()
             ReaderAppCommands()
+            CommandGroup(replacing: .appSettings) {
+                NookSettingsMenu()
+            }
             CommandGroup(after: .sidebar) {
                 LayoutSelectionMenu()
             }
@@ -53,12 +56,29 @@ struct NookApp: App {
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
 
-        Settings {
+        // Settings uses its own preferences-window toolbar layout, which can
+        // override custom chrome after activation. Use the same Window host as
+        // the reader, and provide the standard Settings command explicitly.
+        Window(Text(verbatim: "Nook " + String(localized: "Settings")), id: "settings") {
             LayoutSettingsView()
                 .tint(NookTheme.accent)
                 .accentColor(NookTheme.accent)
                 .environment(\.locale, AppLanguage.formattingLocale)
         }
+        .defaultSize(width: 1040, height: 780)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .windowResizability(.contentSize)
+        .windowToolbarStyle(.unifiedCompact)
+    }
+}
+
+private struct NookSettingsMenu: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button(String(localized: "Settings") + "…") { openWindow(id: "settings") }
+            .keyboardShortcut(",")
     }
 }
 

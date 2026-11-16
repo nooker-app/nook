@@ -69,20 +69,6 @@ struct BetaSettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text("Nook").font(.system(size: 21, weight: .semibold, design: .serif))
-                Rectangle().fill(NookTheme.hairline).frame(width: 1, height: 16)
-                Text("Settings").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                Spacer()
-                Label("Changes save automatically", systemImage: "checkmark.circle")
-                    .font(.system(size: 10)).foregroundStyle(.tertiary)
-            }
-            .padding(.leading, 86).padding(.trailing, 28)
-            .frame(height: 54)
-            .contentShape(Rectangle())
-            .gesture(WindowDragGesture())
-
         HStack(alignment: .top, spacing: 0) {
             navigation
                 .frame(width: 220)
@@ -108,15 +94,35 @@ struct BetaSettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        }
         .frame(minWidth: 960, idealWidth: 1040, maxWidth: .infinity,
                minHeight: 700, idealHeight: 780, maxHeight: .infinity)
         .background {
             LinearGradient(colors: [NookTheme.canvas, NookTheme.accent.opacity(0.07)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         }
-        .ignoresSafeArea(.container, edges: .top)
-        .background(BetaSettingsWindowChrome())
+        .containerBackground(NookTheme.canvas, for: .window)
+        // The title belongs to the native toolbar, not to content underneath it.
+        // Declarative toolbar preferences keep its layout valid across window
+        // activation and layout switches without racing NSWindow setters.
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                HStack(spacing: 12) {
+                    Text("Nook").font(.system(size: 21, weight: .semibold, design: .serif))
+                    Rectangle().fill(NookTheme.hairline).frame(width: 1, height: 16)
+                    Text("Settings").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                }
+                .fixedSize()
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .primaryAction) {
+                Label("Changes save automatically", systemImage: "checkmark.circle")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: pane)
     }
 
@@ -181,64 +187,6 @@ struct BetaSettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .glassEffect(.regular.tint(NookTheme.accent.opacity(0.045)), in: RoundedRectangle(cornerRadius: 22))
                 .padding(.horizontal, 28).padding(.bottom, 28)
-        }
-    }
-}
-
-/// The Settings scene retains native commands (⌘,), focus and traffic lights.
-/// Only Beta extends its canvas through the title bar; teardown restores Classic.
-private struct BetaSettingsWindowChrome: NSViewRepresentable {
-    func makeNSView(context: Context) -> ChromeView { ChromeView() }
-    func updateNSView(_ view: ChromeView, context: Context) { view.configure() }
-    static func dismantleNSView(_ view: ChromeView, coordinator: ()) { view.restore() }
-
-    final class ChromeView: NSView {
-        private weak var configuredWindow: NSWindow?
-        private var originalMask: NSWindow.StyleMask = []
-        private var originalTitle: NSWindow.TitleVisibility = .visible
-        private var originalTransparent = false
-        private var originalMovable = false
-        private var originalSeparator: NSTitlebarSeparatorStyle = .automatic
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            configure()
-        }
-
-        func configure() {
-            guard let window, configuredWindow !== window else { return }
-            restore()
-            configuredWindow = window
-            originalMask = window.styleMask
-            originalTitle = window.titleVisibility
-            originalTransparent = window.titlebarAppearsTransparent
-            originalMovable = window.isMovableByWindowBackground
-            originalSeparator = window.titlebarSeparatorStyle
-            window.styleMask.insert([.fullSizeContentView, .resizable, .miniaturizable])
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.titlebarSeparatorStyle = .none
-            window.isMovableByWindowBackground = true
-            // SwiftUI's Settings host configures its titlebar after attaching
-            // content. Apply the appearance once that native setup has settled.
-            DispatchQueue.main.async { [weak self, weak window] in
-                guard let self, let window, self.configuredWindow === window else { return }
-                window.styleMask.insert([.fullSizeContentView, .resizable, .miniaturizable])
-                window.titlebarAppearsTransparent = true
-                window.titleVisibility = .hidden
-                window.titlebarSeparatorStyle = .none
-                window.isMovableByWindowBackground = true
-            }
-        }
-
-        func restore() {
-            guard let window = configuredWindow else { return }
-            window.styleMask = originalMask
-            window.titleVisibility = originalTitle
-            window.titlebarAppearsTransparent = originalTransparent
-            window.titlebarSeparatorStyle = originalSeparator
-            window.isMovableByWindowBackground = originalMovable
-            configuredWindow = nil
         }
     }
 }
