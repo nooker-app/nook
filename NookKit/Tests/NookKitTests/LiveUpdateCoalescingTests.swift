@@ -66,7 +66,11 @@ struct LiveUpdateCoalescingTests {
         store.selectCategory(categories[0].id)
         #expect(store.visibleArticles.isEmpty)
         store._applyCategoryAssignmentsForTesting(["article-003": [categories[0].id]])
-        try await Task.sleep(for: .milliseconds(600))
+        // Wait for the publication, not a timer racing the main actor while
+        // other suites run. Keep the wait bounded so a missing refilter fails.
+        for _ in 0..<300 where store.visibleArticles.map(\.id) != ["article-003"] {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(store.visibleArticles.map(\.id) == ["article-003"])
 
         // A hidden category hides its articles from every list.
@@ -74,10 +78,11 @@ struct LiveUpdateCoalescingTests {
         var hidden = categories[1]
         hidden.hidden = true
         store.updateCategory(hidden)
-        try await Task.sleep(for: .milliseconds(600))
         let before = store.visibleArticles.count
         store._applyCategoryAssignmentsForTesting(["article-005": [hidden.id]])
-        try await Task.sleep(for: .milliseconds(600))
+        for _ in 0..<300 where store.visibleArticles.contains(where: { $0.id == "article-005" }) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(store.visibleArticles.count == before - 1)
         #expect(!store.visibleArticles.contains { $0.id == "article-005" })
     }
