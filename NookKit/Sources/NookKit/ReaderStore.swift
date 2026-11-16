@@ -20,7 +20,7 @@ public final class ReaderStore {
     private var feedsByID: [Feed.ID: Feed] = [:]
     var articles: [Article] = [] {
         didSet {
-            #if DEBUG && os(macOS)
+            #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
             let didSetStarted = ProcessInfo.processInfo.systemUptime
             defer { MainThreadLog.add("store.didset.articles", ms: (ProcessInfo.processInfo.systemUptime - didSetStarted) * 1000) }
             #endif
@@ -1870,7 +1870,7 @@ public final class ReaderStore {
     /// the `articles` didSet so the cached values stay exact without the sidebar
     /// re-scanning all articles per badge, per render.
     private func recomputeCounts() {
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         let countsStarted = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("store.counts", ms: (ProcessInfo.processInfo.systemUptime - countsStarted) * 1000) }
         #endif
@@ -2357,7 +2357,7 @@ public final class ReaderStore {
     /// category delta, and one in-place patch of the listed copies, which
     /// reconfigures only the rows on screen.
     private func applyCategoryAssignments(_ assignments: [Article.ID: [String]]) {
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         let flushStarted = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("store.ai.flush", ms: (ProcessInfo.processInfo.systemUptime - flushStarted) * 1000) }
         #endif
@@ -4279,7 +4279,7 @@ public final class ReaderStore {
     /// currently displayed. One property republish; no O(n) refilter.
     @discardableResult
     private func updateDisplayedArticleInPlace(_ id: Article.ID, _ mutate: (inout Article) -> Void) -> Bool {
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         let updateStarted = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("store.updateInPlace", ms: (ProcessInfo.processInfo.systemUptime - updateStarted) * 1000) }
         #endif
@@ -4296,7 +4296,7 @@ public final class ReaderStore {
     /// `updateDisplayedArticleInPlace` for a batch: one window patch (one table
     /// update) and one republish for all of them.
     private func updateDisplayedArticlesInPlace(_ updates: [(Article.ID, (inout Article) -> Void)]) {
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         let updateStarted = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("store.updateInPlace", ms: (ProcessInfo.processInfo.systemUptime - updateStarted) * 1000) }
         #endif
@@ -4687,6 +4687,9 @@ public final class ReaderStore {
             }
         }
 
+        #if NOOK_PERFORMANCE_TRACE && os(macOS)
+        MainThreadLog.note("library.loaded", extra: "articles=\(articles.count) feeds=\(feeds.count)")
+        #endif
         errorMessage = nil
         lastKnownLibraryModDate = load.libraryModDate
         lastKnownStateModDate = load.stateModDate

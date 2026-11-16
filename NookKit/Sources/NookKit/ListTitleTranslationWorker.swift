@@ -1,7 +1,7 @@
 import Foundation
 
 /// The non-UI half of list-title translation. A run owns provider streaming,
-/// validation/fallback, reveal gating, and typewriter pacing. Its consumer only
+/// validation/fallback, reveal gating, and snapshot coalescing. Its consumer only
 /// receives bounded, immutable presentation events and can therefore do a tiny
 /// state assignment on the main actor.
 actor ListTitleTranslationWorker {
@@ -31,50 +31,44 @@ actor ListTitleTranslationWorker {
     }
 
     /// Starts a self-contained run. The detached producer is deliberate: callers
-    /// are MainActor coordinators, but no provider, parsing, validation, or pacing
+    /// are MainActor coordinators, but no provider, parsing, validation, or coalescing
     /// work is allowed to inherit their executor.
     func events(
         for request: Request,
         revealDelay: Duration = .milliseconds(340),
-        frameInterval: Duration = .milliseconds(33)
+        frameInterval: Duration = .milliseconds(100)
     ) -> AsyncStream<Event> {
         let backend = self.backend
         return AsyncStream(bufferingPolicy: .bufferingNewest(4)) { continuation in
+            let emitter = ListTitleProgressEmitter(
+                continuation: continuation,
+                provider: request.provider,
+                revealDelay: revealDelay,
+                frameInterval: frameInterval
+            )
             let producer = Task.detached(priority: .userInitiated) {
-                let emitter = ListTitleProgressEmitter(
-                    continuation: continuation,
-                    provider: request.provider,
-                    revealDelay: revealDelay,
-                    frameInterval: frameInterval
-                )
+                let terminal: Event?
                 do {
                     let final = try await backend(request) { partial in
                         await emitter.emit(partial)
                     }
                     try Task.checkCancellation()
-                    guard let final else {
-                        continuation.yield(.failed)
-                        continuation.finish()
-                        return
-                    }
-                    let cleaned = final.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !cleaned.isEmpty else {
-                        continuation.yield(.failed)
-                        continuation.finish()
-                        return
-                    }
-                    await emitter.emit(cleaned)
-                    continuation.yield(.completed(cleaned, request.provider))
-                    continuation.finish()
+                    let cleaned = final?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    terminal = cleaned.isEmpty ? .failed : .completed(cleaned, request.provider)
                 } catch is CancellationError {
-                    continuation.finish()
+                    terminal = nil
                 } catch {
-                    continuation.yield(.failed)
-                    continuation.finish()
+                    terminal = .failed
                 }
+                // Completion wins over any delayed snapshot. A bulk result is
+                // ready to read; never manufacture animation frames from it.
+                await emitter.finish()
+                if let terminal { continuation.yield(terminal) }
+                continuation.finish()
             }
             continuation.onTermination = { @Sendable _ in
                 producer.cancel()
+                Task { await emitter.finish() }
             }
         }
     }
@@ -131,7 +125,7 @@ actor ListTitleTranslationWorker {
 
         // The structured model occasionally echoes a short, proper-noun-heavy
         // title. The plain fallback is still executed here, never by the UI actor;
-        // the emitter types its bulk result at the same bounded cadence.
+        // its bulk result is delivered immediately when ready.
         guard let plain = await NaturalTranslator.translatePlainFallback(
             request.source,
             into: request.languageName,
@@ -155,9 +149,9 @@ actor ListTitleTranslationWorker {
     }
 }
 
-/// Serializes cumulative snapshots into small, frame-bounded prefixes. This
-/// actor is the back-pressure boundary: a provider can generate as quickly as it
-/// likes without turning every token into a SwiftUI update.
+/// Keeps the newest provider snapshot without making the provider wait for UI
+/// animation. At most one delayed flush is scheduled, so a burst of tokens costs
+/// one row layout, not one layout per token (or per synthetic four-character step).
 private actor ListTitleProgressEmitter {
     private let continuation: AsyncStream<ListTitleTranslationWorker.Event>.Continuation
     private let provider: TranslationProvider
@@ -166,6 +160,9 @@ private actor ListTitleProgressEmitter {
     private let startedAt = ContinuousClock.now
     private var lastEmission: ContinuousClock.Instant?
     private var displayed = ""
+    private var pending: String?
+    private var flushTask: Task<Void, Never>?
+    private var finished = false
 
     init(
         continuation: AsyncStream<ListTitleTranslationWorker.Event>.Continuation,
@@ -179,49 +176,40 @@ private actor ListTitleProgressEmitter {
         self.frameInterval = frameInterval
     }
 
-    func emit(_ raw: String) async {
-        guard !Task.isCancelled else { return }
+    func emit(_ raw: String) {
+        guard !finished, !Task.isCancelled else { return }
         let target = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !target.isEmpty, target != displayed else { return }
-
-        await waitForReveal()
-        guard !Task.isCancelled else { return }
-
-        // Normal cumulative streams extend the previous value. Reveal at most
-        // four characters per frame so even a provider that returns one bulk
-        // snapshot retains the intended typewriter motion.
-        if target.hasPrefix(displayed) {
-            let characters = Array(target)
-            var shown = Array(displayed).count
-            while shown < characters.count, !Task.isCancelled {
-                shown = min(characters.count, shown + 4)
-                await waitForFrame()
-                displayed = String(characters.prefix(shown))
-                continuation.yield(.partial(displayed, provider))
-            }
+        guard !target.isEmpty else { return }
+        // A correction back to the displayed value must replace pending text too.
+        pending = target
+        guard flushTask == nil else { return }
+        let deadline = max(startedAt + revealDelay, (lastEmission ?? startedAt) + (lastEmission == nil ? .zero : frameInterval))
+        if ContinuousClock.now >= deadline {
+            flush()
         } else {
-            // A provider correction can replace an earlier prefix. Apply it in
-            // one frame rather than synthesizing misleading delete/retype motion.
-            await waitForFrame()
-            displayed = target
-            continuation.yield(.partial(displayed, provider))
-        }
-    }
-
-    private func waitForReveal() async {
-        let elapsed = startedAt.duration(to: .now)
-        if elapsed < revealDelay {
-            try? await Task.sleep(for: revealDelay - elapsed)
-        }
-    }
-
-    private func waitForFrame() async {
-        if let lastEmission {
-            let elapsed = lastEmission.duration(to: .now)
-            if elapsed < frameInterval {
-                try? await Task.sleep(for: frameInterval - elapsed)
+            flushTask = Task { [weak self] in
+                do { try await Task.sleep(until: deadline, clock: .continuous) }
+                catch { return }
+                guard !Task.isCancelled else { return }
+                await self?.flush()
             }
         }
+    }
+
+    func finish() {
+        finished = true
+        flushTask?.cancel()
+        flushTask = nil
+        pending = nil
+    }
+
+    private func flush() {
+        flushTask = nil
+        guard !finished, let target = pending else { return }
+        pending = nil
+        guard target != displayed else { return }
+        displayed = target
         lastEmission = .now
+        continuation.yield(.partial(target, provider))
     }
 }

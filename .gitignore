@@ -1,6 +1,7 @@
 # Xcode
 DerivedData/
 DerivedData-perf/
+DerivedData-trace/
 build/
 *.xcworkspace
 *.xcuserstate

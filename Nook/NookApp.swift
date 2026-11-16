@@ -129,8 +129,10 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         MainThreadLog.startWatchdog()
+        #endif
+        #if DEBUG
         PerfDriver.prepareLaunchIfRequested()
         #endif
         UNUserNotificationCenter.current().delegate = self
@@ -159,7 +161,7 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
         reevaluateEngagement()
         // Land any shard write still inside its trailing-save window.
         ReaderStore.shared.flushPendingShardSave()
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         MainThreadLog.summary()
         MainThreadLog.flush()
         #endif
@@ -167,7 +169,7 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
 
     func applicationWillTerminate(_ notification: Notification) {
         ReaderStore.shared.flushPendingShardSave()
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         MainThreadLog.summary()
         MainThreadLog.flush()
         #endif

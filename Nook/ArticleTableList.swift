@@ -170,6 +170,9 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     // MARK: Scrolling and visibility
 
     private func clipBoundsChanged() {
+        #if NOOK_PERFORMANCE_TRACE
+        MainThreadLog.add("list.scroll.move", ms: 0)
+        #endif
         let now = ProcessInfo.processInfo.systemUptime
         motion.record(y: scrollView.contentView.bounds.minY, at: now)
         updateScrolling()
@@ -184,8 +187,13 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         let now = ProcessInfo.processInfo.systemUptime
         let fast = motion.isFast(at: now)
         let scrolling = liveScrolling || fast
-        #if DEBUG
-        if scrolling != isScrollingForTranslator { MainThreadLog.add("list.scroll.phase", ms: 0) }
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
+        if scrolling != isScrollingForTranslator {
+            MainThreadLog.add("list.scroll.phase", ms: 0)
+            #if NOOK_PERFORMANCE_TRACE
+            MainThreadLog.note("list.scroll.gate", extra: "active=\(scrolling) live=\(liveScrolling) fast=\(fast)")
+            #endif
+        }
         #endif
         isScrollingForTranslator = scrolling
         // Newest-first while the list has moved in the last second.
@@ -257,7 +265,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     }
 
     private func apply(_ update: ArticleTableUpdate) {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let started = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("list.table.update", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000) }
         #endif
@@ -305,7 +313,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
 
     /// A new source: every row, from the top. The table and its cells stay.
     private func reload(scrollToTop: Bool = true) {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let started = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("list.table.reload", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000) }
         #endif
@@ -339,7 +347,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
 
     /// Every row-height re-query goes through here, so a perf run can count them.
     private func noteHeights(_ rows: IndexSet) {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let started = ProcessInfo.processInfo.systemUptime
         defer {
             MainThreadLog.add("list.table.noteHeights", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000)
@@ -371,7 +379,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     func numberOfRows(in tableView: NSTableView) -> Int { window.rowCount }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let started = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("list.table.height", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000) }
         #endif
@@ -386,13 +394,13 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         if let reused = tableView.makeView(withIdentifier: ArticleTableCellView.reuseIdentifier, owner: nil)
             as? ArticleTableCellView {
             cell = reused
-            #if DEBUG
+            #if DEBUG || NOOK_PERFORMANCE_TRACE
             MainThreadLog.add("list.table.cell.reuse", ms: 0)
             #endif
         } else {
             cell = ArticleTableCellView(translator: translator)
             cell.identifier = ArticleTableCellView.reuseIdentifier
-            #if DEBUG
+            #if DEBUG || NOOK_PERFORMANCE_TRACE
             MainThreadLog.add("list.table.cell.make", ms: 0)
             #endif
         }
@@ -402,7 +410,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     }
 
     private func configure(_ cell: ArticleTableCellView, row: Int) {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         // The per-row configure, the table's counterpart of the List's per-row closure.
         MainThreadLog.add("list.rowcontent", ms: 0)
         #endif
@@ -418,7 +426,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     // dwell, and growth when a row near the end of the window comes into view.
     func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
         guard let model = (rowView.view(atColumn: 0) as? ArticleTableCellView)?.model else { return }
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         // AppKit prepares rows past the visible rect too (overdraw); count those.
         MainThreadLog.add("list.table.add", ms: 0)
         if !tableView.visibleRect.intersects(tableView.rect(ofRow: row)) { MainThreadLog.add("list.table.addOffscreen", ms: 0) }
@@ -455,13 +463,13 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         guard let model = cell.model, let row = window.rowIndex(of: model.id),
               tableView.view(atColumn: 0, row: row, makeIfNecessary: false) === cell else { return }
         let translation = translation(for: model)
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let given = heights.height(for: model, width: column.width, translation: translation)
         #endif
         guard heights.record(height, for: model, width: column.width, translation: translation) else {
             return
         }
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         MainThreadLog.add("list.row.height", ms: 0)
         MainThreadLog.note("list.table.height.fix", extra: "row=\(row) given=\(given) laidOut=\(height) width=\(column.width) translated=\(translation != nil) titleChars=\(model.title.count) summaryChars=\(model.summary.count)")
         #endif
@@ -478,7 +486,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
         let rows = IndexSet(pendingHeightIDs.compactMap(window.rowIndex(of:)))
         pendingHeightIDs.removeAll()
         guard !rows.isEmpty else { return }
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         MainThreadLog.addOncePerTurn("list.row.height.flush")
         #endif
         noteHeights(rows)
@@ -496,7 +504,7 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     func tableView(_ tableView: NSTableView, rowActionsForRow row: Int,
                    edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
         guard edge == .leading, row < window.rowCount else { return [] }
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         MainThreadLog.add("list.row.swipe", ms: 0)
         #endif
         let id = window.row(at: row).id
@@ -619,7 +627,7 @@ struct ArticleTableCellContent: View {
 
     var body: some View {
         if let model {
-            #if DEBUG
+            #if DEBUG || NOOK_PERFORMANCE_TRACE
             let _ = MainThreadLog.add("list.row", ms: 0)
             #endif
             Group {
@@ -651,7 +659,7 @@ enum ArticleRowCalibration {
     static let rowInset: CGFloat = 4
 
     static func measure() -> ArticleTableRowHeights.Metrics {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let started = ProcessInfo.processInfo.systemUptime
         defer { MainThreadLog.add("list.table.calibrate", ms: (ProcessInfo.processInfo.systemUptime - started) * 1000) }
         #endif

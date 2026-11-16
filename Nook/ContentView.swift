@@ -81,7 +81,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let _ = MainThreadLog.add("root.body", ms: 0)
         #endif
         // Applied outside `workspace`: one more modifier on that chain is past
@@ -627,7 +627,7 @@ private struct FeedSidebar: View {
     @State private var actionFeedback = 0
 
     var body: some View {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let _ = MainThreadLog.add("sidebar.body", ms: 0)
         #endif
         // The sections sit directly in the List. Wrapping them in one equatable
@@ -1556,7 +1556,7 @@ private struct SourceRow: View {
     }
 
     var body: some View {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let _ = MainThreadLog.add("sidebar.row", ms: 0)
         #endif
         Label {
@@ -2894,7 +2894,7 @@ private struct ReaderDetailView: View {
     }
 
     var body: some View {
-        #if DEBUG
+        #if DEBUG || NOOK_PERFORMANCE_TRACE
         let _ = MainThreadLog.readerBody()
         #endif
         baseContent
@@ -4733,6 +4733,12 @@ struct ReaderAppCommands: Commands {
 
         CommandGroup(after: .help) {
             Button("Send Feedback…") { FeedbackMailer.compose() }
+            #if NOOK_PERFORMANCE_TRACE
+            Divider()
+            Button("Mark Performance Issue") { MainThreadLog.markIssue() }
+                .keyboardShortcut("l", modifiers: [.command, .option, .shift])
+            Button("Show Performance Log") { MainThreadLog.showLog() }
+            #endif
         }
     }
 }

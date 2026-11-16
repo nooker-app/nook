@@ -14,7 +14,7 @@ BUILD_FLAGS := CODE_SIGNING_ALLOWED=NO
 # project in Xcode still shows the prompt once — click "Trust & Enable".
 PLUGIN_FLAGS := -skipPackagePluginValidation
 
-.PHONY: build perf-build clean open legibility legibility-check app-store-screenshots app-store-capture app-store-check-faces macos-signing-secrets
+.PHONY: build perf-build trace-build clean open legibility legibility-check app-store-screenshots app-store-capture app-store-check-faces macos-signing-secrets
 
 build:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DESTINATION)' -derivedDataPath $(DERIVED_DATA_PATH) $(PLUGIN_FLAGS) $(BUILD_FLAGS) build
@@ -31,6 +31,20 @@ perf-build:
 	/usr/libexec/PlistBuddy -c 'Delete :NookBuildSHA' "$$plist" >/dev/null 2>&1 || true; \
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug -destination '$(DESTINATION)' -derivedDataPath $(PERF_DERIVED_DATA_PATH) $(PLUGIN_FLAGS) $(BUILD_FLAGS) SWIFT_OPTIMIZATION_LEVEL=-O build; \
 	/usr/libexec/PlistBuddy -c "Add :NookBuildSHA string $$stamp" "$$plist"
+
+# A local Release app with opt-in performance logs and a symptom marker in Help.
+# Use the app's Developer ID identity when testing existing bookmarks/Keychain.
+TRACE_DERIVED_DATA_PATH := DerivedData-trace
+TRACE_SIGN_IDENTITY ?= -
+
+trace-build:
+	@set -eu; \
+	stamp="$$(tools/perf/build-id.sh)"; \
+	app="$(TRACE_DERIVED_DATA_PATH)/Build/Products/Release/Nook.app"; \
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Release -destination '$(DESTINATION)' -derivedDataPath $(TRACE_DERIVED_DATA_PATH) $(PLUGIN_FLAGS) CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$(TRACE_SIGN_IDENTITY)" CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=YES OTHER_CODE_SIGN_FLAGS=--timestamp=none SWIFT_ACTIVE_COMPILATION_CONDITIONS='$$(inherited) NOOK_PERFORMANCE_TRACE' build; \
+	/usr/libexec/PlistBuddy -c 'Delete :NookBuildSHA' "$$app/Contents/Info.plist" >/dev/null 2>&1 || true; \
+	/usr/libexec/PlistBuddy -c "Add :NookBuildSHA string $$stamp" "$$app/Contents/Info.plist"; \
+	codesign --force --sign "$(TRACE_SIGN_IDENTITY)" --timestamp=none --preserve-metadata=identifier,entitlements,requirements,flags "$$app"
 
 clean:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $(DERIVED_DATA_PATH) clean

@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Mark Performance Issue": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "문제 시점 기록"
+          }
+        }
+      }
+    },
+    "Show Performance Log": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "성능 로그 보기"
+          }
+        }
+      }
+    },
     "Delete": {
       "localizations": {
         "ja": {

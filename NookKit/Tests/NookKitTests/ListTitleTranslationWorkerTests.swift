@@ -56,8 +56,6 @@ struct ListTitleTranslationWorkerTests {
             return "번역된 제목입니다"
         }
 
-        let clock = ContinuousClock()
-        let started = clock.now
         // `Task` here inherits MainActor, so the consumer side is the UI too —
         // the same shape as the real `ListTitleTranslator`.
         let stream = await worker.events(
@@ -66,30 +64,23 @@ struct ListTitleTranslationWorkerTests {
             frameInterval: .milliseconds(5)
         )
         let collector = Task {
-            var firstPartialElapsed: Duration?
             var last: ListTitleTranslationWorker.Event?
             for await event in stream {
-                if firstPartialElapsed == nil, case .partial = event {
-                    firstPartialElapsed = started.duration(to: clock.now)
-                }
                 last = event
             }
-            return (last, firstPartialElapsed)
+            return last
         }
         // The stream only finishes after the backend returned, so awaiting it
         // is enough to guarantee the probe was written — no spin-waiting.
-        let (lastEvent, firstPartialElapsed) = await collector.value
+        let lastEvent = await collector.value
 
         #expect(await probe.startedOnMainThread == false)
         #expect(await probe.resumedOnMainThread == false)
-        // `Task.sleep` never returns early, so the first partial can only be late.
-        // The tolerance absorbs clock granularity between the two start points.
-        #expect(firstPartialElapsed ?? .zero >= revealDelay - .milliseconds(5))
         #expect(lastEvent == .completed("번역된 제목입니다", .gemini))
     }
 
-    @Test("Bulk output is paced into bounded cumulative prefixes")
-    func pacesBulkOutput() async {
+    @Test("Bulk output completes without synthetic typing frames")
+    func completesBulkOutput() async {
         let final = "abcdefghijklmnop"
         let worker = ListTitleTranslationWorker { _, _ in final }
         let stream = await worker.events(
@@ -100,9 +91,51 @@ struct ListTitleTranslationWorkerTests {
 
         let (partials, terminal) = await drain(stream)
 
-        #expect(partials.count == 4)
-        #expect(partials.map(\.count) == [4, 8, 12, 16])
+        #expect(partials.isEmpty)
         #expect(terminal == .completed(final, .appleIntelligence))
+    }
+
+    @Test("A token burst coalesces to its latest snapshot without delaying the provider")
+    func coalescesBurst() async {
+        let gate = SnapshotGate()
+        let final = String(repeating: "가", count: 100)
+        let worker = ListTitleTranslationWorker { _, onPartial in
+            for count in 1...100 {
+                await onPartial(String(final.prefix(count)))
+            }
+            // The consumer opens the gate on the FIRST partial. If onPartial
+            // waits for a frame, the old implementation exposes the first token instead.
+            await gate.wait()
+            return final
+        }
+        let stream = await worker.events(for: request(), revealDelay: .milliseconds(100))
+        var partials: [String] = []
+        var terminal: ListTitleTranslationWorker.Event?
+        for await event in stream {
+            if case .partial(let text, _) = event {
+                partials.append(text)
+                await gate.open()
+            } else {
+                terminal = event
+            }
+        }
+        #expect(partials == [final])
+        #expect(terminal == .completed(final, .gemini))
+    }
+
+    @Test("Completion replaces a pending snapshot without waiting for its timer")
+    func completionDiscardsPendingSnapshot() async {
+        let worker = ListTitleTranslationWorker { _, onPartial in
+            await onPartial("abcd")
+            await onPartial("abcdefgh")
+            return "final correction"
+        }
+        let stream = await worker.events(
+            for: request(), revealDelay: .zero, frameInterval: .seconds(1)
+        )
+        let (partials, terminal) = await drain(stream)
+        #expect(partials == ["abcd"])
+        #expect(terminal == .completed("final correction", .gemini))
     }
 
     /// A provider may correct itself with a snapshot that is not an extension of
@@ -195,4 +228,20 @@ private actor ThreadProbe {
 
     func recordStart(onMainThread: Bool) { startedOnMainThread = onMainThread }
     func recordResume(onMainThread: Bool) { resumedOnMainThread = onMainThread }
+}
+
+private actor SnapshotGate {
+    private var isOpen = false
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiter = $0 }
+    }
+
+    func open() {
+        isOpen = true
+        waiter?.resume()
+        waiter = nil
+    }
 }

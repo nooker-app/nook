@@ -1,8 +1,8 @@
-#if DEBUG && os(macOS)
+#if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
 import AppKit
 import os
 
-/// Debug-only timing log used by repeatable performance scenarios. It records
+/// Timing log for DEBUG scenarios and opt-in NOOK_PERFORMANCE_TRACE builds. It records
 /// counts and durations, never article or library content.
 @MainActor
 public enum MainThreadLog {
@@ -15,8 +15,43 @@ public enum MainThreadLog {
             ?? ProcessInfo.processInfo.environment["NOOK_PERF_LOG_PATH"] {
             return URL(fileURLWithPath: path)
         }
+        #if NOOK_PERFORMANCE_TRACE
+        return traceLogURL
+        #else
         return FileManager.default.temporaryDirectory.appendingPathComponent("ui-forensics.log")
+        #endif
     }
+
+    #if NOOK_PERFORMANCE_TRACE
+    private static let traceLogURL: URL = {
+        let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        let directory = library.appendingPathComponent("Logs/Nook", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let date = Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
+        return directory.appendingPathComponent("performance-\(date)-\(ProcessInfo.processInfo.processIdentifier).log")
+    }()
+
+    /// User marks the symptom after a missed frame; the watchdog has already
+    /// recorded the blocked interval, even if this menu action had to wait.
+    public static func markIssue() {
+        note("USER_MARK", extra: "wall=\(Date().ISO8601Format())")
+        summary()
+        flush()
+        NSSound.beep()
+    }
+
+    public static func showLog() {
+        flush()
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private static func traceSnapshot() {
+        let fields = MainThreadProbe.shared.totalsSnapshot().map {
+            "\($0.label)=\($0.calls)/\(number($0.ms))ms"
+        }
+        note("trace.snapshot", extra: fields.joined(separator: " "))
+    }
+    #endif
 
     public static func note(_ phase: String, extra: String = "") {
         lines.append(stamp() + " " + phase.padding(toLength: 22, withPad: " ", startingAt: 0) + " " + extra)
@@ -36,7 +71,13 @@ public enum MainThreadLog {
         guard !didBeginRun else { return }
         didBeginRun = true
         let arguments = ProcessInfo.processInfo.arguments
-        let label = launchValue("-NookPerfLabel", in: arguments) ?? "debug"
+        #if NOOK_PERFORMANCE_TRACE
+        let defaultLabel = "release-trace"
+        note("trace.session", extra: "wall=\(Date().ISO8601Format()) pid=\(ProcessInfo.processInfo.processIdentifier)")
+        #else
+        let defaultLabel = "debug"
+        #endif
+        let label = launchValue("-NookPerfLabel", in: arguments) ?? defaultLabel
         let library = launchValue("-NookPerfLibrary", in: arguments)
             .map { URL(fileURLWithPath: $0).lastPathComponent } ?? "default"
         let sha = launchValue("-NookPerfSHA", in: arguments)
@@ -293,8 +334,13 @@ public enum MainThreadLog {
         guard heartbeatTimer == nil else { return }
         runBegin()
         let configuredMs = launchValue("-NookStallMs", in: ProcessInfo.processInfo.arguments).flatMap(Double.init)
-        let heartbeatInterval = configuredMs == nil ? 0.05 : 0.008
-        let threshold = (configuredMs ?? 250) / 1000
+        #if NOOK_PERFORMANCE_TRACE
+        let effectiveMs = configuredMs ?? 50
+        #else
+        let effectiveMs = configuredMs ?? 250
+        #endif
+        let heartbeatInterval = effectiveMs <= 50 ? 0.008 : 0.05
+        let threshold = effectiveMs / 1000
         MainThreadProbe.shared.configure(interval: heartbeatInterval, threshold: threshold)
         let timer = Timer(timeInterval: heartbeatInterval, repeats: true) { _ in
             MainActor.assumeIsolated { MainThreadLog.heartbeat(ProcessInfo.processInfo.systemUptime) }
@@ -302,7 +348,12 @@ public enum MainThreadLog {
         RunLoop.main.add(timer, forMode: .common)
         heartbeatTimer = timer
         let writer = Timer(timeInterval: 2, repeats: true) { _ in
-            MainActor.assumeIsolated { MainThreadLog.flush() }
+            MainActor.assumeIsolated {
+                #if NOOK_PERFORMANCE_TRACE
+                MainThreadLog.traceSnapshot()
+                #endif
+                MainThreadLog.flush()
+            }
         }
         RunLoop.main.add(writer, forMode: .common)
         flushTimer = writer
@@ -336,6 +387,15 @@ public enum MainThreadLog {
     public static func flush() {
         guard !lines.isEmpty, let data = (lines.joined(separator: "\n") + "\n").data(using: .utf8) else { return }
         lines.removeAll()
+        #if NOOK_PERFORMANCE_TRACE
+        // Bound an unattended diagnostic session to two files, 8 MiB each.
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
+        if size >= 8 * 1024 * 1024 {
+            let previous = url.deletingPathExtension().appendingPathExtension("previous.log")
+            try? FileManager.default.removeItem(at: previous)
+            try? FileManager.default.moveItem(at: url, to: previous)
+        }
+        #endif
         if let handle = try? FileHandle(forWritingTo: url) {
             handle.seekToEndOfFile(); handle.write(data); try? handle.close()
         } else { try? data.write(to: url) }
@@ -395,7 +455,8 @@ public enum MainThreadLog {
     }
 
     private static func launchValue(_ key: String, in arguments: [String]) -> String? {
-        PerfLaunch.value(for: key, in: arguments)
+        guard let index = arguments.firstIndex(of: key), arguments.indices.contains(index + 1) else { return nil }
+        return arguments[index + 1]
     }
 
     private static func token(_ value: String) -> String { value.replacingOccurrences(of: " ", with: "_") }

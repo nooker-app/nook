@@ -49,7 +49,7 @@ public final class ListTitleTranslator {
 
         fileprivate init(state: TitleState? = nil) { self.state = state }
 
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         // Boxes are interned for the translator's lifetime, so this staying at 0
         // while `list.title.box` grows is the lifetime being measured.
         deinit { MainThreadLog.add("list.title.box.release", ms: 0) }
@@ -57,7 +57,7 @@ public final class ListTitleTranslator {
 
         func setState(_ newState: TitleState?) {
             guard state != newState else { return }
-            #if DEBUG && os(macOS)
+            #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
             MainThreadLog.add("list.title.state", ms: 0)
             #endif
             state = newState
@@ -102,7 +102,7 @@ public final class ListTitleTranslator {
         if let existing = boxes[id] { return existing }
         let created = StateBox(state: seed)
         boxes[id] = created
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         MainThreadLog.add("list.title.box", ms: 0)
         #endif
         return created
@@ -347,7 +347,7 @@ public final class ListTitleTranslator {
         }
         visibleCounts[id] = nil
         visibleTitles[id] = nil
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         if dwellTasks[id] != nil { MainThreadLog.add("list.title.dwellCancel", ms: 0) }
         if pending.contains(where: { $0.id == id }) { MainThreadLog.add("list.title.queueCancel", ms: 0) }
         if activeTasks[id] != nil { MainThreadLog.add("list.title.cancel", ms: 0) }
@@ -394,8 +394,11 @@ public final class ListTitleTranslator {
     }
 
     private func startTranslate(id: Article.ID, title: String) {
-        #if DEBUG && os(macOS)
+        #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         MainThreadLog.add("list.title.start", ms: 0)
+        #if NOOK_PERFORMANCE_TRACE
+        MainThreadLog.note("list.title.begin", extra: "provider=\(provider.rawValue) active=\(activeTasks.count) queued=\(pending.count)")
+        #endif
         #endif
         let key = cacheKey(for: title)
         let name = targetLanguageName
@@ -422,7 +425,7 @@ public final class ListTitleTranslator {
 
             // Proper nouns / brands / acronyms (LG, SIMD, OpenAI, GPT-4, …) stay
             // verbatim in both the guided and fallback passes. Extraction, model
-            // work, validation, reveal gating, and pacing all happen in the worker.
+            // work, validation, reveal gating, and coalescing happen in the worker.
             let request = ListTitleTranslationWorker.Request(
                 source: title,
                 languageName: name,
@@ -431,9 +434,8 @@ public final class ListTitleTranslator {
             // Mount the empty block before the worker is allowed to emit text.
             // This state assignment is the only reveal work performed on MainActor.
             self.setState(.translating("", provider: provider), for: id)
-            // iOS paces the typewriter slower: each frame is a main-actor
-            // setState + Core Text remeasure of the row, and ~30Hz × concurrent
-            // rows was a measurable source of scroll jank on the phone.
+            // Each snapshot costs a main-actor assignment and text layout.
+            // Keep the existing iOS cadence; macOS coalesces at 100 ms.
             #if os(iOS)
             let events = await ListTitleTranslationWorker.shared.events(
                 for: request, frameInterval: .milliseconds(90)
@@ -447,7 +449,7 @@ public final class ListTitleTranslator {
                 case .partial(let partial, let eventProvider):
                     self.setState(.translating(partial, provider: eventProvider), for: id)
                 case .completed(let final, let eventProvider):
-                    #if DEBUG && os(macOS)
+                    #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
                     MainThreadLog.add("list.title.done", ms: 0)
                     #endif
                     self.rememberTranslation(key, final)
