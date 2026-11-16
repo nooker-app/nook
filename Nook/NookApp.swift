@@ -13,6 +13,7 @@ struct NookApp: App {
         // Keep the AppleLanguages override in sync with the stored preference,
         // and capture the language Nook launched with so Settings can tell when
         // a relaunch is still required.
+        _ = LayoutSelectionCoordinator.shared
         AppLanguage.applyStoredPreference()
         _ = AppLanguage.launchLanguage
         // Before the first filter runs, so its rows are measured off the main thread.
@@ -27,6 +28,8 @@ struct NookApp: App {
         // window instead of opening a new one each time.
         Window("Nook", id: "main") {
             MainWindowContent()
+                .tint(NookTheme.accent)
+                .accentColor(NookTheme.accent)
         }
         .defaultSize(width: 1280, height: 800)
         .windowResizability(.contentMinSize)
@@ -34,10 +37,26 @@ struct NookApp: App {
             SidebarCommands()
             TextEditingCommands()
             ReaderAppCommands()
+            CommandGroup(after: .sidebar) {
+                LayoutSelectionMenu()
+            }
         }
 
+        Window("Layout selection", id: "layout-picker") {
+            LayoutChooserView(isIntroduction: false)
+                .tint(NookTheme.accent)
+                .accentColor(NookTheme.accent)
+                .environment(\.locale, AppLanguage.formattingLocale)
+                .frame(minWidth: 920, minHeight: 640)
+        }
+        .defaultSize(width: 1000, height: 700)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+
         Settings {
-            ReaderSettingsView()
+            LayoutSettingsView()
+                .tint(NookTheme.accent)
+                .accentColor(NookTheme.accent)
                 .environment(\.locale, AppLanguage.formattingLocale)
         }
     }
@@ -51,7 +70,7 @@ private struct MainWindowContent: View {
     @AppStorage(PlusCredential.configuredKey) private var signedInToPlus = false
 
     var body: some View {
-        ContentView()
+        LayoutRootView()
             // Give the app-lifetime activity controller the exact reader window.
             // App activation alone is insufficient: Settings can be frontmost,
             // the reader can be closed/minimized, or the Mac can be unattended.
@@ -76,6 +95,7 @@ private struct ReaderWindowProbe: NSViewRepresentable {
     }
 
     final class ProbeView: NSView {
+        private let closeGate = LayoutWindowCloseGate()
         var title: String {
             didSet { window?.title = title }
         }
@@ -93,6 +113,13 @@ private struct ReaderWindowProbe: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             window?.title = title
+            if let window {
+                LayoutSelectionCoordinator.shared.readerWindow = window
+                if window.delegate !== closeGate {
+                    closeGate.original = window.delegate
+                    window.delegate = closeGate
+                }
+            }
             BackgroundRefreshController.shared?.setReaderWindow(window)
         }
     }
@@ -165,6 +192,10 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
         MainThreadLog.summary()
         MainThreadLog.flush()
         #endif
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        LayoutSelectionCoordinator.shared.canClose() ? .terminateNow : .terminateCancel
     }
 
     func applicationWillTerminate(_ notification: Notification) {

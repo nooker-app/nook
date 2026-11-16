@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B37A00000000000000000042 /* BetaSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000041 /* BetaSettings.swift */; };
+		B37A00000000000000000032 /* MagazineImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000031 /* MagazineImport.swift */; };
+		B37A00000000000000000022 /* MagazineReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000021 /* MagazineReader.swift */; };
+		B37A00000000000000000012 /* MagazineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000011 /* MagazineView.swift */; };
+		B37A00000000000000000002 /* LayoutSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000001 /* LayoutSelection.swift */; };
 		22E39C2B3000BD9900C3ECB6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22E39C2A3000BD9900C3ECB6 /* WidgetKit.framework */; };
 		22E39C2D3000BD9900C3ECB6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22E39C2C3000BD9900C3ECB6 /* SwiftUI.framework */; };
 		22E39C3C3000BD9A00C3ECB6 /* NookWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 22E39C283000BD9900C3ECB6 /* NookWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -109,6 +114,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B37A00000000000000000041 /* BetaSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BetaSettings.swift; sourceTree = "<group>"; };
+		B37A00000000000000000031 /* MagazineImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagazineImport.swift; sourceTree = "<group>"; };
+		B37A00000000000000000021 /* MagazineReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagazineReader.swift; sourceTree = "<group>"; };
+		B37A00000000000000000011 /* MagazineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagazineView.swift; sourceTree = "<group>"; };
+		B37A00000000000000000001 /* LayoutSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutSelection.swift; sourceTree = "<group>"; };
 		1342392267CEEBD4487A3A51 /* CalibrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationView.swift; sourceTree = "<group>"; };
 		136A9805F63042F505EC9EB7 /* CalibrationSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationSession.swift; sourceTree = "<group>"; };
 		22E39C283000BD9900C3ECB6 /* NookWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NookWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -283,6 +293,11 @@
 			children = (
 				2D0E3A1A2D8A4A4700A00001 /* NookApp.swift */,
 				2D0E3A1C2D8A4A4700A00001 /* ContentView.swift */,
+				B37A00000000000000000031 /* MagazineImport.swift */,
+				B37A00000000000000000041 /* BetaSettings.swift */,
+				B37A00000000000000000021 /* MagazineReader.swift */,
+				B37A00000000000000000011 /* MagazineView.swift */,
+				B37A00000000000000000001 /* LayoutSelection.swift */,
 				2D0E3A1C2D8A4A4700A0F501 /* ArticleTableList.swift */,
 				2D0E3A3F2D8A4A4700A00001 /* PerfDriver.swift */,
 				2DAAAAAA000000000000D001 /* UpdateController.swift */,
@@ -584,6 +599,11 @@
 			files = (
 				2D0E3A1B2D8A4A4700A00001 /* NookApp.swift in Sources */,
 				2D0E3A1D2D8A4A4700A00001 /* ContentView.swift in Sources */,
+				B37A00000000000000000032 /* MagazineImport.swift in Sources */,
+				B37A00000000000000000042 /* BetaSettings.swift in Sources */,
+				B37A00000000000000000022 /* MagazineReader.swift in Sources */,
+				B37A00000000000000000012 /* MagazineView.swift in Sources */,
+				B37A00000000000000000002 /* LayoutSelection.swift in Sources */,
 				2D0E3A1D2D8A4A4700A0F501 /* ArticleTableList.swift in Sources */,
 				2D0E3A402D8A4A4700A00001 /* PerfDriver.swift in Sources */,
 				2DAAAAAA000000000000D002 /* UpdateController.swift in Sources */,

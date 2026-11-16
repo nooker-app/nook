@@ -4112,7 +4112,7 @@ struct ReaderSettingsView: View {
     }
 }
 
-private struct ArticleRulesSettingsSections: View {
+struct ArticleRulesSettingsSections: View {
     var body: some View {
         Section("Article Rules") {
             ArticleRulesSettingsContent(store: .shared)
@@ -4120,7 +4120,7 @@ private struct ArticleRulesSettingsSections: View {
     }
 }
 
-private struct OfflineSettingsSections: View {
+struct OfflineSettingsSections: View {
     var body: some View {
         Section("Offline Reading") {
             OfflineSettingsContent(store: .shared)
@@ -4128,7 +4128,7 @@ private struct OfflineSettingsSections: View {
     }
 }
 
-private struct FiltersSettingsSections: View {
+struct FiltersSettingsSections: View {
     @AppStorage(ReaderStore.filterGuideSeenKey) private var filterGuideSeen = false
     @State private var showGuide = false
 
@@ -4148,7 +4148,7 @@ private struct FiltersSettingsSections: View {
     }
 }
 
-private struct ExperimentalSettingsSections: View {
+struct ExperimentalSettingsSections: View {
     @AppStorage(ReaderStore.readerContentByDefaultKey) private var readerContentByDefault = true
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
     @AppStorage(ReaderStore.coherentArticleTranslationKey) private var coherentArticleTranslation = false
@@ -4328,12 +4328,18 @@ private struct AppResetSheet: View {
     }
 }
 
-private struct GeneralSettingsSections: View {
+struct GeneralSettingsSections: View {
+    @Environment(\.openWindow) private var openWindow
+    @AppStorage(MacLayoutPreference.layoutKey) private var layoutRaw = MacLayoutMode.classic.rawValue
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
     @AppStorage("showUnreadBadge") private var showUnreadBadge = true
     @Bindable private var updateController = UpdateController.shared
 
     var body: some View {
+        Section("Layout") {
+            LabeledContent("Current layout", value: layoutRaw == MacLayoutMode.magazine.rawValue ? "Magazine (Beta)" : "Classic")
+            Button("Compare and change…") { openWindow(id: "layout-picker") }
+        }
         Section("Language") {
             Picker("Language", selection: $appLanguage) {
                 ForEach(AppLanguage.allCases) { language in
@@ -4372,7 +4378,7 @@ private struct GeneralSettingsSections: View {
     }
 }
 
-private struct ReadingSettingsSections: View {
+struct ReadingSettingsSections: View {
     @AppStorage("markReadOnOpen") private var markReadOnOpen = true
     @AppStorage("markReadDelaySeconds") private var markReadDelaySeconds = 3
     @AppStorage("readerViewMode") private var readerViewMode = ReaderViewMode.reader
@@ -4406,7 +4412,7 @@ private struct ReadingSettingsSections: View {
     }
 }
 
-private struct ReaderSettingsSections: View {
+struct ReaderSettingsSections: View {
     @AppStorage("readerFont") private var readerFont = ReaderFont.system
     @AppStorage("readerFontSize") private var readerFontSize = 18
     @AppStorage("readerLineHeight") private var readerLineHeight = 1.7
@@ -4466,7 +4472,7 @@ private struct ReaderSettingsSections: View {
     }
 }
 
-private struct FeedsSettingsSections: View {
+struct FeedsSettingsSections: View {
     @Bindable private var store = ReaderStore.shared
     @AppStorage("autoRefreshEnabled") private var autoRefreshEnabled = true
     @AppStorage("refreshIntervalMinutes") private var refreshIntervalMinutes = 30
@@ -4541,7 +4547,7 @@ private struct FeedsSettingsSections: View {
     }
 }
 
-private struct AboutSettingsPane: View {
+struct AboutSettingsPane: View {
     private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0" }
     private var build: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1" }
 

@@ -1,6 +1,666 @@
 {
   "sourceLanguage": "en",
   "strings": {
+  "No search results": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "검색 결과가 없습니다"
+        }
+      }
+    }
+  },
+  "Clear Search": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "검색 지우기"
+        }
+      }
+    }
+  },
+  "Search results": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "검색 결과"
+        }
+      }
+    }
+  },
+  "%lld results": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "검색 결과 %lld개"
+        }
+      }
+    }
+  },
+    "Appearance": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모양"
+          }
+        }
+      }
+    },
+    "Intelligence & experiments": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 및 실험실"
+          }
+        }
+      }
+    },
+    "Make Nook feel at home.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "당신에게 익숙한 Nook으로."
+          }
+        }
+      }
+    },
+    "A reading surface that feels like yours.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글꼴과 색상을 나만의 독서 환경으로."
+          }
+        }
+      }
+    },
+    "Choose how each story opens and reads.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글을 열고 읽는 방식을 설정하세요."
+          }
+        }
+      }
+    },
+    "Keep your publications fresh and in sync.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "구독 소식을 최신 상태로 동기화하세요."
+          }
+        }
+      }
+    },
+    "Give every story a place.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "규칙과 필터로 글을 정리하세요."
+          }
+        }
+      }
+    },
+    "Keep your reading close, wherever you are.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인터넷 없이도 읽을 수 있도록."
+          }
+        }
+      }
+    },
+    "Your voice, your publication.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "당신의 이야기와 발행 공간."
+          }
+        }
+      }
+    },
+    "Choose the intelligence behind your reading.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "읽기를 도와줄 AI와 기능을 선택하세요."
+          }
+        }
+      }
+    },
+    "A quiet place for reading and writing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "읽고 쓰는 시간을 위한 조용한 공간."
+          }
+        }
+      }
+    },
+    "Changes save automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "변경사항은 자동 저장됩니다"
+          }
+        }
+      }
+    },
+    "Magazine trends": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "매거진 동향"
+          }
+        }
+      }
+    },
+    "Show short trends from recent articles": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최신 글의 동향을 짧게 표시"
+          }
+        }
+      }
+    },
+    "Apple Intelligence is used first. If unavailable, your configured AI provider can generate short trends from article titles. Otherwise, Nook shows a simple reading message.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence를 우선 사용합니다. 사용할 수 없으면 설정된 AI 제공자에게 글 제목을 보내 짧은 동향을 생성하고, 생성할 수 없으면 기본 문구를 표시합니다."
+          }
+        }
+      }
+    },
+    "Your daily edition": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘의 읽을거리"
+          }
+        }
+      }
+    },
+    "%lld stories": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 %lld개"
+          }
+        }
+      }
+    },
+    "From your subscriptions": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "구독 중인 소식"
+          }
+        }
+      }
+    },
+    "Open in Reader": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "리더로 열기"
+          }
+        }
+      }
+    },
+    "Choose a layout…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "레이아웃 선택…"
+          }
+        }
+      }
+    },
+    "Layout": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "레이아웃"
+          }
+        }
+      }
+    },
+    "Current layout": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 레이아웃"
+          }
+        }
+      }
+    },
+    "Compare and change…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비교하고 변경…"
+          }
+        }
+      }
+    },
+    "How will you use Nook?": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "어떤 Nook을 만나고 싶으세요?"
+          }
+        }
+      }
+    },
+    "Make room for a new perspective.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새로운 시선으로 만나는 Nook."
+          }
+        }
+      }
+    },
+    "Two ways to read and write. One library.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "하나의 라이브러리, 두 가지 읽기와 쓰기."
+          }
+        }
+      }
+    },
+    "You can change this anytime in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정에서 언제든 변경할 수 있어요."
+          }
+        }
+      }
+    },
+    "Use this layout": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 레이아웃 사용"
+          }
+        }
+      }
+    },
+    "Your familiar three-column reader, with a dedicated writing window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "익숙한 3열 리더와 독립적인 글쓰기 창."
+          }
+        }
+      }
+    },
+    "An editorial canvas. Stories expand into reading, and ideas become drafts in Studio.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잡지처럼 둘러보고, 펼쳐서 읽고. Studio에서 생각을 글로 옮기세요."
+          }
+        }
+      }
+    },
+    "Replay preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다시 재생"
+          }
+        }
+      }
+    },
+    "Explore": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "둘러보기"
+          }
+        }
+      }
+    },
+    "Write": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "쓰기"
+          }
+        }
+      }
+    },
+    "Magazine": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "매거진"
+          }
+        }
+      }
+    },
+    "Studio": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Studio"
+          }
+        }
+      }
+    },
+    "Browse": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "둘러보기"
+          }
+        }
+      }
+    },
+    "Your reading life, in one place.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "나의 읽기 생활을 한곳에."
+          }
+        }
+      }
+    },
+    "Choose your sync folder, then add the publications you love.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "동기화 폴더를 선택하고 즐겨 읽는 구독을 추가하세요."
+          }
+        }
+      }
+    },
+    "Room for your next story.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 이야기를 만날 자리."
+          }
+        }
+      }
+    },
+    "Add a feed or choose another collection to start reading.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "피드를 추가하거나 다른 모음을 선택해 읽기를 시작하세요."
+          }
+        }
+      }
+    },
+    "Choose Sync Folder": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "동기화 폴더 선택"
+          }
+        }
+      }
+    },
+    "Back to Magazine": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "매거진으로 돌아가기"
+          }
+        }
+      }
+    },
+    "Your library": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "나의 라이브러리"
+          }
+        }
+      }
+    },
+    "Manage": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "관리"
+          }
+        }
+      }
+    },
+    "A space for what you have to say.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "당신의 이야기가 시작되는 공간."
+          }
+        }
+      }
+    },
+    "Your words belong here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "당신의 글을 기다리는 공간."
+          }
+        }
+      }
+    },
+    "Sign in to Nook+ in Publishing settings to start writing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글쓰기를 시작하려면 발행 설정에서 Nook+에 로그인하세요."
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 열기"
+          }
+        }
+      }
+    },
+    "Start with a thought.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "하나의 생각에서 시작하세요."
+          }
+        }
+      }
+    },
+    "Your drafts stay on this Mac until you publish them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "발행하기 전까지 초안은 이 Mac에만 저장됩니다."
+          }
+        }
+      }
+    },
+    "Saved on this Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 Mac에 저장됨"
+          }
+        }
+      }
+    },
+    "Saving…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장 중…"
+          }
+        }
+      }
+    },
+    "Save failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장 실패"
+          }
+        }
+      }
+    },
+    "Close the open dialog before changing layouts.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "열려 있는 대화상자를 닫은 뒤 레이아웃을 변경하세요."
+          }
+        }
+      }
+    },
+    "Finish saving your writing before changing layouts.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작성 중인 글을 저장한 뒤 레이아웃을 변경하세요."
+          }
+        }
+      }
+    },
+    "Layout selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "레이아웃 선택"
+          }
+        }
+      }
+    },
     "Mark Performance Issue": {
       "localizations": {
         "ko": {
@@ -3710,7 +4370,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "검색 결과와 일치하는 글가 없습니다."
+            "value": "검색어와 일치하는 글이 없습니다."
           }
         },
         "zh-Hans": {
