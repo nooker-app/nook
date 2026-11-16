@@ -36,18 +36,45 @@ public final class ListTitleTranslator {
         case translated(String, provider: TranslationProvider)
     }
 
+    struct Presentation: Equatable, Sendable {
+        let streaming: Bool
+        let provider: TranslationProvider
+
+        init(_ state: TitleState) {
+            switch state {
+            case .translating(_, let provider):
+                self.streaming = true
+                self.provider = provider
+            case .translated(_, let provider):
+                self.streaming = false
+                self.provider = provider
+            }
+        }
+    }
+
     /// Per-article observable state. A row observes only its own box, so a
     /// translation update re-renders that one row rather than the whole list.
     @MainActor
     @Observable
     public final class StateBox {
         public fileprivate(set) var state: TitleState?
+        // First native layout reads this snapshot without registering SwiftUI
+        // as an observer of every subsequent text prefix.
+        @ObservationIgnored fileprivate(set) var textSnapshot: TitleState?
+        // The block's chrome observes phase, not every cumulative text snapshot.
+        fileprivate(set) var presentation: Presentation?
+        fileprivate(set) var hasPresentedState: Bool
         /// Monotonic signal consumed by the outer native list row. Observing this
         /// at row scope is important on macOS: observing only the translated child
         /// can leave AppKit's newly inserted row-height cache unchanged.
         public fileprivate(set) var layoutRevision = 0
 
-        fileprivate init(state: TitleState? = nil) { self.state = state }
+        fileprivate init(state: TitleState? = nil) {
+            self.state = state
+            textSnapshot = state
+            presentation = state.map(Presentation.init)
+            hasPresentedState = state != nil
+        }
 
         #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
         // Boxes are interned for the translator's lifetime, so this staying at 0
@@ -60,7 +87,11 @@ public final class ListTitleTranslator {
             #if (DEBUG || NOOK_PERFORMANCE_TRACE) && os(macOS)
             MainThreadLog.add("list.title.state", ms: 0)
             #endif
+            textSnapshot = newState
             state = newState
+            let nextPresentation = newState.map(Presentation.init)
+            if presentation != nextPresentation { presentation = nextPresentation }
+            if newState != nil, !hasPresentedState { hasPresentedState = true }
             layoutRevision &+= 1
         }
     }
@@ -286,6 +317,14 @@ public final class ListTitleTranslator {
     public func state(for box: StateBox, title: String) -> TitleState? {
         if let live = box.state { return live }
         return cachedState(for: title)
+    }
+
+    func textSnapshot(for box: StateBox, title: String) -> TitleState? {
+        box.textSnapshot ?? cachedState(for: title)
+    }
+
+    func presentation(for box: StateBox, title: String) -> Presentation? {
+        box.presentation ?? cachedState(for: title).map(Presentation.init)
     }
 
     /// What a row for this id would show now, without interning a box: the AppKit

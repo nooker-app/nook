@@ -24,8 +24,12 @@ public struct ListTitleTranslationBlock: View {
     }
 
     public var body: some View {
+        #if os(macOS)
+        let presentation = translator.presentation(for: box, title: title)
+        #else
         let presentation = resolvedPresentation
         let text = presentation?.text ?? ""
+        #endif
         let streaming = presentation?.streaming ?? false
         let provider = presentation?.provider ?? .appleIntelligence
         let usesGemini = provider == .gemini
@@ -48,6 +52,10 @@ public struct ListTitleTranslationBlock: View {
                     )
                 )
 
+            #if os(macOS)
+            MacListTitleTranslationText(title: title, box: box, translator: translator)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            #else
             if text.isEmpty {
                 Text(String(localized: "Translating…", bundle: .main))
                     .foregroundStyle(.secondary)
@@ -57,6 +65,7 @@ public struct ListTitleTranslationBlock: View {
                     .fontWeight(.medium)
                     .lineLimit(2)
             }
+            #endif
         }
         .font(.callout)
         .foregroundStyle(Color.accentColor)
@@ -105,8 +114,8 @@ public struct ListTitleTranslationBlock: View {
 /// The slot reads the row's own box, so the block appears when the box first gets
 /// a state, and stays once it has had one so a hide still collapses smoothly.
 /// Inserted while streaming, it takes its full height at once and fades in; the
-/// state change that inserts it also advances `layoutRevision`, which the row
-/// root hands to the native row-height invalidator.
+/// slot observes presence only. Partial text must not rebuild the reveal wrapper
+/// or the block's chrome; the native text leaf reports real height changes.
 public struct ListTitleTranslationSlot: View {
     private let title: String
     private let box: ListTitleTranslator.StateBox
@@ -119,7 +128,7 @@ public struct ListTitleTranslationSlot: View {
     }
 
     public var body: some View {
-        if box.layoutRevision > 0 || translator.state(for: box, title: title) != nil {
+        if box.hasPresentedState || translator.presentation(for: box, title: title) != nil {
             ListTitleTranslationBlock(title: title, box: box, translator: translator, opensInsertedHeight: true)
         }
     }

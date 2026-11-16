@@ -158,13 +158,14 @@
 - [ ] **deleteArticle의 동작을 유지한다.** 글 제거, 선택이 일치하면 해제, retained에서 제거, `setArticleTombstone`, 즉시 insert를 수행하고, materialize는 tombstone을 버린다 — 새로고침 중 삭제 → 재실행 후에도 없음 (c7d1a61) — 3
 
 ## 7. 행, 스와이프, 메뉴 (Phase 2, 4)
-- [ ] **ArticleListView의 ForEach 행에 행 단위 `.id`를 두지 않는다.** id는 article.id(Identifiable)이고 선택은 `.tag(article.id)`다. 현재 `.id(`는 reader(2177, 2639)에만 있다. `.id(listGeneration)` 실험은 전체 전환 20회 이상 뒤에도 swipe 버튼이 그려지는지 검증한 뒤 채택한다 — grep `.id(` ContentView (29e53d8) — 1, 2
+- [ ] **ArticleListView의 ForEach 행에 행 단위 `.id`를 두지 않는다.** id는 article.id(Identifiable)이고 선택은 `.tag(article.id)`다. 메타데이터 하위 뷰의 `.id(model.id)`는 셀 재사용 시 다른 글 사이의 보간을 끊기 위한 것으로, 전체 행 ID와 구분한다. `.id(listGeneration)` 실험은 전체 전환 20회 이상 뒤에도 swipe 버튼이 그려지는지 검증한 뒤 채택한다 — grep `.id(` ContentView (29e53d8) — 1, 2
 - [ ] **`.contextMenu { ArticleRowMenu(...) }`와 `.swipeActions(edge: .leading, allowsFullSwipe: true) { ArticleRowSwipeActions(...) }`는 각각 child view 하나만 둔다.** Article 재조회는 child body 안에서 하고, ForEach 클로저에서 하지 않는다. `List.contextMenu(forSelectionType:)`는 쓰지 않는다. 라벨은 현재 isRead/isStarred를 반영한다. `.onKeyPress(.return)`과 `List(selection:)`는 List에 둔다 — ListRowMenuEagernessTests(menuIsDeferred: 0)와 ui-forensics의 list.row.menu ≈ 0. swipe 두 번 하면 라벨이 바뀌는지, Enter로 브라우저가 열리는지 확인 (250a6a3, e41d177, 91b8700, 0c4566b) — 2, 4
 - [ ] **ArticleRowModel은 `publishedAt: Date`만 갖는다.** 상대 시간 문자열은 갖지 않는다. 행은 `RelativeTimeText(model.publishedAt)`(macOS, iOS 각 1곳)로 그린다 — 3분 이상 방치하면 시간이 함께 진행되는지 확인 (27cf8fa, c56e8f7) — 4
-- [ ] **metadata line 구성을 유지한다.** 구성은 inline `CategoryBadges().fixedSize()`와 0폭 투명 칩 `Text("\u{200B}")...opacity(0)`이다. badge가 행 높이를 바꾸지 않는다. `.animation(isBulkCategorizing || reduceMotion ? nil : .smooth(0.28), value: categories)`는 RowModel의 Equatable categories를 기준으로 한다 — AI 태그가 늦게 붙어도 잘리지 않는지 확인 (1186a47) — 4
+- [ ] **metadata line 구성을 유지한다.** 구성은 inline `CategoryBadges().fixedSize()`와 0폭 투명 칩 `Text("\u{200B}")...opacity(0)`이다. badge가 행 높이를 바꾸지 않는다. `.animation(isBulkCategorizing || reduceMotion ? nil : .smooth(0.28), value: categories)`는 RowModel의 Equatable categories를 기준으로 하며, 메타데이터 하위 뷰의 `.id(model.id)`로 다른 글이 재사용될 때의 애니메이션을 초기화한다 — AI 태그가 늦게 붙어도 잘리지 않는지 확인 (1186a47) — 4
 - [ ] **`isBulkCategorizing`은 `@ObservationIgnored` 값으로, 렌더 시점에 live로 읽는다.** RowModel에 넣어 굳히지 않는다. category 이름이나 색이 바뀌면 `categoriesByID`로 badge를 다시 해석한다 — Settings에서 rename/recolor 시 행이 갱신되는지, 일괄 분류 시 애니메이션이 없는지 확인 (68d1b0e) — 4
 
 ## 8. 번역과 행 높이 (Phase 4)
+- [ ] **macOS 중간 번역문은 네이티브 텍스트만 갱신한다.** `ListTitleTranslationSlot`은 최초 등장, 블록은 진행 단계만 관찰한다. `updateNSView` 안에서 observable 텍스트를 읽지 않는다. 같은 줄의 중간 문장은 브리지를 재갱신하지 않고, 한 줄→두 줄 전환만 상위 높이에 반영되어야 한다 — `MacListTitleTranslationTextTests`
 - [ ] **StateBox의 수명을 지킨다.** 다음이 모두 성립해야 한다.
   - `ListTitleTranslator`는 @Observable이 아니고, 행은 자기 StateBox만 관찰한다
   - box는 행 body를 처음 평가할 때 이미 존재한다(행 생성 시 전달, onAppear 전용 생성은 불가)
