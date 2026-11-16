@@ -84,6 +84,16 @@ Time Profiler의 메인 스레드 6,895개 샘플 중 `sizeThatFits`가 1,401개
 - `real-fixture/golden/real-full/`: 동기화 콘텐츠를 포함한 검증용 사본.
 - `live-checks/`: 최종 빌드·테스트 로그와 화면 확인.
 
+## 실제 사용자 표시에서 찾은 셀 재사용 애니메이션
+
+첫 Release 체험의 사용자 표시 구간에서는 목록 제목 `list.title.state` 갱신이 없었고, 대부분 50 ms 이상 정지도 없었다. 사용자는 화면 위치가 튀는 것이 아니라 스크롤이 뚝뚝 끊기는 증상이라고 확인했다.
+
+실행 중인 Release 앱의 실제 스크롤을 Time Profiler로 12초 수집했다. 메인 스레드 3,046개 샘플 중 `RBInterpolatedDisplayListContents`가 820개(26.9%), `CGDrawingLayer.draw`가 859개, `sizeThatFits`가 417개였다. `IntrinsicRevealLayout`은 3개여서 이 구간의 주된 비용은 번역 블록 높이 계산이 아니라 텍스트 보간 렌더링이었다. 프레임 비율이 아니라 CPU 샘플 비중이며 호출 스택은 중첩된다.
+
+`ArticleRowLayout`의 메타데이터 줄은 `.animation(value: model.categories)`를 사용했다. `NSTableView`가 동일한 hosting cell을 다른 글에 재사용하면 새 글의 카테고리 차이도 애니메이션의 트리거가 된다. 피드명·시간·태그를 포함한 줄이 다른 글로 바뀔 때 불필요한 보간 렌더링이 발생할 수 있었다.
+
+메타데이터 하위 뷰에만 `.id(model.id)`를 지정해 글이 바뀌면 애니메이션의 이전 값을 새로 시작하도록 수정했다. 테이블 행이나 전체 셀의 ID는 바꾸지 않으므로 선택·스크롤 위치·네이티브 swipe action은 유지한다. 같은 글의 태그 추가는 하위 뷰 ID가 같아 기존 애니메이션을 유지한다. macOS 및 서명된 Release 빌드가 통과했다.
+
 ## Release 체험과 문제 기록
 
 `make trace-build TRACE_SIGN_IDENTITY='<이 프로젝트의 Developer ID 인증서>'`는 `DerivedData-trace/Build/Products/Release/Nook.app`을 만든다. Release 최적화에 `NOOK_PERFORMANCE_TRACE`만 추가하며, DEBUG 가짜 번역·격리 라이브러리 경로는 포함하지 않는다. 인증서 없이 개발용으로 빌드할 때의 기본 서명은 ad-hoc이다. 실제 설정·보안 범위 북마크·Gemini 자격 증명으로 체험할 때는 프로젝트의 Developer ID를 사용한다.

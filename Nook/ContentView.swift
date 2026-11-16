@@ -2219,6 +2219,12 @@ struct ArticleRowLayout<Translation: View>: View {
                         ? nil : .smooth(duration: 0.28),
                     value: model.categories
                 )
+                // A hosting cell is reused for another article while scrolling.
+                // Seed that article's metadata as a new subtree, so its different
+                // categories do not animate the old feed/date/text into the new
+                // row. Same-article tag arrivals still animate; table-row identity
+                // and its native swipe actions are unchanged.
+                .id(model.id)
             }
         }
         .padding(.vertical, 8)
