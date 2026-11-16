@@ -395,6 +395,9 @@ final class FeedXMLParser: NSObject, XMLParserDelegate {
 
     private struct ArticleDraft {
         var title = ""
+        var authors: [String] = []
+        var creators: [String] = []
+        var sourceAuthors: [String] = []
         var link = ""
         var guid = ""
         var summary = ""
@@ -410,6 +413,7 @@ final class FeedXMLParser: NSObject, XMLParserDelegate {
     private var elementStack: [String] = []
     private var currentText = ""
     private var feedTitle = ""
+    private var feedAuthors: [String] = []
     private var feedDescription = ""
     private var feedSiteLink = ""
     private var currentArticle: ArticleDraft?
@@ -477,7 +481,8 @@ final class FeedXMLParser: NSObject, XMLParserDelegate {
                 isRead: false,
                 isStarred: false,
                 contentHTML: contentHTML,
-                hasExplicitPublishDate: explicitDate != nil
+                hasExplicitPublishDate: explicitDate != nil,
+                authors: authors(for: draft)
             )
         }
 
@@ -559,6 +564,10 @@ final class FeedXMLParser: NSObject, XMLParserDelegate {
             switch key {
             case "title":
                 currentArticle?.title += text
+            case "author":
+                currentArticle?.authors.append(Self.authorName(text, rssEmailForm: true))
+            case "dc:creator", "dcterms:creator":
+                currentArticle?.creators.append(Self.authorName(text))
             case "link":
                 currentArticle?.link += text
             case "guid":
@@ -601,6 +610,17 @@ final class FeedXMLParser: NSObject, XMLParserDelegate {
     }
 
     private func handleAtomEndElement(key: String, text: String) {
+        if key == "name", parentElement == "author" {
+            let name = Self.authorName(text)
+            switch elementStack.dropLast(2).last {
+            case "entry": currentArticle?.authors.append(name)
+            case "source" where elementStack.dropLast(3).last == "entry":
+                currentArticle?.sourceAuthors.append(name)
+            case "feed" where currentArticle == nil: feedAuthors.append(name)
+            default: break
+            }
+            return
+        }
         // Atom entries nest <title> inside <source> — an aggregator naming where it
         // republished from — and inside <author> and <link>. Only the entry's own
         // children describe the entry.
@@ -646,6 +666,38 @@ final class FeedXMLParser: NSObject, XMLParserDelegate {
         } else if feedSiteLink.isEmpty, rel == "alternate" || rel.isEmpty {
             feedSiteLink = href
         }
+    }
+
+    private func authors(for draft: ArticleDraft) -> [String] {
+        let candidates: [[String]]
+        if format == .atom {
+            // Atom inherits authors from source, then feed (RFC 4287 §4.2.1).
+            // Resolve after parsing so a feed author may follow its entries.
+            candidates = [draft.authors, draft.sourceAuthors, feedAuthors]
+        } else {
+            // dc:creator supplies display names; RSS author often repeats them
+            // with an email address. Prefer the names instead of duplicating both.
+            candidates = [draft.creators, draft.authors]
+        }
+        for group in candidates {
+            var seen = Set<String>()
+            let names = group.filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+            if !names.isEmpty { return names }
+        }
+        return []
+    }
+
+    private static func authorName(_ raw: String, rssEmailForm: Bool = false) -> String {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // RSS 2.0: "writer@example.com (Writer Name)". Keep a bare email if
+        // that is all the publisher supplied; never invent a person's name.
+        if rssEmailForm, value.hasSuffix(")"), let opening = value.firstIndex(of: "("),
+           value[..<opening].contains("@") {
+            let name = value[value.index(after: opening)..<value.index(before: value.endIndex)]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { value = name }
+        }
+        return value.cleanedFeedText().split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     private func resolvedURL(from value: String, fallback: URL) -> URL {

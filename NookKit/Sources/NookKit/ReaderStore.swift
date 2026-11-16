@@ -902,6 +902,10 @@ public final class ReaderStore {
     /// article content (Reading Fit draws its test paragraphs from here).
     public var libraryArticles: [Article] { articles }
 
+    /// Invalidates Magazine ranking without hashing/copying the library in a
+    /// SwiftUI body. Includes in-place read/star patches and filter changes.
+    public var magazineContentRevision: Int { displayRevision }
+
     /// Recomputes `displayedArticles` from the current inputs.
     ///
     /// User-driven changes (source/feed selection, search) pass `debounced:

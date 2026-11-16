@@ -27,6 +27,7 @@ public struct ArticleRowModel: Identifiable, Equatable, Sendable {
     public let id: Article.ID
     public let feedID: Feed.ID
     public let title: String
+    public let authors: [String]
     public let summary: String
     public let isRead: Bool
     public let isStarred: Bool
@@ -43,10 +44,11 @@ public struct ArticleRowModel: Identifiable, Equatable, Sendable {
 
     nonisolated public init(id: Article.ID, feedID: Feed.ID, title: String, summary: String, isRead: Bool,
                             isStarred: Bool, publishedAt: Date, feedDisplayTitle: String?, readMinutes: Int,
-                            categories: [String], isSavedOffline: Bool) {
+                            categories: [String], isSavedOffline: Bool, authors: [String] = []) {
         self.id = id
         self.feedID = feedID
         self.title = title
+        self.authors = authors
         self.summary = summary
         self.isRead = isRead
         self.isStarred = isStarred
@@ -61,6 +63,7 @@ public struct ArticleRowModel: Identifiable, Equatable, Sendable {
         id = article.id
         feedID = article.feedID
         title = article.title
+        authors = article.authors
         summary = article.summary
         isRead = article.isRead
         isStarred = article.isStarred

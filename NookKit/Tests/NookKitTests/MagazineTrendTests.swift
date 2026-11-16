@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NookKit
 
@@ -23,5 +24,40 @@ struct MagazineTrendTests {
         let original = MagazineTrendText.fingerprint(titles: ["First"], language: "ko")
         #expect(original != MagazineTrendText.fingerprint(titles: ["Corrected"], language: "ko"))
         #expect(original != MagazineTrendText.fingerprint(titles: ["First"], language: "en"))
+    }
+
+    @Test("Every clickable trend resolves to a supplied source, never a fabricated ID")
+    func sourceMapping() {
+        let articles = [Fixture.article("one", feedID: "f"), Fixture.article("two", feedID: "f")]
+        let response = """
+        [{"text":"개발 도구의 변화","source":2},{"text":"없는 기사","source":3},
+         {"text":"잘못된 번호","source":0},{"text":"개발 도구의 변화","source":1},
+         {"text":"로컬 AI 확산","source":1},{"text":"너무 작은 번호","source":-9223372036854775808}]
+        """
+        let items = MagazineTrendItem.parse(response, articles: articles)
+        #expect(items.map(\.articleID) == ["two", "one"])
+        #expect(items.map(\.text) == ["개발 도구의 변화", "로컬 AI 확산"])
+        #expect(MagazineTrendItem.parse("[\"legacy unlinked text\"]", articles: articles).isEmpty)
+    }
+
+    @Test("Cached links to removed or filtered-out articles are discarded")
+    @MainActor func staleLinks() async throws {
+        let suite = "MagazineTrendTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        struct Cache: Encodable {
+            let fingerprint = "old"
+            let language = "ko"
+            let items = [MagazineTrendItem(text: "남아 있는 글", articleID: "kept"),
+                         MagazineTrendItem(text: "삭제한 글", articleID: "deleted")]
+            let generatedAt = Date.now
+        }
+        defaults.set(try JSONEncoder().encode(Cache()), forKey: "magazineTrendCache.v2")
+        defaults.set(Date.now, forKey: "magazineTrendLastAttempt.v2")
+        let controller = MagazineTrendController(defaults: defaults)
+        await controller.refresh(articles: [Fixture.article("kept", feedID: "f")], locale: Locale(identifier: "ko"))
+        #expect(controller.items.map(\.articleID) == ["kept"])
+        await controller.refresh(articles: [], locale: Locale(identifier: "ko"))
+        #expect(controller.items.isEmpty)
     }
 }

@@ -9,6 +9,9 @@ struct MagazineView: View {
     @State private var tab: MagazineTab = .magazine
     @State private var opened: Article.ID?
     @State private var frozenRows: [ArticleRowModel]?
+    @State private var recommendations = MagazineRecommendationController()
+    @State private var recommendation: MagazineRecommendation?
+    @State private var frozenLead: ArticleRowModel?
     @State private var isTransitioning = false
     @State private var initialLoadFinished = false
     @State private var collectionBarVisible = true
@@ -25,6 +28,8 @@ struct MagazineView: View {
     @Environment(\.openSettings) private var openSettings
     @AppStorage("showUnreadBadge") private var showUnreadBadge = true
     @AppStorage("autoRefreshEnabled") private var autoRefresh = true
+    @AppStorage(MagazineRecommendationController.enabledKey) private var recommendationsEnabled = true
+    @AppStorage(MagazineRecommendationController.resetKey) private var recommendationReset = 0
     @Namespace private var hero
     @FocusState private var focusedArticle: String?
     @FocusState private var searchFocused: Bool
@@ -153,7 +158,34 @@ struct MagazineView: View {
         .onChange(of: store.activeSearchQuery) { _, _ in
             scrollPosition.scrollTo(edge: .top)
         }
+        .onChange(of: recommendationReset) { _, _ in recommendations.reloadAfterReset() }
+        .task(id: recommendationTaskID) {
+            guard opened == nil, initialLoadFinished, tab == .magazine else { return }
+            recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
+            do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
+            let result = await recommendations.recommend(candidates: store.visibleArticles,
+                library: store.libraryArticles, personalized: recommendationsEnabled)
+            guard !Task.isCancelled else { return }
+            recommendation = result
+        }
+        .task(id: readingTaskID) {
+            guard recommendationsEnabled, store.isForegroundActive, let id = opened else { return }
+            // ForegroundEngagementPolicy accounts for reader-window focus,
+            // minimization, screen lock and idle time. Settings is not reading.
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                recommendations.recordReading(articleID: id, seconds: 10)
+            }
+        }
         .focusedSceneValue(\.readerCommandActions, commands)
+    }
+
+    private var recommendationTaskID: String {
+        "\(store.magazineContentRevision)|\(initialLoadFinished)|\(tab)|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(store.syncFolderURL?.path ?? "local")"
+    }
+
+    private var readingTaskID: String {
+        "\(opened ?? "")|\(store.isForegroundActive)|\(recommendationsEnabled)|\(recommendationReset)"
     }
 
     @ViewBuilder private var workspace: some View {
@@ -205,7 +237,10 @@ struct MagazineView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 320)
                     } else {
-                        if let lead = rows.first { card(lead, lead: true) }
+                        if store.activeSearchQuery.isEmpty {
+                            if let lead = leadRow { card(lead, lead: true) }
+                            else { magazineLoading }
+                        }
                         HStack {
                             Text(store.activeSearchQuery.isEmpty ? "From your subscriptions" : "Search results")
                                 .font(.system(size: 12, weight: .semibold))
@@ -215,7 +250,7 @@ struct MagazineView: View {
                         let columns = min(3, max(1, Int((geometry.size.width - 96) / 300)))
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22, alignment: .top), count: columns),
                                   alignment: .leading, spacing: 22) {
-                            ForEach(rows.dropFirst()) { row in card(row, lead: false) }
+                            ForEach(rows.filter { $0.id != leadRow?.id }) { row in card(row, lead: false) }
                         }
                     }
                 }
@@ -264,9 +299,10 @@ struct MagazineView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 10) {
-                MagazineTrendTicker(articles: store.libraryArticles,
-                                    sourceID: rows.first?.id ?? "empty",
-                                    active: opened == nil && tab == .magazine)
+                MagazineTrendTicker(articles: store.visibleArticles,
+                                    sourceID: String(store.magazineContentRevision),
+                                    active: opened == nil && tab == .magazine,
+                                    openArticle: openArticle)
                 Group {
                     if store.activeSearchQuery.isEmpty {
                         Text("\(store.listWindow.totalCount) stories")
@@ -329,10 +365,33 @@ struct MagazineView: View {
 
     private var rows: [ArticleRowModel] { frozenRows ?? store.listWindow.rows }
 
+    private var leadRow: ArticleRowModel? {
+        if let frozenLead { return frozenLead }
+        guard store.activeSearchQuery.isEmpty, let recommendation,
+              store.listWindow.contains(recommendation.articleID),
+              let article = store.listedArticle(withID: recommendation.articleID) else { return nil }
+        return ArticleRowModel(article, feedDisplayTitle: store.feed(for: article.feedID)?.displayTitle, isSavedOffline: false)
+    }
+
+    private var readingOrder: [ArticleRowModel] {
+        if let frozenRows { return frozenRows }
+        guard let lead = leadRow else { return rows }
+        return [lead] + rows.filter { $0.id != lead.id }
+    }
+
     @ViewBuilder private func card(_ row: ArticleRowModel, lead: Bool) -> some View {
         if let article = store.listedArticle(withID: row.id) {
             Button { openArticle(article.id) } label: {
                 VStack(alignment: .leading, spacing: lead ? 20 : 18) {
+                    if lead {
+                        Label(recommendation?.personalized == true ? "Picked for you" : "Fresh from your subscriptions",
+                              systemImage: recommendation?.personalized == true ? "bookmark" : "sun.max")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(NookTheme.accent)
+                            .help(recommendation?.personalized == true
+                                ? Text("Based on your reading time, starred stories, and interests. Ranked on this Mac.")
+                                : Text("Read and star stories to make future picks more personal."))
+                    }
                     MagazineArticleHeading(article: article, feedTitle: row.feedDisplayTitle ?? "",
                                            namespace: hero, expanded: false, lead: lead, matched: opened != row.id)
                     Text(article.summary)
@@ -384,8 +443,12 @@ struct MagazineView: View {
     }
 
     private func openArticle(_ id: Article.ID) {
-        guard !isTransitioning, opened == nil else { return }
-        frozenRows = store.listWindow.rows
+        guard !isTransitioning, opened == nil, let article = store.listedArticle(withID: id) else { return }
+        let order = readingOrder
+        frozenLead = leadRow
+        frozenRows = order.contains(where: { $0.id == id }) ? order : [
+            ArticleRowModel(article, feedDisplayTitle: store.feed(for: article.feedID)?.displayTitle, isSavedOffline: false)
+        ] + order
         store.selectedArticleID = id
         store.retainArticle(id: id)
         isTransitioning = true
@@ -401,6 +464,7 @@ struct MagazineView: View {
             opened = nil
         } completion: {
             frozenRows = nil
+            frozenLead = nil
             focusedArticle = id
             isTransitioning = false
         }
@@ -414,6 +478,7 @@ struct MagazineView: View {
     }
 
     private func adjacentRow(forward: Bool) -> ArticleRowModel? {
+        let rows = readingOrder
         guard let opened, let index = rows.firstIndex(where: { $0.id == opened }) else { return nil }
         let next = index + (forward ? 1 : -1)
         return rows.indices.contains(next) ? rows[next] : nil
@@ -522,8 +587,11 @@ struct MagazineArticleHeading: View {
                     .font(.system(size: 11, weight: .bold))
                     .frame(width: 23, height: 23)
                     .background(.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
-                Text(feedTitle).font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary).lineLimit(1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(feedTitle).font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary).lineLimit(1)
+                    MagazineAuthorLine(authors: article.authors, expanded: expanded)
+                }
             }
             MagazineHeadline(article.title, size: expanded ? 36 : (lead ? 30 : 23), lines: expanded ? nil : 3)
                 .frame(maxWidth: .infinity, alignment: .leading)

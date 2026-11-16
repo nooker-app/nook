@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "Open related article": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "관련 기사 열기"
+        }
+      }
+    }
+  },
+  "By %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "작성자: %@"
+        }
+      }
+    }
+  },
     "Your daily edition": {
       "extractionState": "manual",
       "localizations": {

@@ -34,6 +34,7 @@ public struct ArticleContent: Codable, Sendable, Equatable {
     public var id: Article.ID
     public var feedID: Feed.ID
     public var title: String
+    public var authors: [String]
     public var summary: String
     public var publishedAt: Date
     public var url: URL
@@ -43,6 +44,7 @@ public struct ArticleContent: Codable, Sendable, Equatable {
         id = article.id
         feedID = article.feedID
         title = article.title
+        authors = article.authors
         summary = article.summary
         publishedAt = article.publishedAt
         url = article.url
@@ -54,8 +56,25 @@ public struct ArticleContent: Codable, Sendable, Equatable {
             id: id, feedID: feedID, title: title, summary: summary,
             bodyParagraphs: body?.bodyParagraphs ?? [], publishedAt: publishedAt,
             url: url, estimatedReadMinutes: estimatedReadMinutes,
-            isRead: false, isStarred: false, contentHTML: body?.contentHTML
+            isRead: false, isStarred: false, contentHTML: body?.contentHTML,
+            authors: authors
         )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, feedID, title, authors, summary, publishedAt, url, estimatedReadMinutes
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Article.ID.self, forKey: .id)
+        feedID = try c.decode(Feed.ID.self, forKey: .feedID)
+        title = try c.decode(String.self, forKey: .title)
+        authors = try c.decodeIfPresent([String].self, forKey: .authors) ?? []
+        summary = try c.decode(String.self, forKey: .summary)
+        publishedAt = try c.decode(Date.self, forKey: .publishedAt)
+        url = try c.decode(URL.self, forKey: .url)
+        estimatedReadMinutes = try c.decode(Int.self, forKey: .estimatedReadMinutes)
     }
 }
 

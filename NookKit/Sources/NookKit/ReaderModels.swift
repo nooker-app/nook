@@ -364,6 +364,9 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
     public var id: String
     public var feedID: Feed.ID
     public var title: String
+    /// Feed-supplied author names. An empty array means the feed named nobody.
+    /// Content metadata belongs in the shared baseline, not device state shards.
+    public var authors: [String]
     public var summary: String
     public var bodyParagraphs: [String]
     public var publishedAt: Date
@@ -400,11 +403,13 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
         isStarred: Bool,
         contentHTML: String? = nil,
         hasExplicitPublishDate: Bool = true,
-        categories: [String] = []
+        categories: [String] = [],
+        authors: [String] = []
     ) {
         self.id = id
         self.feedID = feedID
         self.title = title
+        self.authors = authors
         self.summary = summary
         self.bodyParagraphs = bodyParagraphs
         self.publishedAt = publishedAt
@@ -419,7 +424,7 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, feedID, title, summary, bodyParagraphs, publishedAt
-        case url, estimatedReadMinutes, isRead, isStarred, contentHTML
+        case url, estimatedReadMinutes, isRead, isStarred, contentHTML, authors
     }
 
     /// Tolerant of a list-light baseline (bodies absent) as well as the legacy
@@ -429,6 +434,7 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
         id = try c.decode(String.self, forKey: .id)
         feedID = try c.decode(Feed.ID.self, forKey: .feedID)
         title = try c.decode(String.self, forKey: .title)
+        authors = try c.decodeIfPresent([String].self, forKey: .authors) ?? []
         summary = try c.decode(String.self, forKey: .summary)
         bodyParagraphs = try c.decodeIfPresent([String].self, forKey: .bodyParagraphs) ?? []
         publishedAt = try c.decode(Date.self, forKey: .publishedAt)
@@ -444,6 +450,7 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
         try c.encode(id, forKey: .id)
         try c.encode(feedID, forKey: .feedID)
         try c.encode(title, forKey: .title)
+        if !authors.isEmpty { try c.encode(authors, forKey: .authors) }
         try c.encode(summary, forKey: .summary)
         try c.encode(publishedAt, forKey: .publishedAt)
         try c.encode(url, forKey: .url)

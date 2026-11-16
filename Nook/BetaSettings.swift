@@ -69,6 +69,20 @@ struct BetaSettingsView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("Nook").font(.system(size: 21, weight: .semibold, design: .serif))
+                Rectangle().fill(NookTheme.hairline).frame(width: 1, height: 16)
+                Text("Settings").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                Spacer()
+                Label("Changes save automatically", systemImage: "checkmark.circle")
+                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+            .padding(.leading, 86).padding(.trailing, 28)
+            .frame(height: 54)
+            .contentShape(Rectangle())
+            .gesture(WindowDragGesture())
+
         HStack(alignment: .top, spacing: 0) {
             navigation
                 .frame(width: 220)
@@ -94,23 +108,22 @@ struct BetaSettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 1000, height: 740)
+        }
+        .frame(minWidth: 960, idealWidth: 1040, maxWidth: .infinity,
+               minHeight: 700, idealHeight: 780, maxHeight: .infinity)
         .background {
             LinearGradient(colors: [NookTheme.canvas, NookTheme.accent.opacity(0.07)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         }
+        .ignoresSafeArea(.container, edges: .top)
+        .background(BetaSettingsWindowChrome())
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: pane)
     }
 
     private var navigation: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 11) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable().frame(width: 38, height: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Nook").font(.system(size: 20, weight: .semibold, design: .serif))
-                    Text("Settings").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
+                Text("Settings").font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Text("BETA").foregroundStyle(NookTheme.accent).font(.system(size: 8, weight: .bold)).tracking(1)
                     .padding(5).background(.primary.opacity(0.06), in: Capsule())
@@ -140,9 +153,9 @@ struct BetaSettingsView: View {
                 .accessibilityAddTraits(pane == item ? .isSelected : [])
             }
             Spacer()
-            Label("Changes save automatically", systemImage: "checkmark.circle")
-                .font(.system(size: 10)).foregroundStyle(.tertiary)
-                .padding(14)
+            Image(systemName: "leaf")
+                .font(.system(size: 24, weight: .ultraLight)).foregroundStyle(NookTheme.accent.opacity(0.5))
+                .frame(maxWidth: .infinity).padding(18)
         }
         .padding(8)
         .frame(maxHeight: .infinity)
@@ -153,7 +166,7 @@ struct BetaSettingsView: View {
         switch pane {
         case .general: BetaSettingsForm { GeneralSettingsSections() }
         case .appearance: BetaSettingsForm { ReaderSettingsSections() }
-        case .reading: BetaSettingsForm { ReadingSettingsSections() }
+        case .reading: BetaSettingsForm { MagazineRecommendationSettings(); ReadingSettingsSections() }
         case .feeds: BetaSettingsForm { FeedsSettingsSections() }
         case .organize: BetaSettingsForm { ArticleRulesSettingsSections(); FiltersSettingsSections() }
         case .offline: BetaSettingsForm { OfflineSettingsSections() }
@@ -168,6 +181,84 @@ struct BetaSettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .glassEffect(.regular.tint(NookTheme.accent.opacity(0.045)), in: RoundedRectangle(cornerRadius: 22))
                 .padding(.horizontal, 28).padding(.bottom, 28)
+        }
+    }
+}
+
+/// The Settings scene retains native commands (⌘,), focus and traffic lights.
+/// Only Beta extends its canvas through the title bar; teardown restores Classic.
+private struct BetaSettingsWindowChrome: NSViewRepresentable {
+    func makeNSView(context: Context) -> ChromeView { ChromeView() }
+    func updateNSView(_ view: ChromeView, context: Context) { view.configure() }
+    static func dismantleNSView(_ view: ChromeView, coordinator: ()) { view.restore() }
+
+    final class ChromeView: NSView {
+        private weak var configuredWindow: NSWindow?
+        private var originalMask: NSWindow.StyleMask = []
+        private var originalTitle: NSWindow.TitleVisibility = .visible
+        private var originalTransparent = false
+        private var originalMovable = false
+        private var originalSeparator: NSTitlebarSeparatorStyle = .automatic
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configure()
+        }
+
+        func configure() {
+            guard let window, configuredWindow !== window else { return }
+            restore()
+            configuredWindow = window
+            originalMask = window.styleMask
+            originalTitle = window.titleVisibility
+            originalTransparent = window.titlebarAppearsTransparent
+            originalMovable = window.isMovableByWindowBackground
+            originalSeparator = window.titlebarSeparatorStyle
+            window.styleMask.insert([.fullSizeContentView, .resizable, .miniaturizable])
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.titlebarSeparatorStyle = .none
+            window.isMovableByWindowBackground = true
+            // SwiftUI's Settings host configures its titlebar after attaching
+            // content. Apply the appearance once that native setup has settled.
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let self, let window, self.configuredWindow === window else { return }
+                window.styleMask.insert([.fullSizeContentView, .resizable, .miniaturizable])
+                window.titlebarAppearsTransparent = true
+                window.titleVisibility = .hidden
+                window.titlebarSeparatorStyle = .none
+                window.isMovableByWindowBackground = true
+            }
+        }
+
+        func restore() {
+            guard let window = configuredWindow else { return }
+            window.styleMask = originalMask
+            window.titleVisibility = originalTitle
+            window.titlebarAppearsTransparent = originalTransparent
+            window.titlebarSeparatorStyle = originalSeparator
+            window.isMovableByWindowBackground = originalMovable
+            configuredWindow = nil
+        }
+    }
+}
+
+private struct MagazineRecommendationSettings: View {
+    @AppStorage(MagazineRecommendationController.enabledKey) private var enabled = true
+    @State private var confirmingReset = false
+
+    var body: some View {
+        Section("Your magazine") {
+            Toggle("Personalize the featured story", isOn: $enabled)
+            Text("Nook uses time spent reading, starred stories, and topics to choose a story on this Mac. Reading history stays on this device. Marking a feed as read does not train recommendations.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Reset reading interests…") { confirmingReset = true }
+                .confirmationDialog("Reset reading interests?", isPresented: $confirmingReset) {
+                    Button("Reset reading interests", role: .destructive) { MagazineRecommendationController.reset() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This clears local reading history. Your articles and stars stay unchanged; starred stories still help guide recommendations.")
+                }
         }
     }
 }

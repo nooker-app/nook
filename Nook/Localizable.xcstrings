@@ -1,6 +1,221 @@
 {
   "sourceLanguage": "en",
   "strings": {
+  "Enable AI summaries": {
+    "localizations": {
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AI要約を有効にする"
+        }
+      },
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AI 요약 사용"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "启用 AI 摘要"
+        }
+      }
+    }
+  },
+  "Summary style": {
+    "localizations": {
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "要約スタイル"
+        }
+      },
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "요약 스타일"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "摘要样式"
+        }
+      }
+    }
+  },
+  "AI provider": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AI provider"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AIプロバイダ"
+        }
+      },
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AI 제공자"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "AI 提供方"
+        }
+      }
+    }
+  },
+  "Summarize articles automatically": {
+    "localizations": {
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "記事を自動的に要約"
+        }
+      },
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "글 자동 요약"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "自动生成文章摘要"
+        }
+      }
+    }
+  },
+  "Your magazine": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "나의 매거진"
+        }
+      }
+    }
+  },
+  "Personalize the featured story": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "나에게 맞는 대표 글 추천"
+        }
+      }
+    }
+  },
+  "Nook uses time spent reading, starred stories, and topics to choose a story on this Mac. Reading history stays on this device. Marking a feed as read does not train recommendations.": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "읽은 시간과 별표, 관심 주제로 이 Mac에서 추천 글을 고릅니다. 읽기 기록은 이 기기에만 저장되며, 피드를 일괄 읽음 처리한 기록은 학습하지 않습니다."
+        }
+      }
+    }
+  },
+  "Reset reading interests…": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "읽기 관심사 초기화…"
+        }
+      }
+    }
+  },
+  "Reset reading interests?": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "읽기 관심사를 초기화할까요?"
+        }
+      }
+    }
+  },
+  "Reset reading interests": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "읽기 관심사 초기화"
+        }
+      }
+    }
+  },
+  "This clears local reading history. Your articles and stars stay unchanged; starred stories still help guide recommendations.": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "이 기기의 읽기 기록을 지웁니다. 글과 별표는 유지되며, 별표한 글은 계속 추천에 반영됩니다."
+        }
+      }
+    }
+  },
+  "Picked for you": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "당신을 위한 읽을거리"
+        }
+      }
+    }
+  },
+  "Fresh from your subscriptions": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "구독에서 발견한 새 글"
+        }
+      }
+    }
+  },
+  "Based on your reading time, starred stories, and interests. Ranked on this Mac.": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "읽은 시간과 별표, 관심 주제를 바탕으로 이 Mac에서 고른 글입니다."
+        }
+      }
+    }
+  },
+  "Read and star stories to make future picks more personal.": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "글을 읽고 별표를 남길수록 취향에 가까운 글을 추천합니다."
+        }
+      }
+    }
+  },
   "No search results": {
     "extractionState": "manual",
     "localizations": {
@@ -3762,7 +3977,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "선택한 글를 읽음으로 표시"
+            "value": "선택한 글을 읽음으로 표시"
           }
         },
         "zh-Hans": {
@@ -3790,7 +4005,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "선택한 글를 읽음으로 표시"
+            "value": "선택한 글을 읽음으로 표시"
           }
         },
         "zh-Hans": {
@@ -3818,7 +4033,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "글를 열면 읽음으로 표시"
+            "value": "글을 열면 읽음으로 표시"
           }
         },
         "zh-Hans": {
