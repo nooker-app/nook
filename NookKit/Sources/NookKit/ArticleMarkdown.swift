@@ -554,14 +554,23 @@ public struct MarkdownDocument: FileDocument {
 
 /// The reader's share control: keeps ordinary URL sharing, and adds Markdown
 /// clipboard and file export actions behind the same familiar share button.
+public enum ArticleSharePresentation {
+    case native
+    #if os(macOS)
+    case magazine
+    #endif
+}
+
 public struct ArticleShareMenu<MenuLabel: View>: View {
     private let articleURL: URL
     private let title: String
+    private let presentation: ArticleSharePresentation
     private let markdown: () -> String
     private let label: (Bool) -> MenuLabel
 
     @State private var isExporting = false
     @State private var copied = false
+    @State private var copiedLink = false
     /// Which copy the checkmark belongs to; bumped by each copy and by a change of
     /// article, so an earlier timer cannot clear a later checkmark.
     @State private var copiedRun = 0
@@ -571,30 +580,19 @@ public struct ArticleShareMenu<MenuLabel: View>: View {
     public init(
         articleURL: URL,
         title: String,
+        presentation: ArticleSharePresentation = .native,
         markdown: @escaping () -> String,
         @ViewBuilder label: @escaping (Bool) -> MenuLabel
     ) {
         self.articleURL = articleURL
         self.title = title
+        self.presentation = presentation
         self.markdown = markdown
         self.label = label
     }
 
     public var body: some View {
-        Menu {
-            ShareLink(item: articleURL) {
-                Label(String(localized: "Share Link", bundle: .module), systemImage: "link")
-            }
-            Divider()
-            Button(action: copyMarkdown) {
-                Label(String(localized: "Copy as Markdown", bundle: .module), systemImage: "doc.on.doc")
-            }
-            Button(action: saveMarkdown) {
-                Label(String(localized: "Save as Markdown", bundle: .module), systemImage: "square.and.arrow.down")
-            }
-        } label: {
-            label(copied)
-        }
+        shareControl
         // A reader that keeps this menu across articles (the macOS reader updates in
         // place) must not show one article's "copied" on the next.
         .onChange(of: articleURL) { _, _ in
@@ -619,6 +617,64 @@ public struct ArticleShareMenu<MenuLabel: View>: View {
             Button("OK") { exportError = nil }
         } message: {
             Text(exportError ?? "")
+        }
+    }
+
+    @ViewBuilder private var shareControl: some View {
+        switch presentation {
+        case .native:
+            Menu {
+                ShareLink(item: articleURL) {
+                    Label(String(localized: "Share Link", bundle: .module), systemImage: "link")
+                }
+                Divider()
+                Button(action: copyMarkdown) {
+                    Label(String(localized: "Copy as Markdown", bundle: .module), systemImage: "doc.on.doc")
+                }
+                Button(action: saveMarkdown) {
+                    Label(String(localized: "Save as Markdown", bundle: .module), systemImage: "square.and.arrow.down")
+                }
+            } label: {
+                label(copied)
+            }
+        #if os(macOS)
+        case .magazine:
+            MagazineMorphingMenu(
+                String(localized: "Share", bundle: .module),
+                systemImage: copied ? "checkmark" : "square.and.arrow.up", height: 264
+            ) { dismiss in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Pass along something worth reading.", bundle: .module)
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 10).padding(.bottom, 9)
+                    ShareLink(item: articleURL) {
+                        MagazineMenuRowLabel(String(localized: "Share Link", bundle: .module), systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.writeObjects([articleURL as NSURL])
+                        showCopyReceipt(isLink: true)
+                        dismiss(after: .milliseconds(650))
+                    } label: {
+                        MagazineMenuRowLabel(String(localized: "Copy Link", bundle: .module), systemImage: "link", selected: copied && copiedLink)
+                    }
+                    Button {
+                        copyMarkdown()
+                        dismiss(after: .milliseconds(650))
+                    } label: {
+                        MagazineMenuRowLabel(String(localized: "Copy as Markdown", bundle: .module), systemImage: "doc.on.doc", selected: copied && !copiedLink)
+                    }
+                    Button {
+                        dismiss()
+                        saveMarkdown()
+                    } label: {
+                        MagazineMenuRowLabel(String(localized: "Save as Markdown", bundle: .module), systemImage: "square.and.arrow.down")
+                    }
+                }
+                .buttonStyle(MagazinePlainButtonStyle())
+                .padding(.horizontal, 12)
+            }
+        #endif
         }
     }
 
@@ -647,6 +703,11 @@ public struct ArticleShareMenu<MenuLabel: View>: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
 
+        showCopyReceipt(isLink: false)
+    }
+
+    private func showCopyReceipt(isLink: Bool) {
+        copiedLink = isLink
         copied = true
         copiedRun &+= 1
         let run = copiedRun

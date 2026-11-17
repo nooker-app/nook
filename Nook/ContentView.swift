@@ -1917,9 +1917,9 @@ private struct ArticleListRows: View {
         .background { PerfDisplayLinkProbe().accessibilityHidden(true) }
         #endif
         .onKeyPress(.return) {
-            guard store.selectedArticle != nil else { return .ignored }
+            guard let article = store.selectedArticle else { return .ignored }
             withAnimation(.easeInOut(duration: 0.3)) {
-                store.isBrowserPresented = true
+                store.presentBrowser(for: article)
             }
             return .handled
         }
@@ -3418,7 +3418,7 @@ private struct ReaderDetailView: View {
                     openURL(article.url)
                 } else {
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        store.isBrowserPresented = true
+                        store.presentBrowser(for: article)
                     }
                 }
             } label: {

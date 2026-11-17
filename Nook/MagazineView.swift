@@ -59,12 +59,12 @@ struct MagazineView: View {
                 MagazineReaderDetail(store: store, articleID: opened, heroNamespace: hero,
                                      nextTitle: adjacentRow(forward: true)?.title,
                                      previousTitle: adjacentRow(forward: false)?.title,
+                                     backToCollection: libraryScope != nil,
                                      onClose: closeArticle, onNavigate: navigate)
                     .background {
                         NookTheme.canvas
                             .matchedGeometryEffect(id: "surface-\(opened)", in: hero)
                     }
-                    .safeAreaInset(edge: .top) { readerControls }
                     .allowsHitTesting(!store.isBrowserPresented)
                     .disabled(store.isBrowserPresented)
                     .accessibilityHidden(store.isBrowserPresented)
@@ -531,19 +531,6 @@ struct MagazineView: View {
             .contextMenu { ArticleRowMenu(store: store, id: article.id) }
             .onAppear { if opened == nil { store.listWindow.rowAppeared(id: row.id) } }
         }
-    }
-
-    private var readerControls: some View {
-        HStack {
-            Button(libraryScope == nil ? LocalizedStringKey("Back to Magazine") : LocalizedStringKey("Back to Collection"), systemImage: "arrow.left", action: closeArticle)
-                .keyboardShortcut(.cancelAction)
-            Spacer()
-            Button("Previous Article", systemImage: "chevron.left") { navigate(false) }
-                .disabled(adjacentRow(forward: false) == nil)
-            Button("Next Article", systemImage: "chevron.right") { navigate(true) }
-                .disabled(adjacentRow(forward: true) == nil)
-        }
-        .buttonStyle(MagazineGlassButtonStyle()).padding(.horizontal, 32).padding(.vertical, 14)
     }
 
     private func openArticle(_ id: Article.ID) {

@@ -158,10 +158,19 @@ public final class ReaderStore {
     /// override, else the global default. The single source of truth so opening
     /// an article and advancing to the next one resolve the mode identically —
     /// previously "next" skipped this and stuck on the prior article's mode.
-    public func resolvedBrowserMode(for article: Article) -> ReaderViewMode {
+    public func resolvedBrowserMode(for article: Article, defaults: UserDefaults = .standard) -> ReaderViewMode {
         if let feedMode = feed(for: article.feedID)?.preferredViewMode { return feedMode }
-        let stored = UserDefaults.standard.string(forKey: "readerViewMode")
+        let stored = defaults.string(forKey: "readerViewMode")
         return stored.flatMap(ReaderViewMode.init(rawValue:)) ?? .reader
+    }
+
+    /// Resolve preferences before showing the browser, including when reopening
+    /// the same article after changing Settings. A temporary mode toggle is not
+    /// a saved preference and must not leak into the next presentation.
+    public func presentBrowser(for article: Article, defaults: UserDefaults = .standard) {
+        selectedArticleID = article.id
+        browserMode = resolvedBrowserMode(for: article, defaults: defaults)
+        isBrowserPresented = true
     }
     // Articles kept visible in the current source even after being read, until
     // the user navigates to another source (Chrome-tab-close heuristic).

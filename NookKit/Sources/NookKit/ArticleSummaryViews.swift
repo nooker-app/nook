@@ -138,21 +138,30 @@ public struct ArticleSummaryActionButton: View {
     public let isLoading: Bool
     public let issue: ArticleSummaryIssue?
     public let usesGlassStyle: Bool
+    public let compact: Bool
     public let action: () -> Void
 
     public init(
         isLoading: Bool,
         issue: ArticleSummaryIssue? = nil,
         usesGlassStyle: Bool = false,
+        compact: Bool = false,
         action: @escaping () -> Void
     ) {
         self.isLoading = isLoading
         self.issue = issue
         self.usesGlassStyle = usesGlassStyle
+        self.compact = compact
         self.action = action
     }
 
     public var body: some View {
+        if compact {
+            styledButton
+                .disabled(isLoading)
+                .accessibilityLabel(buttonTitle)
+                .help(issue.map(message(for:)) ?? String(localized: "Summarize", bundle: .module))
+        } else {
         VStack(alignment: .leading, spacing: 10) {
             if let issue {
                 Label {
@@ -172,6 +181,7 @@ public struct ArticleSummaryActionButton: View {
                 .accessibilityLabel(buttonTitle)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder private var styledButton: some View {

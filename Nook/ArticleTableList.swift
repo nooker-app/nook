@@ -367,9 +367,9 @@ final class ArticleTableController: NSObject, NSTableViewDataSource, NSTableView
     }
 
     private func openSelectionInBrowser() -> Bool {
-        guard store.selectedArticle != nil else { return false }
+        guard let article = store.selectedArticle else { return false }
         withAnimation(.easeInOut(duration: 0.3)) {
-            store.isBrowserPresented = true
+            store.presentBrowser(for: article)
         }
         return true
     }

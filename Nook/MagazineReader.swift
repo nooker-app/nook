@@ -11,15 +11,18 @@ struct MagazineReaderDetail: View {
     let heroNamespace: Namespace.ID
     let nextTitle: String?
     let previousTitle: String?
+    let backToCollection: Bool
     let onClose: () -> Void
     let onNavigate: (Bool) -> Void
     @State private var contentReady = false
     @State private var pull = MagazinePullPresentation()
     @State private var pullResetTask: Task<Void, Never>?
+    @State private var menuPresentation = MagazineMenuPresentation()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @AppStorage("markReadOnOpen") private var markReadOnOpen = true
     @AppStorage("markReadDelaySeconds") private var markReadDelaySeconds = 3
+    @AppStorage("readerViewMode") private var defaultBrowserMode = ReaderViewMode.reader
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
     @AppStorage(ArticleSummarySettings.enabledKey) private var summariesEnabled = false
     @AppStorage(ArticleSummarySettings.automaticKey) private var summariesAutomatic = false
@@ -163,6 +166,24 @@ struct MagazineReaderDetail: View {
         let _ = MainThreadLog.readerBody()
         #endif
         baseContent
+            .safeAreaInset(edge: .top, spacing: 0) { readerToolbar }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let article = presentedArticle {
+                    floatingReadingTools(article)
+                        // Give the pull-to-next indicator the same bottom space
+                        // without changing the scroll view's reserved inset.
+                        .opacity(contentReady && pull.edge != .bottom ? 1 : 0)
+                        .offset(y: contentReady || reduceMotion ? 0 : 12)
+                        .allowsHitTesting(contentReady && pull.edge == nil)
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: contentReady)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: pull.edge == .bottom)
+                }
+            }
+            .magazineMorphingMenus(menuPresentation)
+    }
+
+    private var presentedArticle: Article? {
+        store.article(withID: articleID) ?? store.listedArticle(withID: articleID)
     }
 
     @ViewBuilder
@@ -201,7 +222,7 @@ struct MagazineReaderDetail: View {
     /// state (summary, `HTMLContentView`, comments) keep their own `.id(article.id)`,
     /// and the scroll position is put back at the top explicitly. The reader's own
     /// translation and summary state lives in `session`, which is read only for the
-    /// article it is bound to. The footer's Share menu keeps no id either: rebuilding
+    /// article it is bound to. The top bar's Share control keeps no id either: rebuilding
     /// its pop-up button alone cost ~35 ms a change. It clears its "copied" checkmark
     /// itself when the article's URL changes; its save sheet blocks the window while
     /// it is open.
@@ -233,14 +254,6 @@ struct MagazineReaderDetail: View {
                                 provider: summaryController.provider
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
-                        } else {
-                            ArticleSummaryActionButton(
-                                isLoading: summaryController?.isLoading ?? false,
-                                issue: summaryController?.issue,
-                                usesGlassStyle: true
-                            ) {
-                                requestSummary(for: article)
-                            }
                         }
                     }
                     .id(article.id)
@@ -263,40 +276,6 @@ struct MagazineReaderDetail: View {
                     .id(article.id)
                 }
 
-                Divider()
-
-                HStack {
-                    Button { openURL(article.url) } label: {
-                        Label("Open Original", systemImage: "safari")
-                    }
-                    .buttonStyle(MagazineGlassButtonStyle())
-
-                    ArticleShareMenu(
-                        articleURL: article.url,
-                        title: article.title,
-                        markdown: {
-                            session.translator(for: article.id)?.translatedMarkdown
-                                ?? store.nativeReaderMarkdown(for: article)
-                        }
-                    ) { copied in
-                        HStack(spacing: 7) {
-                            Label("Share", systemImage: copied ? "checkmark" : "square.and.arrow.up")
-                            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
-                                .accessibilityHidden(true)
-                        }
-                    }
-                    .magazineGlassMenu()
-
-                    Spacer()
-
-                    Button(role: .destructive) {
-                        pendingDeleteID = article.id
-                    } label: {
-                        Label("Delete Article", systemImage: "trash")
-                    }
-                    .buttonStyle(MagazineGlassButtonStyle())
-                }
-                .buttonStyle(MagazineGlassButtonStyle())
                 }
             }
             .padding(.horizontal, 44)
@@ -305,13 +284,14 @@ struct MagazineReaderDetail: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .background {
                 MagazineReaderGestureProbe(articleID: article.id,
-                    enabled: contentReady,
+                    enabled: contentReady && !menuPresentation.isPresented,
                     hasNext: nextTitle != nil, hasPrevious: previousTitle != nil,
                     onChange: updatePull, onAction: performGesture)
             }
         }
         .scrollPosition($readerScrollPosition)
         .onChange(of: article.id, initial: true) { oldID, newID in
+            menuPresentation.reset()
             // Hand the per-article state to the new article. Its first body already
             // read the session as empty; this clears what the old article left.
             if session.begin(articleID: newID) {
@@ -672,16 +652,124 @@ struct MagazineReaderDetail: View {
         }
     }
 
+    /// Navigation and article organization stay in the existing top bar. The
+    /// heading itself has no controls competing with the article's title.
+    private var readerToolbar: some View {
+        HStack(spacing: 10) {
+            Button(
+                backToCollection ? LocalizedStringKey("Back to Collection") : LocalizedStringKey("Back to Magazine"),
+                systemImage: "arrow.left", action: onClose
+            )
+            .keyboardShortcut(.cancelAction)
+            Spacer(minLength: 12)
+            if let article = presentedArticle {
+                Button { store.toggleStarred(articleID: article.id) } label: {
+                    Image(systemName: article.isStarred ? "star.fill" : "star")
+                        .foregroundStyle(article.isStarred ? NookTheme.accent : .primary)
+                }
+                .help(article.isStarred ? "Starred" : "Star")
+                .accessibilityLabel(Text(article.isStarred ? "Starred" : "Star"))
+                MagazineCategoryMenu(store: store, article: article)
+                ArticleShareMenu(
+                    articleURL: article.url, title: article.title, presentation: .magazine,
+                    markdown: {
+                        session.translator(for: article.id)?.translatedMarkdown
+                            ?? store.nativeReaderMarkdown(for: article)
+                    }
+                ) { copied in
+                    Label("Share", systemImage: copied ? "checkmark" : "square.and.arrow.up")
+                }
+                Rectangle().fill(NookTheme.hairline).frame(width: 1, height: 16).padding(.horizontal, 2)
+            }
+            Button { navigateReader(forward: false) } label: { Image(systemName: "chevron.left") }
+                .disabled(previousTitle == nil)
+                .help("Previous Article").accessibilityLabel(Text("Previous Article"))
+            Button { navigateReader(forward: true) } label: { Image(systemName: "chevron.right") }
+                .disabled(nextTitle == nil)
+                .help("Next Article").accessibilityLabel(Text("Next Article"))
+        }
+        .buttonStyle(MagazineGlassButtonStyle())
+        .padding(.horizontal, 28).padding(.vertical, 14)
+    }
+
+    /// Reading tools remain within reach after the heading scrolls away. This
+    /// inset reserves space so the last paragraph and links never sit under it.
+    private func floatingReadingTools(_ article: Article) -> some View {
+        HStack(spacing: 8) {
+            if summariesEnabled {
+                let summary = session.summary(for: article.id)
+                if summary?.summary != nil {
+                    Button("Summary", systemImage: "text.alignleft") {
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+                            readerScrollPosition.scrollTo(edge: .top)
+                        }
+                    }
+                } else {
+                    ArticleSummaryActionButton(
+                        isLoading: summary?.isLoading ?? false, issue: summary?.issue,
+                        usesGlassStyle: true, compact: true
+                    ) { requestSummary(for: article) }
+                }
+            }
+            if canTranslate(article) {
+                Button { toggleTranslation(article) } label: {
+                    Label(
+                        translationActive(article) ? "Show Original" : "Translate",
+                        systemImage: translationActive(article) ? "character.bubble.fill" : "character.bubble"
+                    )
+                }
+                .disabled(session.isTranslating(for: article.id))
+            }
+            Button(
+                (store.feed(for: article.feedID)?.preferredViewMode ?? defaultBrowserMode) == .reader
+                    ? LocalizedStringKey("Open in Reader") : LocalizedStringKey("Open Original in App"),
+                systemImage: "safari"
+            ) { store.presentBrowser(for: article) }
+
+            if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+                MagazineParserMenu(store: store, article: article)
+            }
+            MagazineMorphingMenu(String(localized: "More"), systemImage: "ellipsis", height: 216) { dismiss in
+                VStack(spacing: 5) {
+                    if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
+                        Button {
+                            dismiss()
+                            store.refreshReaderContent(for: article)
+                        } label: {
+                            MagazineMenuRowLabel(String(localized: "Refresh"), systemImage: "arrow.clockwise")
+                        }
+                        .disabled(store.isReparsing(article))
+                    }
+                    Button {
+                        dismiss()
+                        openURL(article.url)
+                    } label: {
+                        MagazineMenuRowLabel(String(localized: "Open in Browser"), systemImage: "arrow.up.right.square")
+                    }
+                    Divider().padding(.horizontal, 10)
+                    Button(role: .destructive) {
+                        dismiss()
+                        pendingDeleteID = article.id
+                    } label: {
+                        MagazineMenuRowLabel(String(localized: "Delete Article"), systemImage: "trash")
+                            .foregroundStyle(.red)
+                    }
+                }
+                .buttonStyle(MagazinePlainButtonStyle())
+                .padding(.horizontal, 12)
+            }
+        }
+        .buttonStyle(MagazineGlassButtonStyle())
+        .padding(8)
+        .glassEffect(.regular.tint(NookTheme.accent.opacity(0.025)), in: Capsule())
+        .shadow(color: .black.opacity(0.12), radius: 16, y: 5)
+        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+    }
+
     private func articleHeader(_ article: Article) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             MagazineArticleHeading(article: article, feedTitle: store.feed(for: article.feedID)?.displayTitle ?? "", namespace: heroNamespace, expanded: true)
-            Button("Open in Reader", systemImage: "safari") {
-                store.selectedArticleID = article.id
-                store.browserMode = .reader
-                store.isBrowserPresented = true
-            }
-            .buttonStyle(MagazineGlassButtonStyle())
-
             if translationActive(article) {
                 Group {
                     if TranslationSettings.readerProvider() == .gemini {
@@ -701,55 +789,6 @@ struct MagazineReaderDetail: View {
                     .lineSpacing(3)
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    store.toggleStarred(articleID: article.id)
-                } label: {
-                    Label(article.isStarred ? "Starred" : "Star", systemImage: article.isStarred ? "star.fill" : "star")
-                }
-
-                if canTranslate(article) {
-                    Button {
-                        toggleTranslation(article)
-                    } label: {
-                        Label(
-                            translationActive(article) ? "Show Original" : "Translate",
-                            systemImage: translationActive(article) ? "character.bubble.fill" : "character.bubble"
-                        )
-                    }
-                    .disabled(session.isTranslating(for: article.id))
-                }
-
-                MagazineGlassMenu {
-                    CategoryMenuItems(store: store, article: article)
-                } label: {
-                    Label("Categories", systemImage: "tag")
-                }
-                .fixedSize()
-
-                // Only where it can do something: with reader content off and no
-                // offline copy, the reader is showing the feed's own body and no
-                // parser ran.
-                if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
-                    Button {
-                        store.refreshReaderContent(for: article)
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(store.isReparsing(article))
-                    .help("Fetch this article's page again and parse it fresh (⌘⇧R)")
-
-                    MagazineGlassMenu {
-                        ReaderParserMenuItems(store: store, article: article)
-                    } label: {
-                        Label("Parser", systemImage: "text.viewfinder")
-                    }
-                    .fixedSize()
-                    .help("Re-read this article with the other parser")
-                    .accessibilityValue(Text(store.displayedReaderParser(for: article).label))
-                }
-            }
-            .buttonStyle(MagazineGlassButtonStyle())
         }
     }
 }
