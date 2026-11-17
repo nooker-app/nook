@@ -51,6 +51,8 @@ Nook is a native macOS RSS reader. Keep it native.
 - Prefer keeping UI state in `ContentView` and app/domain state in `ReaderStore`.
 - Keep SwiftUI mutations on the main actor. `ReaderStore` is `@MainActor`.
 - Use AppKit only where it improves macOS correctness or native behavior.
+- Magazine previews use `ArticlePreviewCache`: device-local, bounded original HTML and downsampled images. Viewport visibility owns automatic requests; page, image, and redirect requests share per-feed and per-host budgets, with persistent server cooldowns. Keep these requests inert (no page scripts or subresources). Cached reader extraction reuses the selected parser with network blocked; a static parse failure must not become a synced failure verdict.
+- The Beta reader's `MagazineView.opened` state owns its overlay and input lock independently of `ReaderStore.selectedArticleID`. Clearing the store selection (including deletion) must also dismiss that overlay and release its frozen list snapshot.
 
 ## Known Native UI Pitfalls
 

@@ -1,6 +1,116 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+      "Prepare visible articles": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "화면에 보이는 글 미리 가져오기"
+            }
+          }
+        }
+      },
+      "Magazine previews": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "매거진 미리보기"
+            }
+          }
+        }
+      },
+      "Fetch originals and thumbnails only for visible cards. Cached on this Mac for up to 7 days, within 250 MB. Page and image requests share the same budget.": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "화면에 보이는 카드의 원문과 썸네일을 가져옵니다. 이 Mac에 최대 7일·250MB까지 캐시하며, 원문과 이미지 요청을 함께 계산합니다."
+            }
+          }
+        }
+      },
+      "Choose a feed": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "피드 선택"
+            }
+          }
+        }
+      },
+      "Custom preview limits": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "이 피드의 요청 제한 직접 설정"
+            }
+          }
+        }
+      },
+      "Prepare articles from this feed": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "이 피드의 글 미리 가져오기"
+            }
+          }
+        }
+      },
+      "Per-feed limits": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "피드별 요청 제한"
+            }
+          }
+        }
+      },
+      "At most 2 requests at once, and 1 per feed or server. Feeds sharing a server also share a ceiling of 20 requests per minute and a 2-second minimum interval. Server cooldowns take priority over these settings.": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "전체 동시 요청은 2개, 피드·서버별로는 1개입니다. 같은 서버의 피드는 분당 최대 20회·최소 2초 간격을 공유합니다. 서버가 안내한 대기 시간을 우선 적용합니다."
+            }
+          }
+        }
+      },
+      "Request interval: %lld seconds": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "요청 간격: %lld초"
+            }
+          }
+        }
+      },
+      "Up to %lld requests per minute": {
+        "extractionState": "manual",
+        "localizations": {
+          "ko": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "분당 최대 %lld회 요청"
+            }
+          }
+        }
+      },
     "Expanded": {
       "extractionState": "manual",
       "localizations": {

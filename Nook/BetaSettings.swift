@@ -173,7 +173,7 @@ struct BetaSettingsView: View {
         case .general: BetaSettingsForm { GeneralSettingsSections() }
         case .appearance: BetaSettingsForm { ReaderSettingsSections() }
         case .reading: BetaSettingsForm { MagazineRecommendationSettings(); ReadingSettingsSections() }
-        case .feeds: BetaSettingsForm { FeedsSettingsSections() }
+        case .feeds: BetaSettingsForm { MagazinePreviewSettings(feeds: ReaderStore.shared.feeds); FeedsSettingsSections() }
         case .organize: BetaSettingsForm { ArticleRulesSettingsSections(); FiltersSettingsSections() }
         case .offline: BetaSettingsForm { OfflineSettingsSections() }
         case .publishing: PlusSettingsScreenContent { rows in BetaSettingsForm { rows } }

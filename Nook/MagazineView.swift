@@ -34,6 +34,11 @@ struct MagazineView: View {
     @AppStorage("autoRefreshEnabled") private var autoRefresh = true
     @AppStorage(MagazineRecommendationController.enabledKey) private var recommendationsEnabled = true
     @AppStorage(MagazineRecommendationController.resetKey) private var recommendationReset = 0
+    @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
+    @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
+    @AppStorage(TranslationSettings.titleProviderKey) private var titleProvider = TranslationProvider.appleIntelligence.rawValue
+    @AppStorage(TranslationSettings.geminiKeyConfiguredKey) private var geminiKeyConfigured = false
+    private let titleTranslator = ListTitleTranslator.shared
     @Namespace private var hero
     @FocusState private var focusedArticle: String?
     @FocusState private var searchFocused: Bool
@@ -172,9 +177,14 @@ struct MagazineView: View {
             if autoRefresh { store.refreshOnActivation(honorThrottle: true) }
         }
         .onAppear {
+            configureTitleTranslator()
             LayoutSelectionCoordinator.shared.prepareToLeave = { draftSession?.flush() ?? true }
         }
-        .onDisappear { LayoutSelectionCoordinator.shared.prepareToLeave = nil }
+        .onDisappear {
+            LayoutSelectionCoordinator.shared.prepareToLeave = nil
+            titleTranslator.setScrolling(false)
+        }
+        .onChange(of: titleTranslationConfiguration) { _, _ in configureTitleTranslator() }
         .onOpenURL { handleLayoutURL($0) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.syncFromDisk()
@@ -192,7 +202,10 @@ struct MagazineView: View {
             recommendations.reloadAfterReset()
         }
         .onChange(of: store.selectedArticleID) { _, id in
-            if id == nil { closeBrowser() }
+            if id == nil {
+                closeBrowser()
+                closeArticle()
+            }
         }
         .task(id: opened) {
             guard opened == nil, let dismissedArticle else { return }
@@ -242,6 +255,22 @@ struct MagazineView: View {
 
     private var recommendationTaskID: String {
         "\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
+    }
+
+    private func configureTitleTranslator() {
+        let locale = appLanguage == .system ? Locale.current : appLanguage.locale
+        let code = locale.language.languageCode?.identifier ?? "en"
+        let name: String
+        switch locale.language.script?.identifier {
+        case "Hans": name = "Simplified Chinese"
+        case "Hant": name = "Traditional Chinese"
+        default: name = Locale(identifier: "en_US").localizedString(forLanguageCode: code) ?? code
+        }
+        titleTranslator.configure(enabled: translateListTitles, targetLanguageName: name, targetLanguageCode: code)
+    }
+
+    private var titleTranslationConfiguration: String {
+        "\(translateListTitles)|\(appLanguage.rawValue)|\(titleProvider)|\(geminiKeyConfigured)"
     }
 
     private var isBrowsingMagazine: Bool { tab == .magazine || (tab == .library && libraryScope != nil) }
@@ -314,6 +343,8 @@ struct MagazineView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollPosition($scrollPosition)
+            .onScrollPhaseChange { _, phase in titleTranslator.setScrolling(phase != .idle) }
+            .onDisappear { titleTranslator.setScrolling(false) }
             .overlay(alignment: .bottom) {
                 if !collectionBarVisible && opened == nil && libraryScope == nil {
                     collectionTabs
@@ -526,6 +557,7 @@ struct MagazineView: View {
                 }
             }
             .magazineReveal(paused: opened != nil)
+            .magazinePreviewDemand(active: opened == nil && store.isForegroundActive)
             .focused($focusedArticle, equals: row.id)
             .id(row.id)
             .contextMenu { ArticleRowMenu(store: store, id: article.id) }
@@ -553,6 +585,17 @@ struct MagazineView: View {
 
     private func closeArticle() {
         guard let id = opened else { return }
+        // Deletion clears the store selection, but `opened` owns the Beta
+        // overlay and its input lock. There is no source card to morph back to.
+        // Drop the frozen snapshot too, so it cannot retain a deleted target.
+        if store.article(withID: id) == nil && !store.isOfflineSaved(id) {
+            opened = nil
+            dismissedArticle = nil
+            frozenRows = nil
+            frozenLead = nil
+            focusedArticle = nil
+            return
+        }
         dismissedArticle = id
         withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.35, bounce: 0.08)) {
             opened = nil
@@ -740,7 +783,6 @@ struct MagazineArticleHeading: View {
     var expanded = false
     var lead = false
     var matched = true
-    @State private var coverURL: URL?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -755,36 +797,21 @@ struct MagazineArticleHeading: View {
                     MagazineAuthorLine(authors: article.authors, expanded: expanded)
                 }
             }
-            MagazineHeadline(article.title, size: expanded ? 36 : (lead ? 30 : 23), lines: expanded ? nil : 3)
+            Group {
+                if expanded {
+                    MagazineHeadline(article.title, size: 36)
+                } else {
+                    MagazineTranslatedHeadline(id: article.id, title: article.title, size: lead ? 30 : 23)
+                        .id("\(article.id)|\(article.title)")
+                }
+            }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .modifier(MagazineMatch(id: "title-\(article.id)", namespace: namespace, enabled: matched, properties: .position))
                 .transition(.opacity)
-            if let coverURL {
-                AsyncImage(url: coverURL) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                            .frame(maxWidth: .infinity).frame(height: expanded ? 240 : (lead ? 180 : 130))
-                            .clipped().clipShape(RoundedRectangle(cornerRadius: 12))
-                            .modifier(MagazineMatch(id: "image-\(article.id)", namespace: namespace, enabled: matched))
-                    }
-                }
-            }
+            MagazineArticleThumbnail(article: article, height: expanded ? 240 : (lead ? 180 : 130), expanded: expanded, lead: lead)
+                .id("\(article.id)|\(article.url)")
+                .modifier(MagazineMatch(id: "image-\(article.id)", namespace: namespace, enabled: matched))
 
-        }
-        .task(id: article.id) {
-            let html = article.contentHTML
-            let base = article.url
-            let url = await Task.detached {
-                guard let html,
-                      let regex = try? NSRegularExpression(pattern: #"<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']"#, options: .caseInsensitive),
-                      let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
-                      let range = Range(match.range(at: 1), in: html),
-                      let url = URL(string: String(html[range]).replacingOccurrences(of: "&amp;", with: "&"), relativeTo: base)?.absoluteURL,
-                      ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return URL?.none }
-                return url
-            }.value
-            do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
-            if !Task.isCancelled { coverURL = url }
         }
     }
 }

@@ -15,6 +15,35 @@ import WebKit
 public final class ReaderModeExtractor {
     public init() {}
 
+    /// Reuse the magazine's HTML with the selected parser. The cached document
+    /// cannot execute publisher scripts or request subresources. A static page
+    /// that needs JavaScript gets the existing live extraction on explicit open;
+    /// that incomplete snapshot is never recorded as a parser failure.
+    func extractCachedPage(for article: Article, engine: ReaderParserEngine, cache: ArticlePreviewCache = .shared) async -> Outcome? {
+        guard let page = await cache.cachedPage(for: article),
+              let html = page.html,
+              let rules = await Self.cachedPageRules.value,
+              !Task.isCancelled else { return nil }
+        let outcome: Outcome = await withCheckedContinuation { continuation in
+            var session: ExtractionSession!
+            session = ExtractionSession(url: page.url, engine: engine, timeout: 8,
+                                        cachedHTML: html, blockingRules: rules) { [weak self] outcome in
+                self?.retain.remove(session)
+                continuation.resume(returning: outcome)
+            }
+            retain.insert(session)
+            session.start()
+        }
+        if case .success = outcome { return outcome }
+        return nil
+    }
+
+    private static let cachedPageRules = Task { @MainActor in
+        try? await WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "nook-cached-article-no-network-v1",
+            encodedContentRuleList: #"[{"trigger":{"url-filter":".*"},"action":{"type":"block"}}]"#)
+    }
+
     /// What came out of a page.
     public struct Extracted: Sendable {
         /// The reader content HTML.
@@ -112,6 +141,8 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
     private let engine: ReaderParserEngine
     private let timeout: TimeInterval
     private let reloadFromOrigin: Bool
+    private let cachedHTML: String?
+    private let blockingRules: WKContentRuleList?
     // Optional so it can be released after firing, breaking the session↔closure
     // retain cycle (the completion captures the session to deregister it).
     private var onFinish: ((ReaderModeExtractor.Outcome) -> Void)?
@@ -125,12 +156,16 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
         engine: ReaderParserEngine,
         timeout: TimeInterval,
         reloadFromOrigin: Bool = false,
+        cachedHTML: String? = nil,
+        blockingRules: WKContentRuleList? = nil,
         onFinish: @escaping (ReaderModeExtractor.Outcome) -> Void
     ) {
         self.url = url
         self.engine = engine
         self.timeout = timeout
         self.reloadFromOrigin = reloadFromOrigin
+        self.cachedHTML = cachedHTML
+        self.blockingRules = blockingRules
         self.onFinish = onFinish
     }
 
@@ -139,8 +174,9 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
         configuration.processPool = WebViewWarmer.processPool
         // Share the persistent session so extraction sees the same logged-in state
         // as the browser (e.g. subscriber-only articles).
-        configuration.websiteDataStore = WebViewWarmer.dataStore
+        configuration.websiteDataStore = cachedHTML == nil ? WebViewWarmer.dataStore : .nonPersistent()
         let controller = configuration.userContentController
+        if let blockingRules { controller.add(blockingRules) }
         // Readability is injected whichever engine was asked for: it is what the
         // legibility path falls back to when the engine itself cannot run, and by
         // then the page is loaded and there is no second chance to inject.
@@ -149,7 +185,7 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
         }
         controller.addUserScript(WKUserScript(source: Self.script(for: engine), injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         controller.add(self, name: "nookExtract")
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = cachedHTML == nil
 
         // A non-zero frame so pages that gate content on a viewport still lay out
         // and expose their article body to the parser, even though this web view
@@ -167,7 +203,8 @@ final class ExtractionSession: NSObject, WKNavigationDelegate, WKScriptMessageHa
             // is the one this parses.
             request.cachePolicy = .reloadIgnoringLocalCacheData
         }
-        webView.load(request)
+        if let cachedHTML { webView.loadHTMLString(cachedHTML, baseURL: url) }
+        else { webView.load(request) }
     }
 
     /// (Re)starts the give-up timer.

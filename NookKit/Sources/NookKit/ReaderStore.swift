@@ -3331,6 +3331,19 @@ public final class ReaderStore {
         }
     }
 
+    public func seedMagazinePreview(for article: Article) async {
+        if case .ready(let html) = readerContentStates[article.id] {
+            await ArticlePreviewCache.shared.seed(article, html: html)
+        } else if let cached = await readerContentStore?.value(for: article.id),
+                  cached.status == .success, let html = cached.html,
+                  NookPostOrigin.cachedBodyIsCurrent(cached.sourceFingerprint, for: article) {
+            await ArticlePreviewCache.shared.seed(article, html: html)
+        } else if isOfflineSaved(article.id),
+                  let html = await OfflineArticleStore.shared.contentAsync(for: article.id) {
+            await ArticlePreviewCache.shared.seed(article, html: html)
+        }
+    }
+
     /// Re-extracts and re-saves an offline copy whose Nook post has been edited.
     ///
     /// Nil whenever the copy on disk is the one to show: not a Nook post, unchanged
@@ -3726,11 +3739,16 @@ public final class ReaderStore {
             return
         }
 
+        if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
+        if forceRefresh { await ArticlePreviewCache.shared.invalidate(article.url) }
+        let prepared = forceRefresh ? nil : await readerModeExtractor?.extractCachedPage(for: article, engine: engine)
+        if Task.isCancelled { return }
+
         // Check the original's status up front. WKWebView can be served a cached
         // 200 for a page that's really gone (so extraction "succeeds" on the error
         // page and Try Again would show it as content) — an explicit HEAD 404/410
         // is authoritative, so treat it as gone without extracting.
-        if await originalIsGone(url: article.url, ignoringCache: reloadFromOrigin) {
+        if prepared == nil, await originalIsGone(url: article.url, ignoringCache: reloadFromOrigin) {
             if Task.isCancelled { return }
             reparsingArticles[article.id] = nil
             readerContentStates[article.id] = .gone
@@ -3741,9 +3759,12 @@ public final class ReaderStore {
             return
         }
 
-        if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
-        let outcome = await readerModeExtractor?.extract(
-            url: article.url, engine: engine, reloadFromOrigin: reloadFromOrigin) ?? .timedOut
+        let outcome: ReaderModeExtractor.Outcome
+        if let prepared { outcome = prepared }
+        else {
+            outcome = await readerModeExtractor?.extract(
+                url: article.url, engine: engine, reloadFromOrigin: reloadFromOrigin) ?? .timedOut
+        }
         // Cancellation does not stop an extraction that is already in flight, so a
         // superseded load returns here with a real answer. Publishing it would let the
         // parser the reader switched away from overwrite the one they switched to.
