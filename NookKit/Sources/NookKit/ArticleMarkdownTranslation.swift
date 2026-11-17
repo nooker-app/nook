@@ -429,7 +429,7 @@ enum MarkdownNativeParser {
         return Int(raw[range])
     }
 
-    private static func safeInlineHTML(_ raw: String) -> String {
+    static func safeInlineHTML(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let allowed = #"^</?(u|mark|sub|sup|kbd)>$"#
         guard trimmed.range(of: allowed, options: [.regularExpression, .caseInsensitive]) != nil else {

@@ -139,7 +139,7 @@ struct PlusMarkdownDocumentIndex: Sendable {
         }
     }
 
-    private static func anchor(for title: String) -> String {
+    static func anchor(for title: String) -> String {
         let folded = title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
         let allowed = folded.unicodeScalars.map { scalar -> Character in
             if CharacterSet.alphanumerics.contains(scalar) {

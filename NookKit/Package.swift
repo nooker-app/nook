@@ -13,6 +13,9 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-markdown.git", exact: "0.8.0"),
+        // The same parser already used by swift-markdown. Its C API exposes
+        // footnotes, which Swift Markdown's document model does not represent.
+        .package(url: "https://github.com/swiftlang/swift-cmark.git", exact: "0.8.0"),
         // Nook Plus is opt-in. Reading feeds must keep working with no
         // account and no network, so nothing on the reader path may depend on
         // these types.
@@ -24,6 +27,8 @@ let package = Package(
             name: "NookKit",
             dependencies: [
                 .product(name: "Markdown", package: "swift-markdown"),
+                .product(name: "cmark-gfm", package: "swift-cmark"),
+                .product(name: "cmark-gfm-extensions", package: "swift-cmark"),
                 .product(name: "NookPlusProtocol", package: "nook-plus-protocol"),
                 .product(name: "NookPlusServiceAPI", package: "nook-plus-protocol"),
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),

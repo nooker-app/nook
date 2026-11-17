@@ -239,25 +239,45 @@ private struct BetaPublishedPostView: View {
     }
 }
 
-/// The same block renderer as the RSS reader, including headings, code, tables
-/// and images. Parsing happens once per source, away from view-body evaluation.
+/// Both published posts and draft previews use the complete reader, including
+/// its anchor navigation. Bare HTMLBlockList displays links but cannot follow them.
 private struct BetaMarkdownPreview: View {
     let markdown: String
     var baseURL: URL?
-    @State private var blocks: [HTMLContentBlock]?
+    @State private var rendered: Rendered?
+
+    private struct Source: Equatable {
+        let markdown: String
+        let baseURL: URL?
+    }
+
+    private struct Rendered {
+        let source: Source
+        let html: String
+    }
+
+    private var source: Source { Source(markdown: markdown, baseURL: baseURL) }
 
     var body: some View {
         Group {
-            if let blocks {
-                HTMLBlockList(blocks: blocks, selectable: true, typography: .current())
+            if let rendered, rendered.source == source {
+                HTMLContentView(html: rendered.html, baseURL: baseURL, typography: .current())
             } else { ProgressView().controlSize(.small) }
         }
-        .task(id: markdown) {
-            let parsed = await Task.detached {
-                MarkdownNativeParser.blocks(from: markdown, baseURL: baseURL, protectedBlocks: [:]) ?? [.text(markdown.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;"))]
+        .task(id: source) {
+            let source = source
+            let html = await Task.detached(priority: .userInitiated) {
+                let html = PlusMarkdownRenderer.html(from: source.markdown)
+                HTMLBlockCache.shared.store(
+                    HTMLContentParser.parseWithAnchors(html, baseURL: source.baseURL),
+                    html: html, baseURL: source.baseURL)
+                return html
             }.value
             guard !Task.isCancelled else { return }
-            blocks = parsed
+            await HTMLContentText.warmReaderAttributedCache(
+                html: html, baseURL: source.baseURL, typography: .current(), maxBlocks: 14)
+            guard !Task.isCancelled else { return }
+            rendered = Rendered(source: source, html: html)
         }
     }
 }
