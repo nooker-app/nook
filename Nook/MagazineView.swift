@@ -21,7 +21,6 @@ struct MagazineView: View {
     @State private var importRequest: MagazineOPMLImportRequest?
     @State private var imagePresenter = ArticleImagePresenter()
     @State private var draftSession: BetaDraftSession?
-    @State private var browserOffset: CGFloat = 0
     @Namespace private var navigationSelection
     @State private var scrollPosition = ScrollPosition(edge: .top)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -48,8 +47,9 @@ struct MagazineView: View {
     var body: some View {
         ZStack {
             workspace
-                .allowsHitTesting(opened == nil)
-                .accessibilityHidden(opened != nil)
+                .allowsHitTesting(opened == nil && !store.isBrowserPresented)
+                .disabled(store.isBrowserPresented)
+                .accessibilityHidden(opened != nil || store.isBrowserPresented)
             if let opened {
                 MagazineReaderDetail(store: store, articleID: opened, heroNamespace: hero,
                                      nextTitle: adjacentRow(forward: true)?.title,
@@ -60,13 +60,35 @@ struct MagazineView: View {
                             .matchedGeometryEffect(id: "surface-\(opened)", in: hero)
                     }
                     .safeAreaInset(edge: .top) { readerControls }
+                    .allowsHitTesting(!store.isBrowserPresented)
+                    .disabled(store.isBrowserPresented)
+                    .accessibilityHidden(store.isBrowserPresented)
                     .zIndex(2)
                     .transition(reduceMotion ? .opacity : .identity)
             }
+            if store.isBrowserPresented, let article = store.selectedArticle {
+                MagazineBrowserPanel(store: store, article: article,
+                    previousTitle: adjacentRow(forward: false)?.title,
+                    nextTitle: adjacentRow(forward: true)?.title,
+                    onNavigate: navigate, onClose: closeBrowser)
+                    .zIndex(3)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
+            }
         }
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.32, bounce: 0.04), value: store.isBrowserPresented)
         .background(NookTheme.canvas)
         .articleImageOverlay(imagePresenter)
         .toolbar {
+            if store.isBrowserPresented {
+                ToolbarItem(placement: .principal) {
+                    Label(store.browserMode == .reader ? LocalizedStringKey("Reader Mode") : LocalizedStringKey("Original Page"),
+                          systemImage: store.browserMode == .reader ? "book" : "globe")
+                        .labelStyle(.titleAndIcon)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 3) {
                     ForEach(MagazineTab.allCases, id: \.self) { item in
@@ -99,6 +121,7 @@ struct MagazineView: View {
                     .disabled(store.isRefreshing || store.feeds.isEmpty)
                 Button("Settings", systemImage: "gearshape") { openWindow(id: "settings") }
             }
+            }
         }
         .sheet(isPresented: $addingFeed) {
             MagazineAddFeedSheet(folders: store.feedFolders) { url, folder in
@@ -120,13 +143,6 @@ struct MagazineView: View {
         }
         .fileExporter(isPresented: $exporting, document: OPMLDocument(feeds: store.exportableFeeds),
                       contentType: .opml, defaultFilename: "NookSubscriptions.opml") { store.handleOPMLExport($0) }
-        .sheet(isPresented: $store.isBrowserPresented) {
-            if let article = store.selectedArticle {
-                MagazineBrowserPanel(store: store, article: article, style: ReaderStyle(),
-                                     linkOpensInApp: true, dragOffset: $browserOffset) { store.isBrowserPresented = false }
-                    .frame(minWidth: 800, minHeight: 600)
-            }
-        }
         .alert("Something went wrong", isPresented: Binding(get: { store.errorMessage != nil },
                 set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
@@ -158,6 +174,9 @@ struct MagazineView: View {
             scrollPosition.scrollTo(edge: .top)
         }
         .onChange(of: recommendationReset) { _, _ in recommendations.reloadAfterReset() }
+        .onChange(of: store.selectedArticleID) { _, id in
+            if id == nil { closeBrowser() }
+        }
         .task(id: opened) {
             guard opened == nil, let dismissedArticle else { return }
             // Keep the source cards in place during dismissal. This task is
@@ -481,11 +500,18 @@ struct MagazineView: View {
         }
     }
 
+    private func closeBrowser() {
+        store.isBrowserPresented = false
+    }
+
     private func navigate(_ forward: Bool) {
         guard let row = adjacentRow(forward: forward) else { return }
         opened = row.id
         store.selectedArticleID = row.id
         store.retainArticle(id: row.id)
+        if store.isBrowserPresented, let article = store.selectedArticle {
+            store.browserMode = store.resolvedBrowserMode(for: article)
+        }
     }
 
     private func adjacentRow(forward: Bool) -> ArticleRowModel? {

@@ -98,6 +98,7 @@ public struct ArticleWebView {
         configuration.websiteDataStore = WebViewWarmer.dataStore
         let controller = configuration.userContentController
 
+        coordinator.readerStyle = style
         coordinator.usesReaderMode = useReaderMode
         coordinator.parserEngine = parserEngine
         if useReaderMode {
@@ -168,15 +169,42 @@ public struct ArticleWebView {
         return try? String(contentsOf: url, encoding: .utf8)
     }()
 
-    /// Defines `window.__nookRenderReader(payloadJSON)`: given `{ok, title,
-    /// byline, content}`, it replaces the page with Nook's reader view, styled from
-    /// `style`.
-    ///
-    /// Split from the driver below so a parser switch can re-render without a
-    /// reload. The page is downloaded once, `window.__nook.stash()` keeps a copy of
-    /// it, and native can re-parse that copy with the other engine and call this
-    /// again — which is the whole difference between an instant switch and a second
-    /// trip to the network.
+    /// Shared by the initial renderer and live typography updates. Updating only
+    /// this stylesheet preserves the DOM, translation and reading position.
+    static func readerCSS(style: ReaderStyle) -> String {
+        """
+        :root { color-scheme: light dark; }
+        html, body { margin: 0; padding: 0; background: \(style.backgroundCSS); color: \(style.textCSS); }
+        #nook-reader { max-width: \(style.contentWidth)px; margin: 0 auto; padding: 44px 28px 96px; font-family: \(style.font.cssFamily); font-size: \(style.fontSize)px; line-height: \(style.lineHeight); letter-spacing: \(style.letterSpacing)em; }
+        #nook-reader h1 { font-size: 1.7em; line-height: 1.25; font-weight: 700; margin: 0 0 12px; letter-spacing: normal; }
+        #nook-reader .nook-byline { color: \(style.secondaryTextCSS); margin: 0 0 24px; font-size: 0.85em; }
+        #nook-reader h2, #nook-reader h3 { line-height: 1.3; margin: 1.6em 0 0.6em; }
+        #nook-reader p { margin: 0 0 1.1em; }
+        #nook-reader img, #nook-reader video, #nook-reader figure { max-width: 100%; height: auto; border-radius: 6px; }
+        #nook-reader video { width: 100%; }
+        #nook-reader iframe { display: block; width: 100%; max-width: 100%; min-height: 281px; border: 0; border-radius: 6px; }
+        #nook-reader .cp_embed_wrapper iframe, #nook-reader iframe.cp_embed_iframe { min-height: 450px; }
+        #nook-reader .wp-has-aspect-ratio iframe { aspect-ratio: 16 / 9; height: auto; }
+        #nook-reader figure { margin: 1.4em 0; }
+        #nook-reader figcaption { font-size: 0.8em; color: \(style.secondaryTextCSS); }
+        #nook-reader a { color: LinkText; }
+        #nook-reader pre { overflow-x: auto; background: color-mix(in srgb, \(style.textCSS) 8%, transparent); padding: 12px; border-radius: 6px; }
+        #nook-reader code { font-family: ui-monospace, monospace; }
+        #nook-reader table { display: block; overflow-x: auto; border-collapse: collapse; }
+        #nook-reader td, #nook-reader th { border: 1px solid color-mix(in srgb, \(style.textCSS) 20%, transparent); padding: 6px 10px; }
+        #nook-reader blockquote { margin: 0 0 1.1em; padding-left: 16px; border-left: 3px solid color-mix(in srgb, \(style.textCSS) 25%, transparent); color: \(style.secondaryTextCSS); }
+        """
+    }
+
+    static let readerStyleUpdateScript = """
+    const sheet = document.getElementById('nook-reader-style');
+    if (!sheet || !document.getElementById('nook-reader')) return false;
+    sheet.textContent = css;
+    return true;
+    """
+
+    /// Defines `window.__nookRenderReader(payloadJSON)`. The stashed original
+    /// page lets a parser switch re-render without downloading the page again.
     static func readerRenderScript(style: ReaderStyle) -> String {
         """
         (function () {
@@ -197,28 +225,7 @@ public struct ArticleWebView {
             if (document.getElementById('nook-reader-style')) return;
             var style = document.createElement('style');
             style.id = 'nook-reader-style';
-            style.textContent = [
-            ':root { color-scheme: light dark; }',
-            'html, body { margin: 0; padding: 0; background: \(style.backgroundCSS); color: \(style.textCSS); }',
-            '#nook-reader { max-width: 720px; margin: 0 auto; padding: 44px 28px 96px; font-family: \(style.font.cssFamily); font-size: \(style.fontSize)px; line-height: \(style.lineHeight); letter-spacing: \(style.letterSpacing)em; }',
-            '#nook-reader h1 { font-size: 1.7em; line-height: 1.25; font-weight: 700; margin: 0 0 12px; letter-spacing: normal; }',
-            '#nook-reader .nook-byline { color: \(style.secondaryTextCSS); margin: 0 0 24px; font-size: 0.85em; }',
-            '#nook-reader h2, #nook-reader h3 { line-height: 1.3; margin: 1.6em 0 0.6em; }',
-            '#nook-reader p { margin: 0 0 1.1em; }',
-            '#nook-reader img, #nook-reader video, #nook-reader figure { max-width: 100%; height: auto; border-radius: 6px; }',
-            '#nook-reader video { width: 100%; }',
-            '#nook-reader iframe { display: block; width: 100%; max-width: 100%; min-height: 281px; border: 0; border-radius: 6px; }',
-            '#nook-reader .cp_embed_wrapper iframe, #nook-reader iframe.cp_embed_iframe { min-height: 450px; }',
-            '#nook-reader .wp-has-aspect-ratio iframe { aspect-ratio: 16 / 9; height: auto; }',
-            '#nook-reader figure { margin: 1.4em 0; }',
-            '#nook-reader figcaption { font-size: 0.8em; color: \(style.secondaryTextCSS); }',
-            '#nook-reader a { color: LinkText; }',
-            '#nook-reader pre { overflow-x: auto; background: color-mix(in srgb, \(style.textCSS) 8%, transparent); padding: 12px; border-radius: 6px; }',
-            '#nook-reader code { font-family: ui-monospace, monospace; }',
-            '#nook-reader table { display: block; overflow-x: auto; border-collapse: collapse; }',
-            '#nook-reader td, #nook-reader th { border: 1px solid color-mix(in srgb, \(style.textCSS) 20%, transparent); padding: 6px 10px; }',
-            '#nook-reader blockquote { margin: 0 0 1.1em; padding-left: 16px; border-left: 3px solid color-mix(in srgb, \(style.textCSS) 25%, transparent); color: \(style.secondaryTextCSS); }'
-            ].join('\\n');
+            style.textContent = \(String(data: try! JSONEncoder().encode(readerCSS(style: style)), encoding: .utf8)!);
             document.head.appendChild(style);
           }
 
@@ -301,6 +308,9 @@ extension ArticleWebView: NSViewRepresentable {
 
     public func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView(frame: .zero, configuration: makeConfiguration(coordinator: context.coordinator))
+        if useReaderMode, style.backgroundOption == .custom {
+            webView.underPageBackgroundColor = NSColor(Color(hex: style.backgroundHex))
+        }
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
@@ -315,6 +325,9 @@ extension ArticleWebView: NSViewRepresentable {
     }
 
     public func updateNSView(_ webView: WKWebView, context: Context) {
+        if useReaderMode, style.backgroundOption == .custom {
+            webView.underPageBackgroundColor = NSColor(Color(hex: style.backgroundHex))
+        }
         context.coordinator.linkOpensInApp = linkOpensInApp
         context.coordinator.onOverscroll = onOverscroll
         context.coordinator.onOverscrollEnded = onOverscrollEnded
@@ -325,6 +338,7 @@ extension ArticleWebView: NSViewRepresentable {
         context.coordinator.onLoadingProgress = onLoadingProgress
         context.coordinator.onURLChange = onURLChange
         context.coordinator.onParserResolved = onParserResolved
+        context.coordinator.applyStyle(style)
         context.coordinator.applyParser(parserEngine)
         context.coordinator.applyTranslation(translate: translate, languageName: translationLanguage)
     }
@@ -379,6 +393,7 @@ extension ArticleWebView: UIViewRepresentable {
         context.coordinator.onBottomOverscrollEnded = onBottomOverscrollEnded
         context.coordinator.onURLChange = onURLChange
         context.coordinator.onParserResolved = onParserResolved
+        context.coordinator.applyStyle(style)
         context.coordinator.applyParser(parserEngine)
         context.coordinator.applyTranslation(translate: translate, languageName: translationLanguage)
     }
@@ -468,6 +483,17 @@ extension ArticleWebView {
         /// Whether this web view renders the reader view; drives which readiness
         /// signal applies and is only informational for the coordinator.
         var usesReaderMode = false
+        var readerStyle = ReaderStyle()
+
+        func applyStyle(_ style: ReaderStyle, force: Bool = false) {
+            guard force || style != readerStyle else { return }
+            readerStyle = style
+            guard usesReaderMode, let webView else { return }
+            webView.callAsyncJavaScript(ArticleWebView.readerStyleUpdateScript,
+                arguments: ["css": ArticleWebView.readerCSS(style: style)],
+                in: nil, in: .page) { _ in }
+        }
+
         /// The parser currently rendering this page. Changed by `updateNSView` /
         /// `updateUIView` when the reader switches engines.
         var parserEngine: ReaderParserEngine = .preferred
@@ -1470,6 +1496,7 @@ extension ArticleWebView {
                 // The page's translatable content has settled (reader rendered or
                 // original page loaded): now translation may run.
                 contentReady = true
+                applyStyle(readerStyle, force: true)
                 runTranslationIfNeeded()
                 return
             }

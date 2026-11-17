@@ -193,6 +193,43 @@ struct ReaderParserEngineTests {
 
     // MARK: - Harness
 
+    @Test("Reader appearance updates preserve the document and reading position")
+    func liveReaderAppearance() async throws {
+        let webView = try await loaded("<html><body><p>Original page</p></body></html>",
+                                       baseURL: URL(string: "https://example.com/article")!)
+        webView.frame = CGRect(x: 0, y: 0, width: 1100, height: 700)
+        _ = try await webView.evaluateJavaScript(ArticleWebView.readerRenderScript(style: ReaderStyle()))
+        let paragraphs = String(repeating: "<p>A paragraph to keep the reader scrollable while changing appearance.</p>", count: 80)
+        let payload = try JSONSerialization.data(withJSONObject: ["ok": true, "title": "A long article", "content": paragraphs])
+        _ = try await webView.callAsyncJavaScript("return window.__nookRenderReader(payload);",
+            arguments: ["payload": String(decoding: payload, as: UTF8.self)], contentWorld: .page)
+        _ = try await webView.evaluateJavaScript("window.keptArticle = document.getElementById('nook-reader'); window.scrollTo(0, 600); true")
+        let before = try #require(try await webView.evaluateJavaScript("window.scrollY") as? Double)
+        #expect(before > 0)
+
+        let style = ReaderStyle(font: .serif, fontSize: 24, backgroundOption: .custom,
+                                backgroundHex: "#FFFCF6", contentWidth: 960)
+        let applied = try await webView.callAsyncJavaScript(ArticleWebView.readerStyleUpdateScript,
+            arguments: ["css": ArticleWebView.readerCSS(style: style)], contentWorld: .page) as? Bool
+        #expect(applied == true)
+        #expect(try await webView.evaluateJavaScript("window.keptArticle === document.getElementById('nook-reader')") as? Bool == true)
+        #expect(try await webView.evaluateJavaScript("getComputedStyle(window.keptArticle).fontSize") as? String == "24px")
+        #expect(try await webView.evaluateJavaScript("getComputedStyle(window.keptArticle).maxWidth") as? String == "960px")
+        #expect(try await webView.evaluateJavaScript("document.querySelectorAll('#nook-reader p').length") as? Int == 80)
+        #expect((try await webView.evaluateJavaScript("window.scrollY") as? Double ?? 0) > 0)
+    }
+
+    @Test("Reader styling leaves an original page untouched")
+    func originalPageAppearance() async throws {
+        let webView = try await loaded("<html><body><p>Original page</p></body></html>",
+                                       baseURL: URL(string: "https://example.com/article")!)
+        let before = try await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String
+        let applied = try await webView.callAsyncJavaScript(ArticleWebView.readerStyleUpdateScript,
+            arguments: ["css": ArticleWebView.readerCSS(style: ReaderStyle(fontSize: 28))], contentWorld: .page) as? Bool
+        #expect(applied == false)
+        #expect(try await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String == before)
+    }
+
     private func loaded(_ html: String, baseURL: URL) async throws -> WKWebView {
         let configuration = WKWebViewConfiguration()
         if let readability = ArticleWebView.readabilitySource {

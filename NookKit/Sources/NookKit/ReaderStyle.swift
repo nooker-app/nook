@@ -227,6 +227,7 @@ public struct ReaderStyle: Equatable, Sendable {
     public var backgroundHex: String
     public var textOption: ReaderColorOption
     public var textHex: String
+    public var contentWidth: Int
 
     public init(
         font: ReaderFont = .system,
@@ -236,7 +237,8 @@ public struct ReaderStyle: Equatable, Sendable {
         backgroundOption: ReaderColorOption = .automatic,
         backgroundHex: String = "#FFFFFF",
         textOption: ReaderColorOption = .automatic,
-        textHex: String = "#1A1A1A"
+        textHex: String = "#1A1A1A",
+        contentWidth: Int = 720
     ) {
         self.font = font
         self.fontSize = fontSize
@@ -246,11 +248,12 @@ public struct ReaderStyle: Equatable, Sendable {
         self.backgroundHex = backgroundHex
         self.textOption = textOption
         self.textHex = textHex
+        self.contentWidth = min(1040, max(480, contentWidth))
     }
 
     /// A stable key so the web view is recreated when the style changes.
     public var identity: String {
-        "\(font.rawValue)-\(fontSize)-\(lineHeight)-\(letterSpacing)-\(backgroundOption.rawValue)-\(backgroundHex)-\(textOption.rawValue)-\(textHex)"
+        "\(font.rawValue)-\(fontSize)-\(lineHeight)-\(letterSpacing)-\(backgroundOption.rawValue)-\(backgroundHex)-\(textOption.rawValue)-\(textHex)-\(contentWidth)"
     }
 
     public var backgroundCSS: String { backgroundOption == .automatic ? "Canvas" : backgroundHex }

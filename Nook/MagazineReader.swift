@@ -675,6 +675,7 @@ struct MagazineReaderDetail: View {
             MagazineArticleHeading(article: article, feedTitle: store.feed(for: article.feedID)?.displayTitle ?? "", namespace: heroNamespace, expanded: true)
             Button("Open in Reader", systemImage: "safari") {
                 store.selectedArticleID = article.id
+                store.browserMode = .reader
                 store.isBrowserPresented = true
             }
             .buttonStyle(MagazineGlassButtonStyle())
@@ -768,29 +769,54 @@ private struct MagazineTranslationBanner: View {
 }
 
 
+/// Beta's full-window reading surface. The native article remains underneath so
+/// closing returns to the same reading position, without another sheet host.
 struct MagazineBrowserPanel: View {
     @Bindable var store: ReaderStore
     let article: Article
-    let style: ReaderStyle
-    let linkOpensInApp: Bool
-    @Binding var dragOffset: CGFloat
-    var onClose: () -> Void
+    let previousTitle: String?
+    let nextTitle: String?
+    let onNavigate: (Bool) -> Void
+    let onClose: () -> Void
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("markReadOnOpen") private var markReadOnOpen = true
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
+    @AppStorage("readerLinkBehavior") private var linkBehavior = ReaderLinkBehavior.inApp
+    @AppStorage("readerFont") private var readerFont = ReaderFont.system
+    @AppStorage("readerFontSize") private var readerFontSize = 18
+    @AppStorage("readerLineHeight") private var readerLineHeight = 1.7
+    @AppStorage("readerLetterSpacing") private var readerLetterSpacing = 0.0
+    @AppStorage("readerBackgroundOption") private var backgroundOption = ReaderColorOption.automatic
+    @AppStorage("readerBackgroundHex") private var backgroundHex = "#FFFFFF"
+    @AppStorage("readerTextOption") private var textOption = ReaderColorOption.automatic
+    @AppStorage("readerTextHex") private var textHex = "#1A1A1A"
+    @AppStorage("magazineReaderContentWidth") private var contentWidth = 800
+    @State private var showingAppearance = false
     @State private var loadingProgress: Double = 0
+    @State private var topPull: CGFloat = 0
     @State private var bottomPull: CGFloat = 0
+    @State private var currentURL: URL?
+    @State private var detectedLanguage: String?
     @State private var isTranslationOn = false
     @State private var translationInFlight = false
+
+    private var style: ReaderStyle {
+        ReaderStyle(font: readerFont, fontSize: min(28, max(12, readerFontSize)),
+            lineHeight: min(2.4, max(1.2, readerLineHeight)), letterSpacing: readerLetterSpacing,
+            backgroundOption: .custom,
+            backgroundHex: backgroundOption == .custom ? backgroundHex : (colorScheme == .dark ? "#29241B" : "#FFFCF6"),
+            textOption: .custom,
+            textHex: textOption == .custom ? textHex : (colorScheme == .dark ? "#F2EBDD" : "#30261E"),
+            contentWidth: contentWidth)
+    }
 
     private var targetLanguage: Locale.Language {
         (appLanguage == .system ? Locale.current : appLanguage.locale).language
     }
 
     private var targetLanguageName: String {
-        // Give the model the script for Chinese so it doesn't guess Simplified vs
-        // Traditional; other languages use their plain English name.
         if let script = targetLanguage.script?.identifier {
             if script == "Hans" { return "Simplified Chinese" }
             if script == "Hant" { return "Traditional Chinese" }
@@ -799,159 +825,214 @@ struct MagazineBrowserPanel: View {
         return Locale(identifier: "en_US").localizedString(forLanguageCode: code) ?? code
     }
 
-    /// Web-view translation uses Apple Intelligence in place; offer it only when
-    /// that's available and the article's language differs from the app's.
     private var canTranslate: Bool {
         guard NaturalTranslator.isAvailable(for: TranslationSettings.readerProvider()),
-              let detected = MagazineReaderDetail.detectLanguage(for: article),
+              let detected = detectedLanguage,
               let target = targetLanguage.languageCode?.identifier else { return false }
-        // Compare base languages: the detector returns script-qualified codes
-        // (e.g. "zh-Hans") while the target is the bare subtag ("zh"), so an
-        // unnormalized compare would offer a pointless same-language translation.
-        let detectedBase = Locale.Language(identifier: detected).languageCode?.identifier ?? detected
-        return detectedBase != target
+        return Locale.Language(identifier: detected).languageCode?.identifier != target
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            WebLoadingBar(progress: loadingProgress)
-            Divider()
-            ArticleWebView(
-                url: article.url,
-                useReaderMode: store.browserMode == .reader,
-                style: style,
-                parserEngine: store.browserParser(for: article),
-                linkOpensInApp: linkOpensInApp,
-                translate: isTranslationOn,
-                translationLanguage: targetLanguageName,
-                onTranslatingChange: { translationInFlight = $0 },
-                onLoadingProgress: { loadingProgress = $0 },
-                onOverscroll: { amount in
-                    dragOffset = amount
-                },
-                onOverscrollEnded: { amount in
-                    if amount > 140 {
-                        onClose()
-                    } else {
-                        withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                topBar(compact: geometry.size.width < 1100)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                webContent
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18)
+                            .strokeBorder(NookTheme.hairline.opacity(0.7), lineWidth: 0.5)
+                            .allowsHitTesting(false)
                     }
-                },
-                onBottomOverscroll: { bottomPull = $0 },
-                onBottomOverscrollEnded: handleBottomRelease,
-                // The parser that actually drew the page, which is not always the one
-                // asked for: it may not have run, or may have found no article and
-                // left the previous body up. The menu's check-mark follows this.
-                onParserResolved: { store.setBrowserParser($0, for: article) }
-            )
-            // The parser is deliberately NOT part of this identity. `ArticleWebView`
-            // keeps a copy of the page and re-renders from it, so switching engines
-            // costs nothing; putting it here would tear the web view down and
-            // download the article again.
-            .id("\(article.id)|\(store.browserMode.rawValue)|\(style.identity)")
-            .overlay(alignment: .bottom) {
-                BottomPullAffordance(pull: bottomPull, nextTitle: store.article(after: article.id)?.title)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 14)
             }
-            .overlay(alignment: .top) {
-                if translationInFlight {
-                    MagazineTranslationBanner()
-                }
-            }
-            .animation(.easeInOut(duration: 0.2), value: translationInFlight)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: 980)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08))
-        )
-        .shadow(color: .black.opacity(0.3), radius: 30, y: 6)
-        .padding(.top, 44)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 14)
-        .offset(y: max(0, dragOffset))
+        .background(NookTheme.canvas)
+        .toolbarBackground(NookTheme.canvas, for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+        .onChange(of: article.id, initial: true) { _, _ in
+            loadingProgress = 0
+            topPull = 0
+            bottomPull = 0
+            currentURL = article.url
+            detectedLanguage = nil
+            isTranslationOn = false
+            translationInFlight = false
+        }
         .task(id: article.id) {
             store.retainArticle(id: article.id)
-            if markReadOnOpen {
-                store.markArticleOpened(articleID: article.id)
+            if markReadOnOpen { store.markArticleOpened(articleID: article.id) }
+            let detected = await Task.detached { MagazineReaderDetail.detectLanguage(for: article) }.value
+            if !Task.isCancelled { detectedLanguage = detected }
+        }
+        .onExitCommand(perform: dismissReader)
+    }
+
+    private func dismissReader() {
+        if showingAppearance { showingAppearance = false }
+        else { onClose() }
+    }
+
+    private var webContent: some View {
+        ArticleWebView(
+            url: article.url, useReaderMode: store.browserMode == .reader,
+            style: style, parserEngine: store.browserParser(for: article),
+            linkOpensInApp: linkBehavior == .inApp,
+            translate: isTranslationOn, translationLanguage: targetLanguageName,
+            onTranslatingChange: { translationInFlight = $0 },
+            onLoadingProgress: { loadingProgress = $0 },
+            onOverscroll: { topPull = $0 },
+            onOverscrollEnded: { amount in
+                if amount > 140 { onClose() }
+                else { withAnimation(.easeOut(duration: 0.2)) { topPull = 0 } }
+            },
+            onBottomOverscroll: { bottomPull = $0 },
+            onBottomOverscrollEnded: handleBottomRelease,
+            onURLChange: { currentURL = $0 },
+            onParserResolved: { store.setBrowserParser($0, for: article) }
+        )
+        // Typography updates the existing document; changing it must never
+        // reload the page or discard the reader's scroll position/translation.
+        .id("\(article.id)|\(store.browserMode.rawValue)")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: style.backgroundHex))
+        .overlay(alignment: .top) {
+            GeometryReader { geometry in
+                NookTheme.accent
+                    .frame(width: geometry.size.width * min(1, max(0.03, loadingProgress)))
+                    .opacity(loadingProgress < 1 ? 1 : 0)
+            }
+            .frame(height: 2)
+            .animation(.easeOut(duration: 0.2), value: loadingProgress)
+            .allowsHitTesting(false)
+        }
+        .overlay(alignment: .bottom) {
+            BottomPullAffordance(pull: bottomPull, nextTitle: nextTitle)
+        }
+        .overlay(alignment: .top) {
+            if translationInFlight { MagazineTranslationBanner() }
+            else if topPull > 0 {
+                Label("Back to Article", systemImage: "arrow.up")
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 18).padding(.vertical, 12)
+                    .glassEffect(.regular.tint(NookTheme.accent.opacity(min(1, topPull / 140) * 0.3)), in: Capsule())
+                    .padding(.top, 16)
+                    .allowsHitTesting(false)
             }
         }
     }
 
-    /// Decides what a bottom pull-up did on release: a short pull opens the next
-    /// article, a longer pull closes the browser, otherwise it snaps back.
     private func handleBottomRelease(_ amount: CGFloat) {
-        if amount >= BottomPullAffordance.closeThreshold {
-            onClose()
-        } else if amount >= BottomPullAffordance.nextThreshold {
-            store.selectNextArticle()
+        if amount >= BottomPullAffordance.closeThreshold { onClose() }
+        else if amount >= BottomPullAffordance.nextThreshold, nextTitle != nil {
+            onNavigate(true)
             bottomPull = 0
         } else {
             withAnimation(.easeOut(duration: 0.2)) { bottomPull = 0 }
         }
     }
 
-    private var topBar: some View {
-        HStack(spacing: 12) {
-                Button { onClose() } label: {
-                    Image(systemName: "xmark")
+    private func topBar(compact: Bool) -> some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 14) {
+                HStack(spacing: 6) {
+                    iconButton("Back to Article", symbol: "arrow.left", action: dismissReader)
+                        .keyboardShortcut(.cancelAction)
+                    Divider().frame(height: 18).padding(.horizontal, 2)
+                    iconButton("Previous Article", symbol: "chevron.left") { onNavigate(false) }
+                        .disabled(previousTitle == nil)
+                        .help(previousTitle ?? String(localized: "Previous Article"))
+                    iconButton("Next Article", symbol: "chevron.right") { onNavigate(true) }
+                        .disabled(nextTitle == nil)
+                        .help(nextTitle ?? String(localized: "Next Article"))
                 }
-                .keyboardShortcut("w", modifiers: .command)
-                .help("Close")
-
-                Spacer()
-
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { store.toggleBrowserMode() }
-                } label: {
-                    Label(
-                        store.browserMode == .reader ? "Reader Mode" : "Original Page",
-                        systemImage: store.browserMode == .reader ? "doc.plaintext" : "globe"
-                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(article.title).font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1).help(article.title)
+                    Text(currentURL?.host() ?? article.url.host() ?? "")
+                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
-                .help("Switch Reader / Original (⌘⇧F)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
 
-                // Reader mode only: on the original page nothing is parsed, so the
-                // control would be inert. Icon-only, like its neighbours.
-                if store.browserMode == .reader {
-                    Menu {
-                        ReaderParserMenuItems(store: store, article: article, surface: .browser)
-                    } label: {
-                        Image(systemName: "text.viewfinder")
+                Picker("Reader Mode", selection: $store.browserMode) {
+                    Text("Reader Mode").tag(ReaderViewMode.reader)
+                    Text("Original Page").tag(ReaderViewMode.original)
+                }
+                .labelsHidden().pickerStyle(.segmented).frame(width: compact ? 180 : 206)
+
+                HStack(spacing: 6) {
+                    iconButton("Reading Appearance", symbol: "textformat.size") { showingAppearance.toggle() }
+                        .disabled(store.browserMode != .reader)
+                        .popover(isPresented: $showingAppearance, arrowEdge: .bottom) { appearanceControls }
+                    if compact {
+                        MagazineGlassMenu {
+                            if store.browserMode == .reader {
+                                Menu("Article Parser") { ReaderParserMenuItems(store: store, article: article, surface: .browser) }
+                            }
+                            if canTranslate { translationButton }
+                            Button("Open Original", systemImage: "safari") { openURL(currentURL ?? article.url) }
+                        } label: { Image(systemName: "ellipsis") }
+                        .help("More reader actions").accessibilityLabel("More reader actions")
+                    } else {
+                        if store.browserMode == .reader {
+                            MagazineGlassMenu {
+                                ReaderParserMenuItems(store: store, article: article, surface: .browser)
+                            } label: { Image(systemName: "text.viewfinder") }
+                            .help("Choose the article parser").accessibilityLabel("Article Parser")
+                            .accessibilityValue(Text(store.browserParser(for: article).label))
+                        }
+                        if canTranslate {
+                            iconButton(isTranslationOn ? "Show Original Text" : "Translate", symbol: "character.bubble") {
+                                isTranslationOn.toggle()
+                            }
+                        }
+                        iconButton("Open Original", symbol: "safari") { openURL(currentURL ?? article.url) }
                     }
-                    .fixedSize()
-                    .help("Choose the article parser")
-                    .accessibilityLabel(Text("Article Parser"))
-                    .accessibilityValue(Text(store.browserParser(for: article).label))
+                    ShareLink(item: currentURL ?? article.url) { Image(systemName: "square.and.arrow.up") }
+                        .buttonStyle(MagazineGlassButtonStyle())
+                        .help("Share").accessibilityLabel("Share")
                 }
-
-                Spacer()
-
-                if canTranslate {
-                    Button {
-                        isTranslationOn.toggle()
-                    } label: {
-                        Image(systemName: isTranslationOn ? "character.bubble.fill" : "character.bubble")
-                    }
-                    .help(isTranslationOn ? "Show Original Text" : "Translate")
-                }
-
-                Button { openURL(article.url) } label: {
-                    Image(systemName: "safari")
-                }
-                .help("Open Original")
-
-                ShareLink(item: article.url) {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .help("Share")
             }
-            .buttonStyle(.borderless)
-        .padding(.top, 22)
-        .padding(.bottom, 9)
-        .padding(.horizontal, 14)
-        .background(.bar)
+        }
+    }
+
+    private func iconButton(_ title: LocalizedStringKey, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol) }
+            .buttonStyle(MagazineGlassButtonStyle())
+            .help(Text(title)).accessibilityLabel(Text(title))
+    }
+
+    private var translationButton: some View {
+        Button(isTranslationOn ? "Show Original Text" : "Translate", systemImage: "character.bubble") {
+            isTranslationOn.toggle()
+        }
+    }
+
+    private var appearanceControls: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Reading Appearance").font(.headline)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Font").font(.caption).foregroundStyle(.secondary)
+                Picker("Font", selection: $readerFont) {
+                    ForEach(ReaderFont.allCases) { Text($0.label).tag($0) }
+                }.labelsHidden().pickerStyle(.segmented)
+            }
+            Stepper("Font Size: \(readerFontSize)", value: $readerFontSize, in: 12...28)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Text Width").font(.caption).foregroundStyle(.secondary)
+                Picker("Text Width", selection: $contentWidth) {
+                    Text("Narrow").tag(640)
+                    Text("Comfortable").tag(800)
+                    Text("Wide").tag(960)
+                }.labelsHidden().pickerStyle(.segmented)
+            }
+            Text("Font changes also apply to the article reader.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(22).frame(width: 320).tint(NookTheme.accent)
     }
 }
-
