@@ -285,9 +285,7 @@ struct MagazineReaderDetail: View {
                                 .accessibilityHidden(true)
                         }
                     }
-                    .menuStyle(.button)
-                    .menuIndicator(.hidden)
-                    .buttonStyle(MagazineGlassButtonStyle())
+                    .magazineGlassMenu()
 
                     Spacer()
 

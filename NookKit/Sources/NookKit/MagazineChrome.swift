@@ -48,6 +48,15 @@ public extension View {
     func magazineInput(focused: Bool = false) -> some View {
         modifier(MagazineInputSurface(focused: focused))
     }
+
+    /// Menus need a label-based ButtonStyle; native PrimitiveButtonStyle bodies
+    /// are ignored by macOS menu controls, including composite share menus.
+    func magazineGlassMenu() -> some View {
+        menuStyle(.button)
+            .buttonStyle(MagazineMenuButtonStyle())
+            .menuIndicator(.hidden)
+            .fixedSize()
+    }
 }
 
 public struct MagazineGlassMenu<Content: View, Label: View>: View {
@@ -72,10 +81,7 @@ public struct MagazineGlassMenu<Content: View, Label: View>: View {
         // The AppKit-backed borderless style reduces its label to text/image,
         // dropping custom surfaces. Button menus preserve the shared SwiftUI
         // button style while retaining native menu tracking and keyboard input.
-        .menuStyle(.button)
-        .buttonStyle(MagazineMenuButtonStyle())
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .magazineGlassMenu()
     }
 }
 
