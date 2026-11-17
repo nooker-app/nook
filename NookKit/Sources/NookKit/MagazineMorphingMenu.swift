@@ -167,7 +167,10 @@ private struct MagazineMenuHost: ViewModifier {
                         }
                     }
                     .clipped()
-                    .background { MagazineMenuEscapeHandler(presentation: presentation) }
+                    .background {
+                        MagazineMenuEscapeHandler(presentation: presentation)
+                            .allowsHitTesting(false)
+                    }
                     .onKeyPress(.escape) {
                         guard presentation.isPresented else { return .ignored }
                         presentation.dismiss()
@@ -301,6 +304,10 @@ private struct MagazineMenuEscapeHandler: NSViewRepresentable {
     final class EscapeView: NSView {
         var presentation: MagazineMenuPresentation?
         private var monitor: Any?
+
+        // This bridge observes keys through a window-scoped event monitor. It
+        // must never become the mouse/scroll target above the reader beneath it.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
