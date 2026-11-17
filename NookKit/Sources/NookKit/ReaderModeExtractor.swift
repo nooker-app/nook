@@ -21,12 +21,18 @@ public final class ReaderModeExtractor {
     /// that incomplete snapshot is never recorded as a parser failure.
     func extractCachedPage(for article: Article, engine: ReaderParserEngine, cache: ArticlePreviewCache = .shared) async -> Outcome? {
         guard let page = await cache.cachedPage(for: article),
-              let html = page.html,
-              let rules = await Self.cachedPageRules.value,
+              let html = page.html else { return nil }
+        return await extractCachedDocument(html, url: page.url, engine: engine)
+    }
+
+    /// Parses already-local HTML with scripts and all network requests disabled.
+    /// Also used to repair a Nook post's old extracted body from its complete RSS.
+    func extractCachedDocument(_ html: String, url: URL, engine: ReaderParserEngine) async -> Outcome? {
+        guard let rules = await Self.cachedPageRules.value,
               !Task.isCancelled else { return nil }
         let outcome: Outcome = await withCheckedContinuation { continuation in
             var session: ExtractionSession!
-            session = ExtractionSession(url: page.url, engine: engine, timeout: 8,
+            session = ExtractionSession(url: url, engine: engine, timeout: 8,
                                         cachedHTML: html, blockingRules: rules) { [weak self] outcome in
                 self?.retain.remove(session)
                 continuation.resume(returning: outcome)

@@ -3391,6 +3391,18 @@ public final class ReaderStore {
         #endif
         let html = await OfflineArticleStore.shared.contentAsync(for: article.id)
         if let html, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let repaired = await repairReaderAnchors(html, engine: .legibility, for: article) {
+                let saved = OfflineArticleStore.shared.info(for: article.id)
+                guard !Task.isCancelled, let saved else { return }
+                OfflineArticleStore.shared.save(
+                    id: article.id, title: saved.title, url: saved.url,
+                    feedTitle: saved.feedTitle, html: repaired, now: saved.savedAt,
+                    sourceFingerprint: NookPostOrigin.fingerprint(of: article))
+                await warmReaderContent(html: repaired, baseURL: article.url)
+                await loadCommentsIfNeeded(for: article)
+                note(html: repaired, engine: .legibility, for: article)
+                return
+            }
             // A Nook post the author edited: the saved copy is the old text, so show
             // the new one and re-save it. Replaced rather than invalidated — a saved
             // article has to open with no network, so the copy stays until a
@@ -3580,7 +3592,7 @@ public final class ReaderStore {
         if let cached = await readerContentStore?.value(for: article.id),
            cached.status == .success, let html = cached.html,
            !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return html
+            return await repairReaderAnchors(html, engine: cached.recordedEngine, for: article) ?? html
         }
         if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
         if case .success(let extracted)? = await readerModeExtractor?.extract(url: article.url),
@@ -3730,9 +3742,11 @@ public final class ReaderStore {
             NookPostOrigin.cachedBodyIsCurrent(cached.sourceFingerprint, for: article)
         {
             if cached.status == .success, let html = cached.html, !html.isEmpty {
-                await warmReaderContent(html: html, baseURL: article.url)
+                let body = await repairReaderAnchors(html, engine: cached.recordedEngine, for: article) ?? html
+                guard !Task.isCancelled else { return }
+                await warmReaderContent(html: body, baseURL: article.url)
                 await loadCommentsIfNeeded(for: article)
-                note(html: html, engine: cached.recordedEngine, for: article)
+                note(html: body, engine: cached.recordedEngine, for: article)
                 // Cached content can outlive the source page. Check the original's
                 // status in the background (non-blocking) and offer deletion if it
                 // now returns 404/410 — a fresh extraction would catch this, but a
@@ -3849,6 +3863,24 @@ public final class ReaderStore {
             ReaderContentValue.failure(
                 engine: engine, previous: previous, sourceFingerprint: fingerprint),
             for: id)
+    }
+
+    /// Rebuilds only the old all-targets-missing Nook body from the complete feed
+    /// already on disk. No cache invalidation or network is needed, and a failed
+    /// repair leaves the existing saved/synced copy intact.
+    private func repairReaderAnchors(
+        _ html: String, engine: ReaderParserEngine, for article: Article
+    ) async -> String? {
+        let extractor = ReaderModeExtractor()
+        guard let repaired = await NookPostAnchorRepair.repair(html, for: article, extract: { source in
+            await extractor.extractCachedDocument(source, url: article.url, engine: engine)
+        }), !Task.isCancelled else { return nil }
+        await readerContentStore?.record(
+            ReaderContentValue(
+                status: .success, html: repaired,
+                sourceFingerprint: NookPostOrigin.fingerprint(of: article), engine: engine),
+            for: article.id)
+        return repaired
     }
 
     /// Records a freshly-extracted discussion, and files it on this device.

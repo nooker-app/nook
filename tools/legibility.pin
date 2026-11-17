@@ -7,7 +7,7 @@
 # tools/build-legibility.sh reads it, and the build stamp inside the generated
 # page must match the short commit here.
 repo=https://github.com/nooker-app/legibility.git
-commit=5f4a78319bcb09a23972ddbe2938be8e0163855b
+commit=b0fe3ea167eed71419cd125baa0bfc552977442b
 # The module the commit above compiles to, as the generated page stamps it. The
 # commit says what the tree was; this says what was actually built.
-wasm=6ca2806d
+wasm=818cad39
