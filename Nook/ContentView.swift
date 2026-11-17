@@ -2205,7 +2205,7 @@ struct ArticleRowLayout<Translation: View>: View {
                     Text(verbatim: ArticleRowStrings.separator)
                     RelativeTimeText(model.publishedAt)
                     Text(verbatim: ArticleRowStrings.separator)
-                    Text(verbatim: ArticleRowStrings.readMinutes(model.readMinutes))
+                    ArticleReadingTimeLabel(id: model.id, fallback: model.readMinutes)
 
                     if !model.categories.isEmpty {
                         ArticleRowCategoryBadges(ids: model.categories)
@@ -3370,7 +3370,7 @@ private struct ReaderDetailView: View {
         HStack(spacing: 8) {
             Text(article.publishedAt.localized(date: .abbreviated, time: .shortened))
             Text("·")
-            Text("\(article.estimatedReadMinutes) min read")
+            ArticleReadingTimeLabel(article: article)
         }
     }
 
@@ -3531,7 +3531,7 @@ private struct ArticleInspector: View {
                 Section("Article") {
                     LabeledContent("Status", value: article.isRead ? String(localized: "Read") : String(localized: "Unread"))
                     LabeledContent("Published", value: article.publishedAt.localized(date: .abbreviated, time: .shortened))
-                    LabeledContent("Reading Time", value: String(localized: "\(article.estimatedReadMinutes) min"))
+                    LabeledContent("Reading Time") { ArticleReadingTimeLabel(article: article, compact: true) }
 
                     Toggle("Starred", isOn: store.starredBinding(articleID: article.id))
                     Toggle("Read", isOn: store.readBinding(articleID: article.id))

@@ -648,7 +648,7 @@ struct MagazineReaderDetail: View {
         HStack(spacing: 8) {
             Text(article.publishedAt.localized(date: .abbreviated, time: .shortened))
             Text("·")
-            Text("\(article.estimatedReadMinutes) min read")
+            ArticleReadingTimeLabel(article: article)
         }
     }
 

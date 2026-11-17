@@ -156,6 +156,49 @@ struct ArticlePreviewCacheTests {
         return article
     }
 
+    @Test func originalBodyReplacesRSSReadingTimeWithoutAnotherRequest() async throws {
+        let folder = folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let item = article("reading-time")
+        #expect(item.estimatedReadMinutes == 1)
+        let body = String(repeating: "The article explains thoughtful native application design. ", count: 200)
+        let clutter = String(repeating: "Navigation advertising unrelated content. ", count: 2000)
+        let html = "<html><head><title>Article</title></head><body><nav>\(clutter)</nav><article><h1>Article</h1><p>\(body)</p></article><aside>\(clutter)</aside><script>\(clutter)</script></body></html>"
+        Stub.reset(["/reading-time": .init(data: Data(html.utf8))])
+        let cache = ArticlePreviewCache(directory: folder, session: session())
+        #expect(await cache.readingMinutes(for: item) == nil)
+        #expect(Stub.count("/reading-time") == 0)
+        _ = try await cache.prepare(item, policy: ArticlePreviewPolicy())
+        let minutes = try #require(await cache.readingMinutes(for: item))
+        #expect(minutes == Article.readingMinutes(for: [body]))
+        #expect(minutes > item.estimatedReadMinutes)
+        #expect(Stub.count("/reading-time") == 1, "Estimating must use cached HTML, not fetch the page again")
+        let restored = ArticlePreviewCache(directory: folder, session: session())
+        #expect(await restored.cachedPage(for: item)?.readingMinutes == minutes)
+        #expect(await restored.readingMinutes(for: item) == minutes)
+        #expect(Stub.count("/reading-time") == 1)
+    }
+
+    @Test func freshlyReadBodyUpdatesAnExistingPreviewEstimate() async throws {
+        let folder = folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let item = article("rendered")
+        let cache = ArticlePreviewCache(directory: folder, session: session())
+        await cache.seed(item, html: "<p>Short cached body.</p>")
+        #expect(await cache.readingMinutes(for: item) == 1)
+        let words = String(repeating: "word ", count: 1100)
+        await cache.seed(item, html: "<article><p>\(words)</p></article>")
+        #expect(await cache.readingMinutes(for: item) == 5)
+        let restored = ArticlePreviewCache(directory: folder, session: session())
+        #expect(await restored.readingMinutes(for: item) == 5)
+    }
+
+    @Test func readerHTMLCountsDecodedBodyWithoutScriptsOrStyle() {
+        let words = String(repeating: "one&nbsp;two&#32;", count: 220)
+        #expect(ArticleReadingTime.minutes(inReaderHTML: "<p>\(words)</p><style>\(words)</style><script>\(words)</script><aside>\(words)</aside>") == 2)
+        #expect(ArticleReadingTime.minutes(inReaderHTML: "<p> </p>") == nil)
+    }
+
     @Test func concurrentCardsAndDiskReuseFetchOnce() async throws {
         let folder = folder()
         defer { try? FileManager.default.removeItem(at: folder) }

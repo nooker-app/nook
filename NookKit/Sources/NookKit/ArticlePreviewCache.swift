@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 /// HTML, not a live page: no publisher scripts, ads or subresources execute.
 public actor ArticlePreviewCache {
     public static let shared = ArticlePreviewCache()
+    public static let didChange = Notification.Name("NookArticlePreviewDidChange")
 
     struct Page: Codable, Sendable {
         var url: URL
@@ -15,6 +16,8 @@ public actor ArticlePreviewCache {
         var imageURLs: [URL]
         var mayStore: Bool
         var sourceFingerprint: String?
+        var readingMinutes: Int?
+        var readingTimeChecked: Bool?
     }
 
     private struct Pending {
@@ -116,12 +119,52 @@ public actor ArticlePreviewCache {
     /// A full body already downloaded by the reader/offline feature is enough
     /// for a preview. Do not fetch the same article just to discover its image.
     func seed(_ article: Article, html: String) {
-        guard cachedPage(for: article) == nil, !html.isEmpty else { return }
+        guard !html.isEmpty else { return }
+        let minutes = ArticleReadingTime.minutes(inReaderHTML: html)
+        if var page = cachedPage(for: article) {
+            guard let minutes, page.readingMinutes != minutes else { return }
+            page.readingMinutes = minutes
+            page.readingTimeChecked = true
+            store(page, for: article.url)
+            return
+        }
         let page = Page(url: article.url, html: html, expires: Date().addingTimeInterval(7 * 86400),
                         imageURLs: ArticlePreviewHTML.images(in: html, baseURL: article.url),
-                        mayStore: true, sourceFingerprint: NookPostOrigin.fingerprint(of: article))
-        remember(page, for: article.url)
-        if let data = try? JSONEncoder().encode(page) { write(data, to: file(article.url, extension: "json")) }
+                        mayStore: true, sourceFingerprint: NookPostOrigin.fingerprint(of: article),
+                        readingMinutes: minutes, readingTimeChecked: true)
+        store(page, for: article.url)
+    }
+
+    /// Parse only an already cached document. Legibility runs the markup as data
+    /// in its isolated, network-disabled engine, excluding site chrome/comments.
+    func readingMinutes(for article: Article) async -> Int? {
+        guard let page = cachedPage(for: article) else { return nil }
+        if let minutes = page.readingMinutes { return minutes }
+        guard page.readingTimeChecked != true, let html = page.html, !Task.isCancelled else { return nil }
+        let outcome = await LegibilityEngine.shared.extract(document: html)
+        guard !Task.isCancelled,
+              var current = cachedPage(for: article), current.expires == page.expires,
+              current.html == html else { return nil }
+        // A reader may have supplied a newer, fully rendered body while parsing.
+        if let minutes = current.readingMinutes { return minutes }
+        switch outcome {
+        case .article(let extracted) where !extracted.isLinkOnly && !extracted.truncated:
+            current.readingMinutes = ArticleReadingTime.minutes(inReaderHTML: extracted.html)
+        case .unavailable:
+            return nil
+        default:
+            break
+        }
+        current.readingTimeChecked = true
+        store(current, for: article.url)
+        return current.readingMinutes
+    }
+
+    private func store(_ page: Page, for url: URL) {
+        guard page.mayStore else { return }
+        remember(page, for: url)
+        if let data = try? JSONEncoder().encode(page) { write(data, to: file(url, extension: "json")) }
+        NotificationCenter.default.post(name: Self.didChange, object: url)
     }
 
     func cachedPage(for article: Article) -> Page? {
@@ -147,6 +190,7 @@ public actor ArticlePreviewCache {
         pending[url] = nil
         memoryPages[url] = nil
         try? FileManager.default.removeItem(at: file(url, extension: "json"))
+        NotificationCenter.default.post(name: Self.didChange, object: url)
     }
 
     private func page(for article: Article, policy: ArticlePreviewPolicy) async throws -> Page {
@@ -188,10 +232,7 @@ public actor ArticlePreviewCache {
                         mayStore: Self.mayStore(response.http),
                         sourceFingerprint: NookPostOrigin.fingerprint(of: article))
         try Task.checkCancellation()
-        if page.mayStore {
-            remember(page, for: article.url)
-            if let data = try? JSONEncoder().encode(page) { write(data, to: file(article.url, extension: "json")) }
-        }
+        store(page, for: article.url)
         return page
     }
 

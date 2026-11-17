@@ -3344,6 +3344,12 @@ public final class ReaderStore {
         }
     }
 
+    func cachedReadingMinutes(for article: Article) async -> Int? {
+        await seedMagazinePreview(for: article)
+        guard !Task.isCancelled else { return nil }
+        return await ArticlePreviewCache.shared.readingMinutes(for: article)
+    }
+
     /// Re-extracts and re-saves an offline copy whose Nook post has been edited.
     ///
     /// Nil whenever the copy on disk is the one to show: not a Nook post, unchanged
@@ -3932,6 +3938,7 @@ public final class ReaderStore {
         reparsingArticles[article.id] = nil
         readerContentEngines[article.id] = engine
         readerContentStates[article.id] = .ready(html)
+        Task { await ArticlePreviewCache.shared.seed(article, html: html) }
     }
 
     /// Whether both parsers have already had a go at this article this session.

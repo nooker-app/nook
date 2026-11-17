@@ -532,7 +532,7 @@ struct MagazineView: View {
                         if !article.isRead { Circle().fill(NookTheme.accent).frame(width: 5, height: 5) }
                         Text(article.publishedAt, style: .date)
                         Text("·")
-                        Text("\(article.estimatedReadMinutes) min read")
+                        ArticleReadingTimeLabel(article: article, viewportBound: true)
                         Spacer()
                         if article.isStarred { Image(systemName: "star.fill").foregroundStyle(.orange) }
                         Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .medium))
