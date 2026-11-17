@@ -8,6 +8,27 @@ import UniformTypeIdentifiers
 struct ArticlePreviewBudgetTests {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @Test(arguments: [true, false])
+    func oneSecondSpacingWithThirtyRequestWindow(sharedFeed: Bool) {
+        var budget = ArticlePreviewBudget()
+        let policy = ArticlePreviewPolicy()
+        for index in 0..<30 {
+            let feed = sharedFeed ? "feed" : "feed-\(index)"
+            let host = sharedFeed ? "host-\(index).test" : "publisher.test"
+            let instant = now.addingTimeInterval(Double(index))
+            #expect(budget.delay(feed: feed, host: host, policy: policy, now: instant) == 0)
+            budget.started(feed: feed, host: host, policy: policy, now: instant)
+            if index == 0 {
+                #expect(budget.delay(feed: feed, host: host, policy: policy,
+                                     now: instant.addingTimeInterval(0.5)) == 0.5)
+            }
+        }
+        let feed = sharedFeed ? "feed" : "next-feed"
+        let host = sharedFeed ? "next-host.test" : "publisher.test"
+        #expect(budget.delay(feed: feed, host: host, policy: policy, now: now.addingTimeInterval(30)) == 30)
+        #expect(budget.delay(feed: feed, host: host, policy: policy, now: now.addingTimeInterval(60)) == 0)
+    }
+
     @Test func feedAndSharedHostLimits() {
         var budget = ArticlePreviewBudget()
         var policy = ArticlePreviewPolicy()
@@ -59,7 +80,7 @@ struct ArticlePreviewBudgetTests {
         #expect(restored.policy(for: "a").enabled == false)
         #expect(restored.policy(for: "a").interval == 17)
         restored.setOverride(nil, for: "a")
-        #expect(restored.policy(for: "a").interval == 3)
+        #expect(restored.policy(for: "a").interval == 1)
     }
 }
 

@@ -5,14 +5,14 @@ import Observation
 /// They never change the shared library or a peer's network budget.
 public struct ArticlePreviewPolicy: Codable, Equatable, Sendable {
     public var enabled = true
-    public var interval: Double = 3
-    public var requestsPerMinute = 12
+    public var interval: Double = 1
+    public var requestsPerMinute = 30
 
     public init() {}
 
     var normalized: Self {
         var copy = self
-        copy.interval = interval.isFinite ? min(120, max(1, interval)) : 3
+        copy.interval = interval.isFinite ? min(120, max(1, interval)) : 1
         copy.requestsPerMinute = min(30, max(1, requestsPerMinute))
         return copy
     }
@@ -74,7 +74,7 @@ struct ArticlePreviewBudget: Codable, Sendable {
 
     func delay(feed: String, host: String, policy: ArticlePreviewPolicy, now: Date) -> TimeInterval {
         max(delay(key: "feed:" + feed, interval: policy.interval, limit: policy.requestsPerMinute, now: now),
-            delay(key: "host:" + host, interval: max(2, policy.interval), limit: min(20, policy.requestsPerMinute), now: now))
+            delay(key: "host:" + host, interval: max(1, policy.interval), limit: min(30, policy.requestsPerMinute), now: now))
     }
 
     private func delay(key: String, interval: Double, limit: Int, now: Date) -> TimeInterval {
@@ -95,7 +95,7 @@ struct ArticlePreviewBudget: Codable, Sendable {
             var bucket = buckets[key] ?? Bucket()
             bucket.starts.removeAll { now.timeIntervalSince($0) >= 60 }
             bucket.starts.append(now)
-            bucket.lastInterval = key.hasPrefix("host:") ? max(2, policy.interval) : policy.interval
+            bucket.lastInterval = key.hasPrefix("host:") ? max(1, policy.interval) : policy.interval
             buckets[key] = bucket
         }
         buckets = buckets.filter { !$0.value.starts.allSatisfy { now.timeIntervalSince($0) > 120 } || $0.value.blockedUntil > now }

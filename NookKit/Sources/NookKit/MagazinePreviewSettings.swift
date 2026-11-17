@@ -41,7 +41,7 @@ public struct MagazinePreviewSettings: View {
             } header: {
                 Text("Per-feed limits", bundle: .module)
             } footer: {
-                Text("At most 2 requests at once, and 1 per feed or server. Feeds sharing a server also share a ceiling of 20 requests per minute and a 2-second minimum interval. Server cooldowns take priority over these settings.", bundle: .module)
+                Text("At most 2 requests at once, and 1 per feed or server. Feeds sharing a server also share a ceiling of 30 requests per minute and a 1-second minimum interval. Server cooldowns take priority over these settings.", bundle: .module)
             }
             .disabled(!preferences.standard.enabled)
         }
