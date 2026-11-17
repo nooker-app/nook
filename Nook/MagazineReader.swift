@@ -11,7 +11,6 @@ struct MagazineReaderDetail: View {
     let heroNamespace: Namespace.ID
     let nextTitle: String?
     let previousTitle: String?
-    let gesturesEnabled: Bool
     let onClose: () -> Void
     let onNavigate: (Bool) -> Void
     @State private var contentReady = false
@@ -307,7 +306,7 @@ struct MagazineReaderDetail: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .background {
                 MagazineReaderGestureProbe(articleID: article.id,
-                    enabled: gesturesEnabled && contentReady,
+                    enabled: contentReady,
                     hasNext: nextTitle != nil, hasPrevious: previousTitle != nil,
                     onChange: updatePull, onAction: performGesture)
             }

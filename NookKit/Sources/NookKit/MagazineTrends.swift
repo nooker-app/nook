@@ -29,9 +29,18 @@ enum MagazineTrendText {
     }
 }
 
-public struct MagazineTrendItem: Codable, Equatable, Sendable {
+public struct MagazineTrendItem: Codable, Hashable, Sendable {
     public let text: String
     public let articleID: Article.ID
+
+    static func displayed(items: [Self], index: Int, articles: [Article], enabled: Bool) -> Self? {
+        if enabled, !items.isEmpty {
+            let item = items[max(0, index) % items.count]
+            if articles.contains(where: { $0.id == item.articleID }) { return item }
+        }
+        guard let article = articles.max(by: { $0.publishedAt < $1.publishedAt }) else { return nil }
+        return Self(text: String(localized: "Your daily edition", bundle: .module), articleID: article.id)
+    }
 
     static func parse(_ response: String, articles: [Article]) -> [Self] {
         struct Generated: Decodable { let text: String; let source: Int }
@@ -179,28 +188,17 @@ public struct MagazineTrendTicker: View {
         self.openArticle = openArticle
     }
 
-    private var item: MagazineTrendItem? {
-        guard enabled, !controller.items.isEmpty else { return nil }
-        let item = controller.items[index % controller.items.count]
-        return articles.contains(where: { $0.id == item.articleID }) ? item : nil
-    }
-
-    private var target: Article? {
-        if let item { return articles.first { $0.id == item.articleID } }
-        return articles.max { $0.publishedAt < $1.publishedAt }
-    }
-
-    private var text: String {
-        item?.text ?? String(localized: "Your daily edition", bundle: .module)
-    }
-
     public var body: some View {
+        // Capture the displayed phrase and its destination together. Both the
+        // outgoing and incoming buttons keep their own destination while fading.
+        let item = MagazineTrendItem.displayed(items: controller.items, index: index, articles: articles, enabled: enabled)
+        let text = item?.text ?? String(localized: "Your daily edition", bundle: .module)
         Button {
-            if let target { openArticle(target.id) }
+            if let item { openArticle(item.articleID) }
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: "newspaper").font(.system(size: 11)).foregroundStyle(NookTheme.accent)
-                Text(text).id(text).transition(.opacity)
+                Text(text)
                     .font(.system(size: 14, weight: .medium)).lineLimit(1)
                 Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .medium))
                     .opacity(hovered || focused ? 1 : 0.4)
@@ -209,14 +207,16 @@ public struct MagazineTrendTicker: View {
         }
         .buttonStyle(.plain)
         .focused($focused)
-        .disabled(target == nil)
-        .help(target?.title ?? text)
+        .disabled(item == nil)
+        .help(articles.first { $0.id == item?.articleID }?.title ?? text)
         .accessibilityLabel(Text(text))
         .accessibilityHint(Text("Open related article", bundle: .module))
+        .id(item)
+        .transition(.opacity)
         .onHover { hovered = $0 }
         .foregroundStyle(hovered || focused ? NookTheme.accent : .secondary)
         .frame(minWidth: 200, minHeight: 22, alignment: .trailing)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.8), value: text)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.8), value: item)
         .onScrollVisibilityChange { visible = $0 }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in windowActive = true }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in windowActive = false }

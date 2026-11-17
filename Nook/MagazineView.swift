@@ -12,7 +12,7 @@ struct MagazineView: View {
     @State private var recommendations = MagazineRecommendationController()
     @State private var recommendation: MagazineRecommendation?
     @State private var frozenLead: ArticleRowModel?
-    @State private var isTransitioning = false
+    @State private var dismissedArticle: Article.ID?
     @State private var initialLoadFinished = false
     @State private var collectionBarVisible = true
     @State private var addingFeed = false
@@ -54,7 +54,6 @@ struct MagazineView: View {
                 MagazineReaderDetail(store: store, articleID: opened, heroNamespace: hero,
                                      nextTitle: adjacentRow(forward: true)?.title,
                                      previousTitle: adjacentRow(forward: false)?.title,
-                                     gesturesEnabled: !isTransitioning,
                                      onClose: closeArticle, onNavigate: navigate)
                     .background {
                         NookTheme.canvas
@@ -72,7 +71,7 @@ struct MagazineView: View {
                 HStack(spacing: 3) {
                     ForEach(MagazineTab.allCases, id: \.self) { item in
                         Button {
-                            guard draftSession?.flush() != false, !isTransitioning else { return }
+                            guard draftSession?.flush() != false else { return }
                             if opened != nil { closeArticle() }
                             tab = item
                         } label: {
@@ -159,6 +158,19 @@ struct MagazineView: View {
             scrollPosition.scrollTo(edge: .top)
         }
         .onChange(of: recommendationReset) { _, _ in recommendations.reloadAfterReset() }
+        .task(id: opened) {
+            guard opened == nil, let dismissedArticle else { return }
+            // Keep the source cards in place during dismissal. This task is
+            // cancelled on reopening: an old dismissal must not clear the new
+            // reader's snapshot or steal its focus. Animation completion is not
+            // an input lock; async reader content can outlive the hero animation.
+            do { try await Task.sleep(for: .milliseconds(reduceMotion ? 150 : 400)) } catch { return }
+            guard !Task.isCancelled, opened == nil, self.dismissedArticle == dismissedArticle else { return }
+            frozenRows = nil
+            frozenLead = nil
+            focusedArticle = dismissedArticle
+            self.dismissedArticle = nil
+        }
         .task(id: recommendationTaskID) {
             guard opened == nil, initialLoadFinished, tab == .magazine else { return }
             recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
@@ -444,7 +456,11 @@ struct MagazineView: View {
     }
 
     private func openArticle(_ id: Article.ID) {
-        guard !isTransitioning, opened == nil, let article = store.listedArticle(withID: id) else { return }
+        guard opened == nil, let article = store.listedArticle(withID: id) else { return }
+        // A new click may interrupt a dismissal; use the current collection.
+        dismissedArticle = nil
+        frozenRows = nil
+        frozenLead = nil
         let order = readingOrder
         frozenLead = leadRow
         frozenRows = order.contains(where: { $0.id == id }) ? order : [
@@ -452,27 +468,21 @@ struct MagazineView: View {
         ] + order
         store.selectedArticleID = id
         store.retainArticle(id: id)
-        isTransitioning = true
-        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.35, bounce: 0.08), completionCriteria: .logicallyComplete) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.35, bounce: 0.08)) {
             opened = id
-        } completion: { isTransitioning = false }
+        }
     }
 
     private func closeArticle() {
-        guard let id = opened, !isTransitioning else { return }
-        isTransitioning = true
-        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.35, bounce: 0.08), completionCriteria: .logicallyComplete) {
+        guard let id = opened else { return }
+        dismissedArticle = id
+        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.35, bounce: 0.08)) {
             opened = nil
-        } completion: {
-            frozenRows = nil
-            frozenLead = nil
-            focusedArticle = id
-            isTransitioning = false
         }
     }
 
     private func navigate(_ forward: Bool) {
-        guard !isTransitioning, let row = adjacentRow(forward: forward) else { return }
+        guard let row = adjacentRow(forward: forward) else { return }
         opened = row.id
         store.selectedArticleID = row.id
         store.retainArticle(id: row.id)

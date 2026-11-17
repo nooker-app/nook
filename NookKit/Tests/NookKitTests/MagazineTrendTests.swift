@@ -60,4 +60,32 @@ struct MagazineTrendTests {
         await controller.refresh(articles: [], locale: Locale(identifier: "ko"))
         #expect(controller.items.isEmpty)
     }
+
+    @Test("Rotating phrases keep their own article, including identical text with different sources")
+    func displayedDestination() {
+        let articles = [Fixture.article("one", feedID: "f"), Fixture.article("two", feedID: "f")]
+        let items = [MagazineTrendItem(text: "개발 도구의 변화", articleID: "two"),
+                     MagazineTrendItem(text: "로컬 AI 확산", articleID: "one"),
+                     MagazineTrendItem(text: "로컬 AI 확산", articleID: "two")]
+        for index in 0..<9 {
+            #expect(MagazineTrendItem.displayed(items: items, index: index, articles: articles, enabled: true)
+                == items[index % items.count])
+        }
+        #expect(Set(items).count == 3)
+    }
+
+    @Test("A stale or disabled trend replaces its phrase and destination together")
+    func fallbackDestination() {
+        var old = Fixture.article("old", feedID: "f")
+        old.publishedAt = Date(timeIntervalSince1970: 100)
+        var latest = Fixture.article("latest", feedID: "f")
+        latest.publishedAt = Date(timeIntervalSince1970: 200)
+        let items = [MagazineTrendItem(text: "삭제된 글의 소식", articleID: "removed")]
+        let fallback = MagazineTrendItem.displayed(items: items, index: 10, articles: [latest, old], enabled: true)
+        #expect(fallback?.articleID == latest.id)
+        #expect(fallback?.text != items[0].text)
+        #expect(MagazineTrendItem.displayed(items: [.init(text: "이전 글의 소식", articleID: old.id)],
+            index: 0, articles: [latest, old], enabled: false) == fallback)
+        #expect(MagazineTrendItem.displayed(items: items, index: 0, articles: [], enabled: true) == nil)
+    }
 }
