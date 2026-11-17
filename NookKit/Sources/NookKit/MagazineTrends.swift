@@ -205,7 +205,7 @@ public struct MagazineTrendTicker: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MagazinePlainButtonStyle())
         .focused($focused)
         .disabled(item == nil)
         .help(articles.first { $0.id == item?.articleID }?.title ?? text)

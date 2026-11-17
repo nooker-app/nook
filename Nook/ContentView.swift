@@ -104,7 +104,7 @@ struct ContentView: View {
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 270, max: 340)
         } content: {
-            ArticleListView(store: store)
+            ArticleListView(store: store, onAddFeed: { isAddingFeed = true })
                 .navigationSplitViewColumnWidth(min: 340, ideal: 420, max: 540)
         } detail: {
             ReaderWorkspaceView(store: store, isInspectorPresented: $isInspectorPresented)
@@ -1743,22 +1743,27 @@ private struct PerfDisplayLinkProbe: NSViewRepresentable {
 /// Progress and empty-state observations stay outside the list's body.
 private struct ArticleListEmptyState: View {
     let store: ReaderStore
+    let onAddFeed: () -> Void
 
     var body: some View {
-        if store.activeSearchQuery.isEmpty, store.feedSelection.isEmpty, store.smartSelection == .unread {
-            ContentUnavailableView {
-                Label("You're All Caught Up", systemImage: "checkmark.circle")
-            } description: {
-                Text("No unread articles right now.")
-            } actions: {
+        let state = store.articleEmptyState
+        ContentUnavailableView {
+            Label(state.title, systemImage: state.symbol)
+        } description: {
+            Text(state.message)
+        } actions: {
+            if state == .search {
+                Button("Clear Search") { store.searchText = "" }
+            } else if state == .subscriptions {
+                Button("Add Feed", action: onAddFeed).buttonStyle(.borderedProminent)
+            } else if state == .feed || state == .all || state == .today {
+                Button("Refresh") {
+                    if store.feedSelection.isEmpty { store.refreshAll() }
+                    else { store.refreshFeeds(ids: store.selectedFeedIDs) }
+                }.disabled(store.isRefreshing)
+            } else {
                 Button("View All Articles") { store.selectSmartSource(.all) }
                     .buttonStyle(.borderedProminent)
-            }
-        } else {
-            ContentUnavailableView {
-                Label("No Articles", systemImage: "newspaper")
-            } description: {
-                Text(store.activeSearchQuery.isEmpty ? "Add an RSS or Atom feed, then refresh." : "No article matches the current search.")
             }
         }
     }
@@ -1787,6 +1792,7 @@ private struct ArticleListDownloadButton: View {
 
 private struct ArticleListView: View {
     @Bindable var store: ReaderStore
+    let onAddFeed: () -> Void
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
     @AppStorage(TranslationSettings.titleProviderKey) private var titleProvider = TranslationProvider.appleIntelligence.rawValue
@@ -1810,7 +1816,7 @@ private struct ArticleListView: View {
                     Text("Nook stores its RSS library in a folder you choose, so iCloud Drive can sync it like a vault.")
                 }
             } else if store.listWindow.totalCount == 0 {
-                ArticleListEmptyState(store: store)
+                ArticleListEmptyState(store: store, onAddFeed: onAddFeed)
             } else if MacListBackend.current == .table {
                 ArticleTableRowsHost(store: store, titleTranslator: titleTranslator, translatesTitles: translateListTitles)
             } else {

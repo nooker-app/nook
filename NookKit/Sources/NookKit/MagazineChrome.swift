@@ -1,44 +1,25 @@
 #if os(macOS)
 import SwiftUI
 
-/// Shared chrome for Beta. Menus and buttons use the same label surface; the
-/// Menu itself remains native, including keyboard navigation and menu tracking.
-public struct MagazineGlassLabel<Content: View>: View {
-    private let content: Content
-    private let tint: Color
+/// Keep the platform's own lighting, hover, focus and press behavior. This
+/// wrapper adds Nook's tint and pointer without painting a simulated reflection.
+public struct MagazineGlassButtonStyle: PrimitiveButtonStyle {
     private let prominent: Bool
-    @Environment(\.isEnabled) private var isEnabled
-
-    public init(tint: Color = NookTheme.accent, prominent: Bool = false, @ViewBuilder content: () -> Content) {
-        self.tint = tint
-        self.prominent = prominent
-        self.content = content()
-    }
-
-    public var body: some View {
-        content
-            .font(.system(size: 13, weight: .medium))
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(tint)
-            .padding(.horizontal, 14)
-            .frame(height: 34)
-            .background(tint.opacity(0.035), in: Capsule())
-            .glassEffect(.regular.tint(tint.opacity(prominent ? 0.22 : 0.06)).interactive(), in: Capsule())
-            .overlay {
-                Capsule().strokeBorder(tint.opacity(0.18), lineWidth: 0.5)
-                    .allowsHitTesting(false)
-            }
-            .opacity(isEnabled ? 1 : 0.45)
-            .contentShape(Capsule())
-    }
-}
-
-public struct MagazineGlassButtonStyle: ButtonStyle {
-    private let prominent: Bool
+    @Environment(\.isEnabled) private var enabled
     public init(prominent: Bool = false) { self.prominent = prominent }
+
     public func makeBody(configuration: Configuration) -> some View {
-        MagazineGlassLabel(tint: configuration.role == .destructive ? .red : NookTheme.accent, prominent: prominent) { configuration.label }
-            .opacity(configuration.isPressed ? 0.72 : 1)
+        Button(configuration)
+        .buttonStyle(.glass(.regular.tint(NookTheme.accent.opacity(prominent ? 0.12 : 0.025))))
+        // A button tint fills native Glass with opaque accent color. Tint the
+        // material instead so both primary and secondary actions stay subtle.
+        .tint(nil as Color?)
+        .foregroundStyle(configuration.role == .destructive ? Color.red : (prominent ? NookTheme.accent : .primary))
+        .font(.system(size: 13, weight: .medium))
+        .labelStyle(.titleAndIcon)
+        .controlSize(.large)
+        .buttonBorderShape(.capsule)
+        .pointerStyle(enabled ? .link : .default)
     }
 }
 
@@ -92,9 +73,27 @@ public struct MagazineGlassMenu<Content: View, Label: View>: View {
         // dropping custom surfaces. Button menus preserve the shared SwiftUI
         // button style while retaining native menu tracking and keyboard input.
         .menuStyle(.button)
-        .buttonStyle(MagazineGlassButtonStyle())
+        .buttonStyle(MagazineMenuButtonStyle())
         .menuIndicator(.hidden)
         .fixedSize()
+    }
+}
+
+// Menu does not render a PrimitiveButtonStyle's body on macOS. Keep its native
+// menu behavior, and give the label the same understated interactive material.
+private struct MagazineMenuButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .labelStyle(.titleAndIcon)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .glassEffect(.regular.tint(NookTheme.accent.opacity(0.025)).interactive(), in: Capsule())
+            .contentShape(Capsule())
+            .pointerStyle(enabled ? .link : .default)
+            .opacity(enabled ? (configuration.isPressed ? 0.85 : 1) : 0.5)
     }
 }
 
@@ -145,9 +144,10 @@ public struct MagazineCardStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
+                .magazinePointer(in: RoundedRectangle(cornerRadius: 18))
                 .overlay {
                     RoundedRectangle(cornerRadius: 18)
-                        .strokeBorder(hovering ? NookTheme.accent.opacity(0.5) : NookTheme.hairline.opacity(0.65), lineWidth: 1)
+                        .strokeBorder(hovering ? NookTheme.accent.opacity(0.3) : NookTheme.hairline.opacity(0.65), lineWidth: 1)
                         .allowsHitTesting(false)
                 }
                 .shadow(color: .black.opacity(hovering ? 0.09 : 0), radius: 14, y: 5)

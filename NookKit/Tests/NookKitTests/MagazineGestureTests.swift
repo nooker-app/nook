@@ -3,6 +3,30 @@ import Testing
 
 @Suite("Magazine gesture intent")
 struct MagazineGestureTests {
+    @Test("Resistance impacts require outward movement beyond the threshold and are rate limited")
+    func resistanceHaptics() {
+        var haptics = MagazineResistanceHaptics()
+        #expect(haptics.update(phase: .began, isArmed: false, outwardTravel: 20, time: 0) == nil)
+        #expect(haptics.update(phase: .changed, isArmed: true, outwardTravel: 20, time: 1) == .threshold)
+        #expect(haptics.update(phase: .changed, isArmed: true, outwardTravel: 20, time: 1.01) == nil)
+        #expect(haptics.update(phase: .changed, isArmed: true, outwardTravel: 20, time: 1.06) == .resistance)
+        #expect(haptics.update(phase: .changed, isArmed: true, outwardTravel: 0, time: 1.2) == nil)
+        #expect(haptics.update(phase: .momentum, isArmed: true, outwardTravel: 900, time: 1.3) == nil)
+        #expect(haptics.update(phase: .cancelled, isArmed: true, outwardTravel: 900, time: 1.4) == nil)
+        #expect(haptics.update(phase: .began, isArmed: true, outwardTravel: 240, time: 2) == .threshold)
+        #expect(haptics.update(phase: .ended, isArmed: true, outwardTravel: 240, time: 2.1) == nil)
+    }
+
+    @Test("Continued pulling at the rubber-band limit still supplies resistance movement")
+    func resistanceAtLimit() {
+        var state = MagazineGestureState()
+        _ = state.update(phase: .began, dy: -900, atBottom: true)
+        #expect(state.update(phase: .changed, dy: -20, atBottom: true).resistanceTravel == 20)
+        #expect(state.update(phase: .changed, dy: 20, atBottom: true).resistanceTravel == 0)
+        #expect(state.update(phase: .momentum, dy: -900).resistanceTravel == 0)
+        #expect(state.update(phase: .ended).action == .next)
+    }
+
     @Test("Crossing the threshold arms but only release navigates, once")
     func releaseCommitsOnce() {
         var state = MagazineGestureState()

@@ -154,7 +154,7 @@ struct BetaSettingsView: View {
                     }
                     .contentShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MagazinePlainButtonStyle())
                 .accessibilityLabel(Text(item.title))
                 .accessibilityAddTraits(pane == item ? .isSelected : [])
             }
@@ -230,7 +230,7 @@ private struct BetaSettingsForm<Content: View>: View {
                             }
                         }
                         .font(.system(size: 13))
-                        .toggleStyle(.switch)
+                        .toggleStyle(MagazineSwitchStyle())
                         .controlSize(.regular)
                         .buttonStyle(MagazineGlassButtonStyle())
                         .menuStyle(.button)
@@ -254,7 +254,7 @@ private struct BetaSettingsForm<Content: View>: View {
         }
         // Section subview proxies resolve environment where content is declared,
         // not where each extracted row is placed in the glass card.
-        .toggleStyle(.switch)
+        .toggleStyle(MagazineSwitchStyle())
         .buttonStyle(MagazineGlassButtonStyle())
         .menuStyle(.button)
         .controlSize(.regular)

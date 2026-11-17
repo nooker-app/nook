@@ -14,6 +14,7 @@ struct MagazineView: View {
     @State private var recommendationLoaded = false
     @State private var pendingRecommendation: MagazineRecommendationController.Dismissal?
     @State private var libraryScope: String?
+    @State private var libraryFolder: String?
     @State private var libraryPosition = ScrollPosition(edge: .top)
     @State private var frozenLead: ArticleRowModel?
     @State private var dismissedArticle: Article.ID?
@@ -120,7 +121,7 @@ struct MagazineView: View {
                                     }
                                 }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(MagazinePlainButtonStyle(capsule: true))
                         .help(Text(LocalizedStringKey(item.rawValue)))
                         .accessibilityLabel(Text(LocalizedStringKey(item.rawValue)))
                     }
@@ -130,7 +131,9 @@ struct MagazineView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Refresh All", systemImage: "arrow.clockwise") { store.refreshAll() }
                     .disabled(store.isRefreshing || store.feeds.isEmpty)
+                    .pointerStyle(store.isRefreshing || store.feeds.isEmpty ? .default : .link)
                 Button("Settings", systemImage: "gearshape") { openWindow(id: "settings") }
+                    .pointerStyle(.link)
             }
             }
         }
@@ -205,7 +208,7 @@ struct MagazineView: View {
             self.dismissedArticle = nil
         }
         .task(id: recommendationTaskID) {
-            guard opened == nil, initialLoadFinished, isBrowsingMagazine else { return }
+            guard opened == nil, initialLoadFinished, isBrowsingMagazine, !libraryFolderIsEmpty else { return }
             recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
             let pending = pendingRecommendation
             if pending == nil { recommendationLoaded = false }
@@ -278,27 +281,8 @@ struct MagazineView: View {
                             Button("Choose Sync Folder", action: chooseSyncFolder).buttonStyle(MagazineGlassButtonStyle())
                         }
                         .frame(maxWidth: .infinity, minHeight: 320)
-                    } else if rows.isEmpty && !store.activeSearchQuery.isEmpty {
-                        ContentUnavailableView {
-                            Label("No search results", systemImage: "magnifyingglass")
-                        } description: {
-                            Text("No article matches the current search.")
-                        } actions: {
-                            Button("Clear Search") {
-                                store.searchText = ""
-                                searchFocused = true
-                            }.buttonStyle(MagazineGlassButtonStyle())
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 320)
-                    } else if rows.isEmpty {
-                        ContentUnavailableView {
-                            Label("Room for your next story.", systemImage: "newspaper")
-                        } description: {
-                            Text("Add a feed or choose another collection to start reading.")
-                        } actions: {
-                            Button("Add Feed") { addingFeed = true }.buttonStyle(MagazineGlassButtonStyle())
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 320)
+                    } else if rows.isEmpty || libraryFolderIsEmpty {
+                        emptyCollection
                     } else {
                         if store.activeSearchQuery.isEmpty {
                             if let lead = leadRow { card(lead, lead: true) }
@@ -344,6 +328,42 @@ struct MagazineView: View {
         }
     }
 
+    private var emptyCollection: some View {
+        let state = libraryFolderIsEmpty && store.activeSearchQuery.isEmpty ? ArticleEmptyState.folder : store.articleEmptyState
+        return ContentUnavailableView {
+            Label(state.title, systemImage: state.symbol)
+        } description: {
+            Text(state.message)
+        } actions: {
+            switch state {
+            case .search:
+                Button("Clear Search") { store.searchText = ""; searchFocused = true }
+            case .subscriptions:
+                Button("Add Feed") { addingFeed = true }
+            case .feed, .today, .all:
+                Button("Refresh") {
+                    if store.feedSelection.isEmpty { store.refreshAll() }
+                    else { store.refreshFeeds(ids: store.selectedFeedIDs) }
+                }.disabled(store.isRefreshing)
+                Button("View All Articles", action: showAllArticles)
+            case .folder:
+                Button("Back to Library") { libraryScope = nil; tab = .library }
+            default:
+                Button("View All Articles", action: showAllArticles)
+            }
+        }
+        .buttonStyle(MagazineGlassButtonStyle())
+        .frame(maxWidth: .infinity, minHeight: 320)
+    }
+
+    private func showAllArticles() {
+        libraryScope = nil
+        pendingRecommendation = nil
+        store.searchText = ""
+        store.selectSmartSource(.all)
+        tab = .magazine
+    }
+
     private var magazineLoading: some View {
         VStack(alignment: .leading, spacing: 20) {
             ProgressView().controlSize(.small)
@@ -366,7 +386,7 @@ struct MagazineView: View {
                     Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day())
                 }
                 .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                MagazineHeadline(store.selectedSourceTitle, size: 40)
+                MagazineHeadline(libraryScope ?? store.selectedSourceTitle, size: 40)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 10) {
@@ -376,7 +396,7 @@ struct MagazineView: View {
                                     openArticle: openArticle)
                 Group {
                     if store.activeSearchQuery.isEmpty {
-                        Text("\(store.listWindow.totalCount) stories")
+                        Text("\(libraryFolderIsEmpty ? 0 : store.listWindow.totalCount) stories")
                     } else {
                         Text("\(store.listWindow.totalCount) results")
                     }
@@ -406,7 +426,7 @@ struct MagazineView: View {
                         store.searchText = ""
                         searchFocused = true
                     } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                        .buttonStyle(MagazinePlainButtonStyle()).foregroundStyle(.secondary)
                         .accessibilityLabel("Clear Search")
                 }
             }
@@ -432,7 +452,7 @@ struct MagazineView: View {
                         .padding(.horizontal, 13).frame(height: 32)
                         .background(store.smartSelection == source ? NookTheme.accent.opacity(0.17) : .clear, in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MagazinePlainButtonStyle(capsule: true))
                 .accessibilityLabel(Text(source.title))
                 .accessibilityAddTraits(store.smartSelection == source ? .isSelected : [])
             }
@@ -471,6 +491,7 @@ struct MagazineView: View {
                     }
                     MagazineArticleHeading(article: article, feedTitle: row.feedDisplayTitle ?? "",
                                            namespace: hero, expanded: false, lead: lead, matched: opened != row.id)
+                    MagazineCategoryLabels(store.categories(forArticle: article))
                     Text(article.summary)
                         .font(.system(size: lead ? 15 : 13))
                         .foregroundStyle(.secondary).lineSpacing(5).lineLimit(3)
@@ -598,8 +619,8 @@ struct MagazineView: View {
                 ForEach([""] + store.feedFolders, id: \.self) { folder in
                     VStack(alignment: .leading, spacing: 12) {
                         if !folder.isEmpty {
-                            Button(folder, systemImage: "folder") { enterLibraryCollection(folder) { store.selectFolder(folder) } }
-                                .buttonStyle(.plain).font(.title2)
+                            Button(folder, systemImage: "folder") { enterLibraryCollection(folder, folder: folder) { store.selectFolder(folder) } }
+                                .buttonStyle(MagazinePlainButtonStyle()).font(.title2)
                         }
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 18)], alignment: .leading, spacing: 18) {
                             ForEach(store.feeds(inFolder: folder)) { feed in
@@ -612,8 +633,8 @@ struct MagazineView: View {
                                         Text("\(store.unreadCount(feedID: feed.id)) unread").font(.caption).foregroundStyle(.secondary)
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
-                                    .padding(20).background(NookTheme.card, in: RoundedRectangle(cornerRadius: 16))
-                                }.buttonStyle(.plain)
+                                    .padding(20).background(NookTheme.card, in: RoundedRectangle(cornerRadius: 18))
+                                }.buttonStyle(MagazineCardStyle())
                             }
                         }
                     }
@@ -647,7 +668,13 @@ struct MagazineView: View {
         .background(NookTheme.canvas)
     }
 
-    private func enterLibraryCollection(_ title: String, select: () -> Void) {
+    private var libraryFolderIsEmpty: Bool {
+        guard libraryScope != nil, let libraryFolder else { return false }
+        return store.feeds(inFolder: libraryFolder).isEmpty
+    }
+
+    private func enterLibraryCollection(_ title: String, folder: String? = nil, select: () -> Void) {
+        libraryFolder = folder
         store.searchText = ""
         pendingRecommendation = nil
         recommendation = nil

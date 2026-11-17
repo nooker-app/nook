@@ -26,6 +26,7 @@ struct MagazineGestureState {
     struct Result {
         var consumed = false
         var action: MagazineGestureAction?
+        var resistanceTravel: CGFloat = 0
     }
 
     private(set) var presentation = MagazinePullPresentation()
@@ -97,6 +98,38 @@ struct MagazineGestureState {
         // A bounded, continuously increasing displacement: resistance grows as
         // the finger travels, while the fill measures the actual commit distance.
         presentation.distance = 140 * raw / (raw + 160)
-        return Result(consumed: true)
+        return Result(consumed: true, resistanceTravel: presentation.isArmed ? max(0, delta) : 0)
+    }
+}
+
+/// Detents are driven by deliberate movement, never by a repeating timer.
+/// AppKit exposes patterns rather than amplitude, so each outward step requests
+/// a generic impact, at most twenty times a second. Release/reversal is silent.
+struct MagazineResistanceHaptics {
+    enum Pulse: Equatable { case threshold, resistance }
+    private var armed = false
+    private var travel: CGFloat = 0
+    private var lastPulse: TimeInterval = -.infinity
+
+    mutating func reset() { self = Self() }
+
+    mutating func update(phase: MagazineGestureState.Phase, isArmed: Bool,
+                         outwardTravel: CGFloat, time: TimeInterval) -> Pulse? {
+        if phase == .began { reset() }
+        if phase == .ended || phase == .cancelled { reset(); return nil }
+        guard phase == .began || phase == .changed else { return nil }
+        guard isArmed else { armed = false; travel = 0; return nil }
+        if !armed {
+            armed = true
+            travel = 0
+            lastPulse = time
+            return .threshold
+        }
+        guard outwardTravel > 0 else { travel = 0; return nil }
+        travel += outwardTravel
+        guard travel >= 10, time - lastPulse >= 0.05 else { return nil }
+        travel = 0
+        lastPulse = time
+        return .resistance
     }
 }

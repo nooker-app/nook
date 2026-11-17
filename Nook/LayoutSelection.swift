@@ -203,10 +203,12 @@ struct LayoutChooserView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .pointerStyle(.link)
             .accessibilityLabel(mode == .classic ? "Classic layout" : "Magazine Beta layout")
             .accessibilityValue(preview == mode ? "Selected" : "Not selected")
             Button("Replay preview", systemImage: "arrow.clockwise") { replay[mode, default: 0] += 1 }
                 .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                .pointerStyle(.link)
         }
         .frame(maxWidth: .infinity)
     }

@@ -379,6 +379,8 @@ struct MagazineReaderDetail: View {
             // Re-detected per article so the Translate action is offered only when
             // the language differs from the target.
             if !Task.isCancelled { session.setDetectedLanguage(detected, for: article.id) }
+        }
+        .task(id: "\(article.id)|\(markReadOnOpen)|\(markReadDelaySeconds)") {
             await markReadAfterDwell(article)
         }
         .task(id: summaryTaskKey(for: article)) {
@@ -627,6 +629,7 @@ struct MagazineReaderDetail: View {
             } else {
                 await Task.yield()
             }
+            guard !Task.isCancelled, markReadOnOpen else { return }
             store.markArticleOpened(articleID: article.id)
         } catch {
             // Cancelled before the dwell completed — leave it unread.
@@ -783,6 +786,7 @@ struct MagazineBrowserPanel: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("markReadOnOpen") private var markReadOnOpen = true
+    @AppStorage("markReadDelaySeconds") private var markReadDelaySeconds = 3
     @AppStorage(AppLanguage.storageKey) private var appLanguage = AppLanguage.system
     @AppStorage("readerLinkBehavior") private var linkBehavior = ReaderLinkBehavior.inApp
     @AppStorage("readerFont") private var readerFont = ReaderFont.system
@@ -865,9 +869,14 @@ struct MagazineBrowserPanel: View {
         }
         .task(id: article.id) {
             store.retainArticle(id: article.id)
-            if markReadOnOpen { store.markArticleOpened(articleID: article.id) }
             let detected = await Task.detached { MagazineReaderDetail.detectLanguage(for: article) }.value
             if !Task.isCancelled { detectedLanguage = detected }
+        }
+        .task(id: "\(article.id)|\(markReadOnOpen)|\(markReadDelaySeconds)") {
+            guard markReadOnOpen else { return }
+            do { try await Task.sleep(for: .seconds(max(0, markReadDelaySeconds))) } catch { return }
+            guard !Task.isCancelled, markReadOnOpen else { return }
+            store.markArticleOpened(articleID: article.id)
         }
         .onExitCommand(perform: dismissReader)
     }
@@ -959,11 +968,9 @@ struct MagazineBrowserPanel: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
 
-                Picker("Reader Mode", selection: $store.browserMode) {
-                    Text("Reader Mode").tag(ReaderViewMode.reader)
-                    Text("Original Page").tag(ReaderViewMode.original)
-                }
-                .labelsHidden().pickerStyle(.segmented).frame(width: compact ? 180 : 206)
+                MagazineGlassSegments([ReaderViewMode.reader, .original], selection: $store.browserMode) { mode in
+                    Text(mode == .reader ? "Reader Mode" : "Original Page")
+                }.frame(width: compact ? 180 : 206).accessibilityLabel("Reader Mode")
 
                 HStack(spacing: 6) {
                     iconButton("Reading Appearance", symbol: "textformat.size") { showingAppearance.toggle() }
@@ -1018,18 +1025,16 @@ struct MagazineBrowserPanel: View {
             Text("Reading Appearance").font(.headline)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Font").font(.caption).foregroundStyle(.secondary)
-                Picker("Font", selection: $readerFont) {
-                    ForEach(ReaderFont.allCases) { Text($0.label).tag($0) }
-                }.labelsHidden().pickerStyle(.segmented)
+                MagazineGlassSegments(ReaderFont.allCases, selection: $readerFont) { font in
+                    Text(font.label)
+                }.accessibilityLabel("Font")
             }
             Stepper("Font Size: \(readerFontSize)", value: $readerFontSize, in: 12...28)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Text Width").font(.caption).foregroundStyle(.secondary)
-                Picker("Text Width", selection: $contentWidth) {
-                    Text("Narrow").tag(640)
-                    Text("Comfortable").tag(800)
-                    Text("Wide").tag(960)
-                }.labelsHidden().pickerStyle(.segmented)
+                MagazineGlassSegments([640, 800, 960], selection: $contentWidth) { width in
+                    Text(width == 640 ? "Narrow" : (width == 800 ? "Comfortable" : "Wide"))
+                }.accessibilityLabel("Text Width")
             }
             Text("Font changes also apply to the article reader.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

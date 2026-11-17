@@ -93,12 +93,9 @@ public struct BetaStudioView: View {
                     .disabled(!store.isSignedIn)
                 }
                 HStack(spacing: 24) {
-                    Picker(selection: $filter) {
-                        ForEach(ShelfFilter.allCases, id: \.self) { item in
-                            Text(LocalizedStringKey(item.rawValue), bundle: .module).tag(item)
-                        }
-                    } label: { Text("Your writing", bundle: .module) }
-                    .labelsHidden().pickerStyle(.segmented).frame(width: 280)
+                    MagazineGlassSegments(ShelfFilter.allCases, selection: $filter) { item in
+                        Text(LocalizedStringKey(item.rawValue), bundle: .module)
+                    }.frame(width: 280).accessibilityLabel(Text("Your writing", bundle: .module))
                     Spacer()
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -107,7 +104,7 @@ public struct BetaStudioView: View {
                         }.focused($searchFocused)
                         if !search.isEmpty {
                             Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
-                                .buttonStyle(.plain).help(Text("Clear Search", bundle: .module))
+                                .buttonStyle(MagazinePlainButtonStyle()).help(Text("Clear Search", bundle: .module))
                         }
                     }.magazineInput(focused: searchFocused).frame(width: 280)
                 }
@@ -439,7 +436,7 @@ private struct BetaWritingCanvas: View {
             formatButton("Link", icon: "link") { PlusMarkdownEdit.link($0, selection: $1) }
         }
         .foregroundStyle(NookTheme.accent)
-        .buttonStyle(.plain).padding(.horizontal, 24).padding(.vertical, 14)
+        .buttonStyle(MagazinePlainButtonStyle()).padding(.horizontal, 24).padding(.vertical, 14)
         .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
     }
 

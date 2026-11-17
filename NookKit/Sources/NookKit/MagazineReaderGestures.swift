@@ -51,6 +51,7 @@ public struct MagazineReaderGestureProbe: NSViewRepresentable {
         private var resignObserver: NSObjectProtocol?
         private var staleTask: Task<Void, Never>?
         private var state = MagazineGestureState()
+        private var haptics = MagazineResistanceHaptics()
 
         fileprivate func attach(_ view: NSView) {
             probe = view
@@ -77,6 +78,7 @@ public struct MagazineReaderGestureProbe: NSViewRepresentable {
         fileprivate func reset(report: Bool = true) {
             let wasVisible = state.presentation.edge != nil
             state.reset()
+            haptics.reset()
             staleTask?.cancel()
             if report && wasVisible { configuration?.onChange(state.presentation) }
         }
@@ -117,8 +119,10 @@ public struct MagazineReaderGestureProbe: NSViewRepresentable {
             )
             let after = state.presentation
             if after != before { configuration.onChange(after) }
-            if after.isArmed && !before.isArmed {
-                NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+            if let pulse = haptics.update(phase: phase, isArmed: after.isArmed,
+                                          outwardTravel: result.resistanceTravel, time: event.timestamp) {
+                NSHapticFeedbackManager.defaultPerformer.perform(
+                    pulse == .threshold ? .levelChange : .generic, performanceTime: .now)
             }
             staleTask?.cancel()
             if after.edge != nil {

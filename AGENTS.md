@@ -57,6 +57,7 @@ Nook is a native macOS RSS reader. Keep it native.
 - The app previously hit a SwiftUI/AppKit constraint crash when toggling the first sidebar. Prefer Apple's native sidebar commands (`SidebarCommands`) and avoid custom split-view hacks unless thoroughly tested.
 - macOS may log `com.apple.linkd.autoShortcut` or App Intents registration errors during debug runs. Treat them as OS/App Intents noise unless there is a matching app crash or user-visible failure.
 - If a UI action appears inert, verify both the SwiftUI action path and whether the native panel/sheet is being presented from a valid window context.
+- Do not leave user-facing app launches with preference overrides such as `-markReadOnOpen NO`. UserDefaults' argument domain outranks saved settings, making settings appear to revert. Use an isolated harness for QA overrides and launch the app normally before handing it back.
 
 ## Build And Verification
 
