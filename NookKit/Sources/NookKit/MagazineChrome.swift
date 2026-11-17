@@ -118,9 +118,7 @@ public struct MagazineHeadline: View {
     }
 
     public var body: some View {
-        Text(title)
-            .font(.system(size: size, weight: .semibold, design: design))
-            .tracking(design == .serif ? -0.4 : -0.6)
+        Self.text(title, size: size)
             .lineSpacing(size * 0.12)
             .lineLimit(lines)
             .multilineTextAlignment(.leading)
@@ -131,10 +129,13 @@ public struct MagazineHeadline: View {
             .transaction { $0.animation = nil }
     }
 
-    private var design: Font.Design {
-        title.unicodeScalars.contains {
+    static func text(_ title: String, size: CGFloat) -> Text {
+        let design: Font.Design = title.unicodeScalars.contains {
             (0x2E80...0x9FFF).contains($0.value) || (0xAC00...0xD7AF).contains($0.value)
         } ? .default : .serif
+        return Text(title)
+            .font(.system(size: size, weight: .semibold, design: design))
+            .tracking(design == .serif ? -0.4 : -0.6)
     }
 }
 

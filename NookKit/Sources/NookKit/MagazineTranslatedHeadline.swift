@@ -26,7 +26,9 @@ public struct MagazineTranslatedHeadline: View {
     }
 
     public var body: some View {
-        MagazineHeadline(Self.displayTitle(original: title, state: box.state, enabled: enabled), size: size, lines: lines)
+        let displayed = Self.displayTitle(original: title, state: box.state, enabled: enabled)
+        MagazineHeadlineTransition(title: displayed, size: size, lines: lines,
+                                   animated: visible && enabled && displayed != title)
             .help(title)
             .onChange(of: visible && enabled, initial: true) { _, wanted in
                 if wanted && !registered {
