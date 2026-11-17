@@ -161,6 +161,7 @@ public final class PlusStore {
     private var environment: PlusEnvironment
     private var pds: PlusPDSClient
     private var service: PlusServiceClient
+    private let credential: @Sendable () -> PlusSession?
 
     public convenience init(environment: PlusEnvironment = .current) {
         self.init(
@@ -191,6 +192,7 @@ public final class PlusStore {
         credential: @escaping @Sendable () -> PlusSession?
     ) {
         self.environment = environment
+        self.credential = credential
         self.pds = PlusPDSClient(
             host: environment.pdsHost, issuedDomains: [environment.handleDomain],
             session: urlSession)
@@ -883,7 +885,7 @@ public final class PlusStore {
     /// relaunched, with the writing still on screen.
     public func prepareToCompose() async {
         startNewDraft()
-        let stored = PlusCredential.current
+        let stored = credential()
         if stored != session {
             session = stored
             // They belong to the session that was replaced, not to this one.
@@ -913,6 +915,17 @@ public final class PlusStore {
     public func startNewDraft() {
         if lastPublishedURL != nil { lastPublishedURL = nil }
         clearFailure()
+    }
+
+    /// Studio reopens on the current account, including sign-in from another
+    /// window and posts published on another device while this app was open.
+    public func refreshWritingShelf() async {
+        let hadContent = !publications.isEmpty
+        let previousDID = session?.did
+        await prepareToCompose()
+        if hadContent, isSignedIn, session?.did == previousDID, failure == nil {
+            await loadContent()
+        }
     }
 
     /// Publishes an article through the service, which writes the PDS record

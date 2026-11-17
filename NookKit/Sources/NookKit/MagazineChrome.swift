@@ -6,10 +6,12 @@ import SwiftUI
 public struct MagazineGlassLabel<Content: View>: View {
     private let content: Content
     private let tint: Color
+    private let prominent: Bool
     @Environment(\.isEnabled) private var isEnabled
 
-    public init(tint: Color = NookTheme.accent, @ViewBuilder content: () -> Content) {
+    public init(tint: Color = NookTheme.accent, prominent: Bool = false, @ViewBuilder content: () -> Content) {
         self.tint = tint
+        self.prominent = prominent
         self.content = content()
     }
 
@@ -21,7 +23,7 @@ public struct MagazineGlassLabel<Content: View>: View {
             .padding(.horizontal, 14)
             .frame(height: 34)
             .background(tint.opacity(0.035), in: Capsule())
-            .glassEffect(.regular.tint(tint.opacity(0.06)).interactive(), in: Capsule())
+            .glassEffect(.regular.tint(tint.opacity(prominent ? 0.22 : 0.06)).interactive(), in: Capsule())
             .overlay {
                 Capsule().strokeBorder(tint.opacity(0.18), lineWidth: 0.5)
                     .allowsHitTesting(false)
@@ -32,10 +34,38 @@ public struct MagazineGlassLabel<Content: View>: View {
 }
 
 public struct MagazineGlassButtonStyle: ButtonStyle {
-    public init() {}
+    private let prominent: Bool
+    public init(prominent: Bool = false) { self.prominent = prominent }
     public func makeBody(configuration: Configuration) -> some View {
-        MagazineGlassLabel(tint: configuration.role == .destructive ? .red : NookTheme.accent) { configuration.label }
+        MagazineGlassLabel(tint: configuration.role == .destructive ? .red : NookTheme.accent, prominent: prominent) { configuration.label }
             .opacity(configuration.isPressed ? 0.72 : 1)
+    }
+}
+
+/// A shared input surface for Beta forms. The native text field keeps IME,
+/// selection and keyboard behavior; glass and the focus ring are presentation.
+public struct MagazineInputSurface: ViewModifier {
+    var focused: Bool
+    @Environment(\.isEnabled) private var isEnabled
+
+    public func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 16).padding(.vertical, 13)
+            .glassEffect(.regular.tint(NookTheme.accent.opacity(0.045)), in: RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(focused ? NookTheme.accent.opacity(0.65) : NookTheme.hairline,
+                                  lineWidth: focused ? 1.5 : 0.5)
+                    .allowsHitTesting(false)
+            }
+            .opacity(isEnabled ? 1 : 0.5)
+    }
+}
+
+public extension View {
+    func magazineInput(focused: Bool = false) -> some View {
+        modifier(MagazineInputSurface(focused: focused))
     }
 }
 

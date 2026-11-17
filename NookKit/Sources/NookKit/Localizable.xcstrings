@@ -1,6 +1,490 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "Preview": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "미리보기"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "プレビュー"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "预览"
+        }
+      }
+    }
+  },
+  "Details": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "상세"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "詳細"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "详情"
+        }
+      }
+    }
+  },
+  "Edit": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "편집"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "編集"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "编辑"
+        }
+      }
+    }
+  },
+  "Address": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "주소"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "アドレス"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "地址"
+        }
+      }
+    }
+  },
+  "Every draft and every published story, together.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "쓰고 있는 생각부터 발행한 글까지, 한곳에서."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "下書きも公開した記事も、ひとつの場所に。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "草稿与已发布文章，尽在一处。"
+        }
+      }
+    }
+  },
+  "Your writing": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "내 글"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "自分の文章"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "我的文章"
+        }
+      }
+    }
+  },
+  "Find your writing": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "내 글 검색"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "自分の文章を検索"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "搜索我的文章"
+        }
+      }
+    }
+  },
+  "Sign in to see your published stories and start writing.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "로그인하면 발행한 글을 보고 새 글을 쓸 수 있어요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "ログインして公開済みの記事を確認し、新しい文章を書きましょう。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "登录以查看已发布文章并开始写作。"
+        }
+      }
+    }
+  },
+  "No drafts here yet.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "아직 작성 중인 초안이 없어요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "まだ下書きがありません。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "还没有草稿。"
+        }
+      }
+    }
+  },
+  "Loading your stories…": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "내 글을 불러오는 중…"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "記事を読み込み中…"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "正在加载文章…"
+        }
+      }
+    }
+  },
+  "Your published stories will appear here.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "발행한 글이 이곳에 모입니다."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "公開した記事がここに表示されます。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已发布文章将显示在这里。"
+        }
+      }
+    }
+  },
+  "No matching stories.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "검색어와 일치하는 글이 없어요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "一致する記事がありません。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "没有匹配的文章。"
+        }
+      }
+    }
+  },
+  "Published": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "발행됨"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "公開済み"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已发布"
+        }
+      }
+    }
+  },
+  "Shown": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "열림"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "表示中"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已显示"
+        }
+      }
+    }
+  },
+  "Hidden": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "닫힘"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "非表示"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已隐藏"
+        }
+      }
+    }
+  },
+  "Give your story a title": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "글의 제목을 적어주세요"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "記事のタイトルを入力"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "为文章起个标题"
+        }
+      }
+    }
+  },
+  "your-story": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "your-story"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "your-story"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "your-story"
+        }
+      }
+    }
+  },
+  "Suggested from your title. Edit it to keep a custom address.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "제목에서 자동으로 만들어요. 직접 입력하면 그 주소를 유지합니다."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "タイトルから自動生成されます。編集するとそのアドレスが使われます。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "根据标题自动生成。手动修改后将保留自定义地址。"
+        }
+      }
+    }
+  },
+  "A short introduction for your readers": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "독자에게 전할 짧은 소개"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "読者への短い紹介文"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "给读者的简短介绍"
+        }
+      }
+    }
+  },
+  "Optional. Shown in your publication and feed.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "선택 사항이에요. 발행물과 피드에 표시됩니다."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "任意です。公開ページやフィードに表示されます。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "选填，将显示在刊物和订阅源中。"
+        }
+      }
+    }
+  },
+  "Your draft stays on this Mac until you publish.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "발행하기 전까지 초안은 이 Mac에만 저장돼요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "公開するまで下書きはこのMacにのみ保存されます。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "发布前，草稿仅保存在此 Mac 上。"
+        }
+      }
+    }
+  },
+  "This address is already used by one of your posts.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "이미 발행한 글에서 사용하는 주소예요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "別の記事ですでに使われているアドレスです。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "你的另一篇文章已使用此地址。"
+        }
+      }
+    }
+  },
   "Open related article": {
     "extractionState": "manual",
     "localizations": {

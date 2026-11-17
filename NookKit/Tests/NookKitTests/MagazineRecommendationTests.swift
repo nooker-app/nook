@@ -6,6 +6,43 @@ import Testing
 struct MagazineRecommendationTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @Test("Explicit skips change ranking immediately without hiding the article from the library")
+    func skipRanking() async throws {
+        let first = article("first", title: "Swift architecture")
+        let second = article("second", title: "A different story", age: 60)
+        var history = MagazineReadingHistory()
+        history.dismiss(first.id, now: now)
+        let ranker = MagazineRecommendationRanker()
+        #expect(await ranker.rank(candidates: [first, second], library: [], history: history,
+                                 now: now, useSemantics: false)?.articleID == second.id)
+        history.dismiss(second.id, now: now)
+        #expect(await ranker.rank(candidates: [first, second], library: [], history: history,
+                                 now: now, useSemantics: false) == nil)
+        #expect(!history.isDismissed(first.id, now: now.addingTimeInterval(31 * 86400)))
+        let legacy = try JSONDecoder().decode(MagazineReadingHistory.self, from: Data(#"{"entries":{}}"#.utf8))
+        #expect(!legacy.isDismissed(first.id, now: now))
+    }
+
+    @Test("Skip persists with personalization off and undo restores the previous ranking within its library")
+    @MainActor func skipUndo() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "RecommendationUndo.\(UUID())"))
+        let controller = MagazineRecommendationController(defaults: defaults)
+        defer { MagazineRecommendationController.reset(defaults: defaults) }
+        controller.selectLibrary("one")
+        let first = article("first", title: "First")
+        let second = article("second", title: "Second", age: 60)
+        let undo = controller.dismissRecommendation(first.id)
+        #expect(await controller.recommend(candidates: [first, second], library: [], personalized: false)?.articleID == second.id)
+        let restored = MagazineRecommendationController(defaults: defaults)
+        restored.selectLibrary("one")
+        #expect(await restored.recommend(candidates: [first, second], library: [], personalized: false)?.articleID == second.id)
+        controller.selectLibrary("two")
+        #expect(!controller.undoDismissal(undo))
+        controller.selectLibrary("one")
+        #expect(controller.undoDismissal(undo))
+        #expect(await controller.recommend(candidates: [first, second], library: [], personalized: false)?.articleID == first.id)
+    }
+
     private func article(_ id: String, title: String, feed: String = "feed", age: Double = 0) -> Article {
         var article = Fixture.article(id, feedID: feed)
         article.title = title

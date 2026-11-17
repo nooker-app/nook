@@ -11,6 +11,10 @@ struct MagazineView: View {
     @State private var frozenRows: [ArticleRowModel]?
     @State private var recommendations = MagazineRecommendationController()
     @State private var recommendation: MagazineRecommendation?
+    @State private var recommendationLoaded = false
+    @State private var pendingRecommendation: MagazineRecommendationController.Dismissal?
+    @State private var libraryScope: String?
+    @State private var libraryPosition = ScrollPosition(edge: .top)
     @State private var frozenLead: ArticleRowModel?
     @State private var dismissedArticle: Article.ID?
     @State private var initialLoadFinished = false
@@ -95,6 +99,13 @@ struct MagazineView: View {
                         Button {
                             guard draftSession?.flush() != false else { return }
                             if opened != nil { closeArticle() }
+                            pendingRecommendation = nil
+                            if item == .library { libraryScope = nil }
+                            if item == .magazine && (tab == .library || libraryScope != nil) {
+                                libraryScope = nil
+                                store.selectSmartSource(.all)
+                                store.searchText = ""
+                            }
                             tab = item
                         } label: {
                             Label(LocalizedStringKey(item.rawValue), systemImage: item.icon)
@@ -173,7 +184,10 @@ struct MagazineView: View {
         .onChange(of: store.activeSearchQuery) { _, _ in
             scrollPosition.scrollTo(edge: .top)
         }
-        .onChange(of: recommendationReset) { _, _ in recommendations.reloadAfterReset() }
+        .onChange(of: recommendationReset) { _, _ in
+            pendingRecommendation = nil
+            recommendations.reloadAfterReset()
+        }
         .onChange(of: store.selectedArticleID) { _, id in
             if id == nil { closeBrowser() }
         }
@@ -191,13 +205,25 @@ struct MagazineView: View {
             self.dismissedArticle = nil
         }
         .task(id: recommendationTaskID) {
-            guard opened == nil, initialLoadFinished, tab == .magazine else { return }
+            guard opened == nil, initialLoadFinished, isBrowsingMagazine else { return }
             recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
+            let pending = pendingRecommendation
+            if pending == nil { recommendationLoaded = false }
             do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
             let result = await recommendations.recommend(candidates: store.visibleArticles,
                 library: store.libraryArticles, personalized: recommendationsEnabled)
+            if let pending {
+                let remaining = pending.deadline.timeIntervalSinceNow
+                if remaining > 0 {
+                    do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
+                }
+            }
             guard !Task.isCancelled else { return }
-            recommendation = result
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                recommendation = result
+                recommendationLoaded = true
+                pendingRecommendation = nil
+            }
         }
         .task(id: readingTaskID) {
             guard recommendationsEnabled, store.isForegroundActive, let id = opened else { return }
@@ -212,8 +238,10 @@ struct MagazineView: View {
     }
 
     private var recommendationTaskID: String {
-        "\(store.magazineContentRevision)|\(initialLoadFinished)|\(tab)|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(store.syncFolderURL?.path ?? "local")"
+        "\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
     }
+
+    private var isBrowsingMagazine: Bool { tab == .magazine || (tab == .library && libraryScope != nil) }
 
     private var readingTaskID: String {
         "\(opened ?? "")|\(store.isForegroundActive)|\(recommendationsEnabled)|\(recommendationReset)"
@@ -222,7 +250,10 @@ struct MagazineView: View {
     @ViewBuilder private var workspace: some View {
         switch tab {
         case .magazine: magazine
-        case .library: library
+        case .library:
+            if libraryScope != nil {
+                magazine.safeAreaInset(edge: .top, spacing: 0) { libraryBreadcrumb }
+            } else { library }
         case .studio:
             BetaStudioView(store: plus, session: $draftSession) { openWindow(id: "settings") }
         }
@@ -271,7 +302,15 @@ struct MagazineView: View {
                     } else {
                         if store.activeSearchQuery.isEmpty {
                             if let lead = leadRow { card(lead, lead: true) }
-                            else { magazineLoading }
+                            else if !recommendationLoaded { magazineLoading }
+                            else {
+                                HStack {
+                                    Text("You're all caught up on recommendations.").foregroundStyle(.secondary)
+                                    Spacer()
+                                    Button("Show recommendations again") { recommendations.restoreRecommendations() }
+                                        .buttonStyle(MagazineGlassButtonStyle())
+                                }.padding(24).background(NookTheme.card, in: RoundedRectangle(cornerRadius: 18))
+                            }
                         }
                         HStack {
                             Text(store.activeSearchQuery.isEmpty ? "From your subscriptions" : "Search results")
@@ -292,7 +331,7 @@ struct MagazineView: View {
             }
             .scrollPosition($scrollPosition)
             .overlay(alignment: .bottom) {
-                if !collectionBarVisible && opened == nil {
+                if !collectionBarVisible && opened == nil && libraryScope == nil {
                     collectionTabs
                         .padding(7)
                         .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
@@ -333,7 +372,7 @@ struct MagazineView: View {
             VStack(alignment: .trailing, spacing: 10) {
                 MagazineTrendTicker(articles: store.visibleArticles,
                                     sourceID: String(store.magazineContentRevision),
-                                    active: opened == nil && tab == .magazine,
+                                    active: opened == nil && isBrowsingMagazine,
                                     openArticle: openArticle)
                 Group {
                     if store.activeSearchQuery.isEmpty {
@@ -349,8 +388,13 @@ struct MagazineView: View {
 
     private var collectionBar: some View {
         HStack(spacing: 16) {
-            collectionTabs
-            .padding(4).glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
+            if libraryScope == nil {
+                collectionTabs
+                    .padding(4).glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
+            } else {
+                Label("Stories in this collection", systemImage: "rectangle.stack")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -420,6 +464,7 @@ struct MagazineView: View {
                               systemImage: recommendation?.personalized == true ? "bookmark" : "sun.max")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(NookTheme.accent)
+                            .padding(.trailing, 210)
                             .help(recommendation?.personalized == true
                                 ? Text("Based on your reading time, starred stories, and interests. Ranked on this Mac.")
                                 : Text("Read and star stories to make future picks more personal."))
@@ -453,6 +498,12 @@ struct MagazineView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 18))
             }
             .buttonStyle(MagazineCardStyle())
+            .overlay(alignment: .topTrailing) {
+                if lead && opened == nil {
+                    recommendationAction(row.id)
+                        .padding(22)
+                }
+            }
             .magazineReveal(paused: opened != nil)
             .focused($focusedArticle, equals: row.id)
             .id(row.id)
@@ -463,7 +514,7 @@ struct MagazineView: View {
 
     private var readerControls: some View {
         HStack {
-            Button("Back to Magazine", systemImage: "arrow.left", action: closeArticle)
+            Button(libraryScope == nil ? LocalizedStringKey("Back to Magazine") : LocalizedStringKey("Back to Collection"), systemImage: "arrow.left", action: closeArticle)
                 .keyboardShortcut(.cancelAction)
             Spacer()
             Button("Previous Article", systemImage: "chevron.left") { navigate(false) }
@@ -527,7 +578,7 @@ struct MagazineView: View {
                 HStack {
                     MagazineHeadline(String(localized: "Your library"), size: 40)
                     Spacer()
-                    Button("Add Feed", systemImage: "plus") { addingFeed = true }.buttonStyle(.glassProminent)
+                    Button("Add Feed", systemImage: "plus") { addingFeed = true }.buttonStyle(MagazineGlassButtonStyle(prominent: true))
                     MagazineGlassMenu {
                         Button("Choose Sync Folder", action: chooseSyncFolder)
                         Button("Import OPML…") { importing = true }
@@ -537,7 +588,7 @@ struct MagazineView: View {
                 HStack {
                     ForEach(SmartSource.allCases) { source in
                         Button {
-                            store.selectSmartSource(source); tab = .magazine
+                            enterLibraryCollection(source.title) { store.selectSmartSource(source) }
                         } label: {
                             Label(source.title, systemImage: source.systemImage)
                         }.buttonStyle(MagazineGlassButtonStyle())
@@ -547,13 +598,13 @@ struct MagazineView: View {
                 ForEach([""] + store.feedFolders, id: \.self) { folder in
                     VStack(alignment: .leading, spacing: 12) {
                         if !folder.isEmpty {
-                            Button(folder, systemImage: "folder") { store.selectFolder(folder); tab = .magazine }
+                            Button(folder, systemImage: "folder") { enterLibraryCollection(folder) { store.selectFolder(folder) } }
                                 .buttonStyle(.plain).font(.title2)
                         }
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 18)], alignment: .leading, spacing: 18) {
                             ForEach(store.feeds(inFolder: folder)) { feed in
                                 Button {
-                                    store.selectFeed(feed.id); tab = .magazine
+                                    enterLibraryCollection(feed.displayTitle) { store.selectFeed(feed.id) }
                                 } label: {
                                     VStack(alignment: .leading, spacing: 12) {
                                         Label(feed.displayTitle, systemImage: feed.systemImage).font(.headline)
@@ -568,6 +619,66 @@ struct MagazineView: View {
                     }
                 }
             }.padding(36).frame(maxWidth: 1320).frame(maxWidth: .infinity)
+        }
+        .scrollPosition($libraryPosition)
+    }
+
+    private var libraryBreadcrumb: some View {
+        HStack(spacing: 14) {
+            Button("Back to Library", systemImage: "arrow.left") {
+                libraryScope = nil
+                pendingRecommendation = nil
+                store.searchText = ""
+            }
+            .buttonStyle(MagazineGlassButtonStyle())
+            .keyboardShortcut("[", modifiers: .command)
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+            Text(libraryScope ?? "").font(.callout.weight(.medium)).lineLimit(1)
+            Spacer()
+            Button("All subscriptions", systemImage: "newspaper") {
+                libraryScope = nil
+                pendingRecommendation = nil
+                store.searchText = ""
+                store.selectSmartSource(.all)
+                tab = .magazine
+            }.buttonStyle(MagazineGlassButtonStyle())
+        }
+        .padding(.horizontal, 36).padding(.vertical, 12)
+        .background(NookTheme.canvas)
+    }
+
+    private func enterLibraryCollection(_ title: String, select: () -> Void) {
+        store.searchText = ""
+        pendingRecommendation = nil
+        recommendation = nil
+        recommendationLoaded = false
+        select()
+        libraryScope = title
+        scrollPosition.scrollTo(edge: .top)
+    }
+
+    @ViewBuilder private func recommendationAction(_ articleID: Article.ID) -> some View {
+        if let pending = pendingRecommendation, pending.articleID == articleID {
+            Button {
+                recommendations.undoDismissal(pending)
+                pendingRecommendation = nil
+            } label: {
+                HStack(spacing: 8) {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text("\(max(0, Int(ceil(pending.deadline.timeIntervalSince(context.date)))))")
+                            .monospacedDigit().foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .buttonStyle(MagazineGlassButtonStyle(prominent: true))
+            .help("Undo this recommendation change")
+        } else {
+            Button("Show another story", systemImage: "arrow.trianglehead.2.clockwise.rotate.90") {
+                pendingRecommendation = recommendations.dismissRecommendation(articleID)
+            }
+            .buttonStyle(MagazineGlassButtonStyle())
+            .help("A new recommendation in 3 seconds. You can undo until then.")
         }
     }
 

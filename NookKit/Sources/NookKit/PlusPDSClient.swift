@@ -222,11 +222,24 @@ public struct PlusPDSClient: Sendable {
             // key order is also reverse-chronological.
             .init(name: "reverse", value: "false"),
         ]
-        guard let url = components.url else { throw PlusPDSError.badRequest }
-
-        let (data, response) = try await reach { try await session.data(from: url) }
-        try check(response, data)
-        return try JSONDecoder().decode(ATRecordPage<Value>.self, from: data).records
+        let query = components.queryItems ?? []
+        var records: [ATRecord<Value>] = []
+        var cursor: String?
+        var visited = Set<String>()
+        repeat {
+            try Task.checkCancellation()
+            components.queryItems = query + (cursor.map { [URLQueryItem(name: "cursor", value: $0)] } ?? [])
+            guard let url = components.url else { throw PlusPDSError.badRequest }
+            let (data, response) = try await reach { try await session.data(from: url) }
+            try check(response, data)
+            let page = try JSONDecoder().decode(ATRecordPage<Value>.self, from: data)
+            records.append(contentsOf: page.records)
+            cursor = page.cursor.flatMap { $0.isEmpty ? nil : $0 }
+            // A partial list must never reach Studio or the local post mirror.
+            // Reject a broken pagination loop instead of returning truncated data.
+            if let cursor, !visited.insert(cursor).inserted { throw PlusPDSError.badRequest }
+        } while cursor != nil
+        return records
     }
 
     private func post<Response: Decodable>(

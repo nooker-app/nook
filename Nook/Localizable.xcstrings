@@ -1,6 +1,292 @@
 {
   "sourceLanguage": "en",
   "strings": {
+  "Back to Library": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "라이브러리로 돌아가기"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "ライブラリに戻る"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "返回资料库"
+        }
+      }
+    }
+  },
+  "Back to Collection": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "목록으로 돌아가기"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "コレクションに戻る"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "返回列表"
+        }
+      }
+    }
+  },
+  "All subscriptions": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "전체 구독 보기"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "すべての購読"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "全部订阅"
+        }
+      }
+    }
+  },
+  "Stories in this collection": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "선택한 목록의 글"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "このコレクションの記事"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此列表中的文章"
+        }
+      }
+    }
+  },
+  "You're all caught up on recommendations.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "지금 추천할 글을 모두 살펴봤어요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "おすすめの記事をすべて確認しました。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已看完当前推荐。"
+        }
+      }
+    }
+  },
+  "Show recommendations again": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "추천 다시 보기"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "おすすめを再表示"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "重新显示推荐"
+        }
+      }
+    }
+  },
+  "Undo this recommendation change": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "다른 글 추천 취소"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "おすすめの変更を取り消す"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "撤销推荐更换"
+        }
+      }
+    }
+  },
+  "Show another story": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "다른 글 보기"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "別の記事を見る"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "换一篇"
+        }
+      }
+    }
+  },
+  "A new recommendation in 3 seconds. You can undo until then.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "3초 후 다른 글로 바뀝니다. 그 전에 취소할 수 있어요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "3秒後に別の記事に切り替わります。それまでは取り消せます。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "3 秒后更换推荐，在此之前可以撤销。"
+        }
+      }
+    }
+  },
+  "Bring a publication into your library.": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "좋아하는 매체의 소식을 한곳에 모아보세요."
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "お気に入りのメディアをライブラリに。"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "将喜爱的刊物加入资料库。"
+        }
+      }
+    }
+  },
+  "Website or feed address": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "웹사이트 또는 피드 주소"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "ウェブサイトまたはフィードのアドレス"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "网站或订阅源地址"
+        }
+      }
+    }
+  },
+  "Save to": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "저장 위치"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "保存先"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "保存到"
+        }
+      }
+    }
+  },
+  "Undo": {
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "취소"
+        }
+      },
+      "ja": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "取り消す"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "撤销"
+        }
+      }
+    }
+  },
   "Font changes also apply to the article reader.": {
     "localizations": {
       "ko": {

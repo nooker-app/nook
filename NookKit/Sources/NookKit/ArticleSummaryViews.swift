@@ -137,15 +137,18 @@ public struct ArticleSummaryCard: View {
 public struct ArticleSummaryActionButton: View {
     public let isLoading: Bool
     public let issue: ArticleSummaryIssue?
+    public let usesGlassStyle: Bool
     public let action: () -> Void
 
     public init(
         isLoading: Bool,
         issue: ArticleSummaryIssue? = nil,
+        usesGlassStyle: Bool = false,
         action: @escaping () -> Void
     ) {
         self.isLoading = isLoading
         self.issue = issue
+        self.usesGlassStyle = usesGlassStyle
         self.action = action
     }
 
@@ -164,7 +167,27 @@ public struct ArticleSummaryActionButton: View {
                 .foregroundStyle(.secondary)
             }
 
-            Button(action: action) {
+            styledButton
+                .disabled(isLoading)
+                .accessibilityLabel(buttonTitle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private var styledButton: some View {
+        #if os(macOS)
+        if usesGlassStyle {
+            summaryButton.buttonStyle(MagazineGlassButtonStyle(prominent: true))
+        } else {
+            summaryButton.buttonStyle(.borderedProminent)
+        }
+        #else
+        summaryButton.buttonStyle(.borderedProminent)
+        #endif
+    }
+
+    private var summaryButton: some View {
+        Button(action: action) {
                 HStack(spacing: 8) {
                     if isLoading {
                         ProgressView()
@@ -175,11 +198,6 @@ public struct ArticleSummaryActionButton: View {
                     buttonTitle
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(isLoading)
-            .accessibilityLabel(buttonTitle)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var buttonTitle: Text {

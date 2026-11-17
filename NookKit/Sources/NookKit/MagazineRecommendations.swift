@@ -3,7 +3,7 @@ import Foundation
 import NaturalLanguage
 import Observation
 
-/// Device-local positive feedback. Read flags deliberately are NOT feedback:
+/// Device-local reading feedback. Read flags deliberately are NOT feedback:
 /// importing a library or marking a feed read says nothing about interest.
 struct MagazineReadingHistory: Codable, Sendable {
     struct Entry: Codable, Sendable {
@@ -11,6 +11,20 @@ struct MagazineReadingHistory: Codable, Sendable {
         var lastRead: Date
     }
     var entries: [Article.ID: Entry] = [:]
+    // Optional so profiles written before explicit feedback still decode.
+    var dismissals: [Article.ID: Date]?
+
+    func isDismissed(_ id: Article.ID, now: Date) -> Bool {
+        dismissals?[id].map { now.timeIntervalSince($0) < 30 * 86400 } ?? false
+    }
+
+    mutating func dismiss(_ id: Article.ID, now: Date) {
+        var recent = (dismissals ?? [:]).filter { now.timeIntervalSince($0.value) < 30 * 86400 }
+        recent[id] = now
+        dismissals = Dictionary(uniqueKeysWithValues: recent.sorted {
+            $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value
+        }.prefix(500).map { ($0.key, $0.value) })
+    }
 
     mutating func record(_ id: Article.ID, seconds: Double, now: Date) {
         guard seconds.isFinite, seconds > 0 else { return }
@@ -59,8 +73,9 @@ actor MagazineRecommendationRanker {
               now: Date, useSemantics: Bool = true) -> MagazineRecommendation? {
         // Membership comes from ReaderStore's complete filtered result, not its
         // first rendering window. Prefer unread articles within that scope.
-        let unread = candidates.filter { !$0.isRead }
-        let pool = Array((unread.isEmpty ? candidates : unread).sorted(by: newer).prefix(600))
+        let eligible = candidates.filter { !history.isDismissed($0.id, now: now) }
+        let unread = eligible.filter { !$0.isRead }
+        let pool = Array((unread.isEmpty ? eligible : unread).sorted(by: newer).prefix(600))
         guard !pool.isEmpty, !Task.isCancelled else { return nil }
         let evidence = library.compactMap { article -> (Article, Double)? in
             let weight = history.weight(for: article, now: now)
@@ -214,6 +229,43 @@ public final class MagazineRecommendationController {
 
     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
+    public struct Dismissal: Identifiable, Equatable {
+        public let id = UUID()
+        public let articleID: Article.ID
+        public let deadline: Date
+        fileprivate let scope: String
+        fileprivate let timestamp: Date
+        fileprivate let previous: Date?
+    }
+
+    /// "Another story" is feedback about this pick, not dislike of its author
+    /// or topic. Apply it immediately, without changing read/starred/library data.
+    public func dismissRecommendation(_ articleID: Article.ID, now: Date = .now) -> Dismissal {
+        let undo = Dismissal(articleID: articleID, deadline: now.addingTimeInterval(3),
+                            scope: scope, timestamp: now, previous: history.dismissals?[articleID])
+        history.dismiss(articleID, now: now)
+        saveFeedback()
+        return undo
+    }
+
+    @discardableResult public func undoDismissal(_ dismissal: Dismissal) -> Bool {
+        guard dismissal.scope == scope,
+              history.dismissals?[dismissal.articleID] == dismissal.timestamp else { return false }
+        history.dismissals?[dismissal.articleID] = dismissal.previous
+        saveFeedback()
+        return true
+    }
+
+    public func restoreRecommendations() {
+        history.dismissals = nil
+        saveFeedback()
+    }
+
+    private func saveFeedback() {
+        if !scope.isEmpty, let data = try? JSONEncoder().encode(history) { defaults.set(data, forKey: storageKey) }
+        revision &+= 1
+    }
+
     public func selectLibrary(_ identifier: String) {
         let key = SHA256.hash(data: Data(identifier.utf8)).map { String(format: "%02x", $0) }.joined()
         guard key != scope else { return }
@@ -245,6 +297,6 @@ public final class MagazineRecommendationController {
 
     public func recommend(candidates: [Article], library: [Article], personalized: Bool) async -> MagazineRecommendation? {
         await ranker.rank(candidates: candidates, library: personalized ? library : [],
-                          history: personalized ? history : MagazineReadingHistory(), now: .now)
+                          history: history, now: .now)
     }
 }

@@ -22,6 +22,7 @@ struct PlusStoreCredentialTests {
     /// Records the Authorization header of every request, and answers each one.
     final class Recorder: URLProtocol, @unchecked Sendable {
         nonisolated(unsafe) static var authorizations: [String?] = []
+        nonisolated(unsafe) static var records: [String: String]?
 
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -29,12 +30,15 @@ struct PlusStoreCredentialTests {
 
         override func startLoading() {
             Recorder.authorizations.append(request.value(forHTTPHeaderField: "Authorization"))
+            let collection = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "collection" }?.value ?? ""
             // The body does not matter: the header is what is under test, and it has
             // already been recorded by the time the response is written.
             let response = HTTPURLResponse(
-                url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+                url: request.url!, statusCode: Recorder.records == nil ? 500 : 200,
+                httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data("{}".utf8))
+            client?.urlProtocol(self, didLoad: Data((Recorder.records?[collection] ?? "{}").utf8))
             client?.urlProtocolDidFinishLoading(self)
         }
     }
@@ -69,6 +73,7 @@ struct PlusStoreCredentialTests {
 
     private func makeStore(_ vault: Vault) -> PlusStore {
         Recorder.authorizations = []
+        Recorder.records = nil
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [Recorder.self]
         return PlusStore(
@@ -91,6 +96,30 @@ struct PlusStoreCredentialTests {
     private func edit(_ store: PlusStore) async {
         await store.update(
             article(), title: "Title", slug: "a-post", markdown: "Body.", summary: "")
+    }
+
+    @Test("Studio discovers sign-in after construction and reloads published writing on revisit")
+    func writingShelfRefresh() async {
+        let vault = Vault(nil)
+        let store = makeStore(vault)
+        vault.session = Self.session(access: 4_000_000_000)
+        let publication = #"{"records":[{"uri":"at://did:plc:me/app.nooker.publication/p","cid":"bafy1","value":{"$type":"app.nooker.publication","name":"Writer","slug":"writer","language":"ko","createdAt":"2026-07-01T00:00:00Z"}}]}"#
+        let post = #"{"records":[{"uri":"at://did:plc:me/app.nooker.article/post","cid":"bafy2","value":{"$type":"app.nooker.article","publication":"at://did:plc:me/app.nooker.publication/p","title":"My published story","content":"Body","slug":"story","publishedAt":"2026-07-30T12:00:00Z"}}]}"#
+        Recorder.records = ["app.nooker.publication": publication, "app.nooker.article": post]
+        await store.refreshWritingShelf()
+        #expect(store.isSignedIn)
+        #expect(store.articles.first?.value.title == "My published story")
+        Recorder.records?["app.nooker.article"] = post.replacingOccurrences(of: "My published story", with: "Updated elsewhere")
+        await store.refreshWritingShelf()
+        #expect(store.articles.first?.value.title == "Updated elsewhere")
+        Recorder.records = nil
+        await store.refreshWritingShelf()
+        #expect(store.failure != nil)
+        #expect(store.articles.first?.value.title == "Updated elsewhere")
+        vault.session = nil
+        await store.refreshWritingShelf()
+        #expect(!store.isSignedIn)
+        #expect(store.articles.isEmpty)
     }
 
     /// The bug, as a test. A store built while signed out has to send the credential

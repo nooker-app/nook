@@ -13,7 +13,9 @@ struct MagazineAddFeedSheet: View {
     @State private var newFolderName = ""
     @State private var isSubmitting = false
     @State private var submissionError: String?
-    @FocusState private var isFocused: Bool
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case address, folder }
 
     private enum FolderChoice: Hashable {
         case topLevel
@@ -47,100 +49,107 @@ struct MagazineAddFeedSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Add Feed")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Text("Paste an RSS or Atom feed URL, or a website address. Nook will check it before closing.")
-                    .foregroundStyle(.secondary)
-            }
-
-            TextField("https://example.com/feed.xml", text: $feedURL)
-                .textFieldStyle(.roundedBorder)
-                .focused($isFocused)
-                .disabled(isSubmitting)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Folder")
-                    .font(.callout.weight(.semibold))
-                Picker("Folder", selection: $folderChoice) {
-                    Text("Top Level").tag(FolderChoice.topLevel)
-                    ForEach(folders, id: \.self) { folder in
-                        Text(folder).tag(FolderChoice.existing(folder))
-                    }
-                    Text("New Folder…").tag(FolderChoice.newFolder)
+        VStack(alignment: .leading, spacing: 26) {
+            HStack(alignment: .top, spacing: 18) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 23)).foregroundStyle(NookTheme.accent)
+                    .frame(width: 56, height: 56)
+                    .glassEffect(.regular.tint(NookTheme.accent.opacity(0.08)), in: RoundedRectangle(cornerRadius: 18))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Add Feed").font(.system(size: 26, weight: .semibold))
+                    Text("Bring a publication into your library.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Website or feed address").font(.callout.weight(.semibold))
+                HStack(spacing: 12) {
+                    Image(systemName: "link").foregroundStyle(NookTheme.accent)
+                    TextField("https://example.com", text: $feedURL)
+                        .focused($focusedField, equals: .address)
+                        .accessibilityLabel("Website or feed address")
+                        .onSubmit(addFeed)
+                }
+                .magazineInput(focused: focusedField == .address)
+                Text("Paste an RSS or Atom feed URL, or a website address. Nook will check it before closing.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .disabled(isSubmitting)
 
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Save to").font(.callout.weight(.semibold))
+                    Spacer()
+                    MagazineGlassMenu {
+                        Picker("Folder", selection: $folderChoice) {
+                            Text("Top Level").tag(FolderChoice.topLevel)
+                            ForEach(folders, id: \.self) { folder in
+                                Text(folder).tag(FolderChoice.existing(folder))
+                            }
+                            Text("New Folder…").tag(FolderChoice.newFolder)
+                        }
+                    } label: {
+                        Label(folderLabel, systemImage: "folder")
+                    }
+                }
                 if folderChoice == .newFolder {
                     TextField("Folder Name", text: $newFolderName)
-                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .folder)
+                        .magazineInput(focused: focusedField == .folder)
+                        .onSubmit(addFeed)
                 }
             }
+            .disabled(isSubmitting)
 
             Group {
-                if isSubmitting {
-                    Label {
-                        Text("Checking RSS/Atom feed…")
-                    } icon: {
-                        ProgressView()
-                    }
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
-                } else if let submissionError {
-                    Label {
-                        Text(submissionError)
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                    }
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.red)
+                if let submissionError {
+                    Label(submissionError, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red).textSelection(.enabled)
                 } else {
-                    Text("Nook will only close after it finds a valid feed.")
+                    Label(isSubmitting ? "Checking RSS/Atom feed…" : "Nook will only close after it finds a valid feed.",
+                          systemImage: isSubmitting ? "antenna.radiowaves.left.and.right" : "checkmark.shield")
                         .foregroundStyle(.secondary)
                 }
             }
-            .font(.callout)
-            .frame(minHeight: 22, alignment: .leading)
+            .font(.callout).fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
 
             HStack {
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .buttonStyle(MagazineGlassButtonStyle())
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isSubmitting)
                 Spacer()
-
-                Button("Cancel", role: .cancel) {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button {
-                    addFeed()
-                } label: {
-                    if isSubmitting {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Checking…")
-                        }
-                    } else {
-                        Text("Add")
+                Button(action: addFeed) {
+                    HStack(spacing: 8) {
+                        if isSubmitting { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "plus") }
+                        Text(isSubmitting ? "Checking…" : "Add Feed")
                     }
                 }
+                .buttonStyle(MagazineGlassButtonStyle(prominent: true))
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canSubmit)
             }
         }
-        .padding(24)
-        .frame(width: 440)
-        .task { isFocused = true }
-        .onChange(of: feedURL) { _, _ in
-            if submissionError != nil { submissionError = nil }
+        .padding(32).frame(width: 560)
+        .background(NookTheme.canvas)
+        .tint(NookTheme.accent)
+        .interactiveDismissDisabled(isSubmitting)
+        .task { focusedField = .address }
+        .onChange(of: feedURL) { _, _ in submissionError = nil }
+        .onChange(of: folderChoice) { _, choice in
+            submissionError = nil
+            if choice == .newFolder { focusedField = .folder }
         }
-        .onChange(of: folderChoice) { _, _ in
-            if submissionError != nil { submissionError = nil }
-        }
-        .onChange(of: newFolderName) { _, _ in
-            if submissionError != nil { submissionError = nil }
+        .onChange(of: newFolderName) { _, _ in submissionError = nil }
+    }
+
+    private var folderLabel: String {
+        switch folderChoice {
+        case .topLevel: String(localized: "Top Level")
+        case .existing(let folder): folder
+        case .newFolder: String(localized: "New Folder…")
         }
     }
 

@@ -22,6 +22,8 @@ struct PlusPDSRequestTests {
         nonisolated(unsafe) static var seen: (url: URL?, headers: [String: String], body: Data?)?
         nonisolated(unsafe) static var responseJSON = "{}"
         nonisolated(unsafe) static var status = 200
+        nonisolated(unsafe) static var pages: [String: (json: String, status: Int)]?
+        nonisolated(unsafe) static var requestedCursors: [String] = []
 
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -44,11 +46,16 @@ struct PlusPDSRequestTests {
             }
             Self.seen = (request.url, request.allHTTPHeaderFields ?? [:], body)
 
+            let cursor = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "cursor" }?.value ?? ""
+            Self.requestedCursors.append(cursor)
+            let page = Self.pages?[cursor]
+
             let response = HTTPURLResponse(
-                url: request.url!, statusCode: Self.status,
+                url: request.url!, statusCode: page?.status ?? Self.status,
                 httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(Self.responseJSON.utf8))
+            client?.urlProtocol(self, didLoad: Data((page?.json ?? Self.responseJSON).utf8))
             client?.urlProtocolDidFinishLoading(self)
         }
 
@@ -58,6 +65,8 @@ struct PlusPDSRequestTests {
     private func client() -> PlusPDSClient {
         Recorder.seen = nil
         Recorder.status = 200
+        Recorder.pages = nil
+        Recorder.requestedCursors = []
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [Recorder.self]
         return PlusPDSClient(
@@ -70,6 +79,32 @@ struct PlusPDSRequestTests {
         PlusSession(
             did: "did:plc:example", handle: "tim.example.com",
             accessJWT: "access-token", refreshJWT: "refresh-token")
+    }
+
+    @Test("Studio receives every page, while failed or looping pages never return a partial library")
+    func completeWritingLibrary() async throws {
+        let client = client()
+        func page(_ range: Range<Int>, cursor: String? = nil) throws -> String {
+            let records = range.map { index in
+                ["uri": "at://did:plc:example/app.nooker.article/\(index)", "cid": "bafy\(index)",
+                 "value": ["$type": "app.nooker.article", "publication": "at://did:plc:example/app.nooker.publication/p",
+                           "title": "Story \(index)", "content": "Body", "slug": "story-\(index)",
+                           "publishedAt": "2026-07-30T12:00:00Z"]] as [String: Any]
+            }
+            var body: [String: Any] = ["records": records]
+            body["cursor"] = cursor
+            return String(decoding: try JSONSerialization.data(withJSONObject: body), as: UTF8.self)
+        }
+        Recorder.pages = ["": (try page(0..<100, cursor: "older"), 200),
+                          "older": (try page(100..<101), 200)]
+        let articles = try await client.articles(did: "did:plc:example")
+        #expect(articles.count == 101)
+        #expect(articles.last?.value.title == "Story 100")
+        #expect(Recorder.requestedCursors == ["", "older"])
+        Recorder.pages?["older"] = ("{}", 500)
+        await #expect(throws: (any Error).self) { try await client.articles(did: "did:plc:example") }
+        Recorder.pages?["older"] = (try page(100..<101, cursor: "older"), 200)
+        await #expect(throws: (any Error).self) { try await client.articles(did: "did:plc:example") }
     }
 
     /// The bug, pinned. `refreshSession` takes no input, and a body makes the host

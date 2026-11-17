@@ -236,7 +236,8 @@ struct MagazineReaderDetail: View {
                         } else {
                             ArticleSummaryActionButton(
                                 isLoading: summaryController?.isLoading ?? false,
-                                issue: summaryController?.issue
+                                issue: summaryController?.issue,
+                                usesGlassStyle: true
                             ) {
                                 requestSummary(for: article)
                             }
