@@ -89,7 +89,8 @@ private struct MagazineMenuButtonStyle: ButtonStyle {
             .font(.system(size: 13, weight: .medium))
             .labelStyle(.titleAndIcon)
             .foregroundStyle(.primary)
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            // Match the native large Glass button's 28pt control height.
+            .padding(.horizontal, 12).frame(height: 28)
             .glassEffect(.regular.tint(NookTheme.accent.opacity(0.025)).interactive(), in: Capsule())
             .contentShape(Capsule())
             .pointerStyle(enabled ? .link : .default)
