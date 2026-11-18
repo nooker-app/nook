@@ -783,6 +783,8 @@ struct MagazineArticleHeading: View {
     var expanded = false
     var lead = false
     var matched = true
+    var translatedTitle: String?
+    var titleTranslating = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -799,7 +801,9 @@ struct MagazineArticleHeading: View {
             }
             Group {
                 if expanded {
-                    MagazineHeadline(article.title, size: 36)
+                    ReaderTranslatedTitle(original: article.title, translated: translatedTitle,
+                                          translating: titleTranslating, size: 36)
+                        .id(article.id)
                 } else {
                     MagazineTranslatedHeadline(id: article.id, title: article.title, size: lead ? 30 : 23)
                         .id("\(article.id)|\(article.title)")

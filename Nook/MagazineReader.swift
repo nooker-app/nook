@@ -44,9 +44,8 @@ struct MagazineReaderDetail: View {
         )
     }
 
-    // Translation (Apple Intelligence). Rich (contentHTML) articles stream an
-    // in-place translation preserving markup; plain-body articles fall back to a
-    // whole-body translation.
+    // Native translation preserves markup while streaming in place, including
+    // plain RSS bodies wrapped as native paragraphs.
     //
     // The reader is updated in place across articles (see `readerPushID`), so this
     // state outlives the article. The session keeps it tagged with its article and
@@ -105,7 +104,7 @@ struct MagazineReaderDetail: View {
         if store.usesReaderContentByDefault, case .ready(let extracted) = store.readerContentState(for: article) {
             return extracted
         }
-        return article.contentHTML
+        return article.contentHTML ?? NativeArticleTranslator.plainBodyHTML(article.bodyParagraphs)
     }
 
     private func translationActive(_ article: Article) -> Bool {
@@ -115,17 +114,16 @@ struct MagazineReaderDetail: View {
         return session.plainTranslation(for: article.id) != nil
     }
 
-    private func displayTitle(_ article: Article) -> String {
+    private func displayTitle(_ article: Article) -> String? {
         if renderedReaderHTML(for: article) != nil {
-            guard let translator = session.translator(for: article.id), translator.isActive else { return article.title }
-            return translator.translatedTitle ?? article.title
+            guard let translator = session.translator(for: article.id), translator.isActive else { return nil }
+            return translator.translatedTitle
         }
-        return session.plainTranslation(for: article.id)?.title ?? article.title
+        return session.plainTranslation(for: article.id)?.title
     }
 
-    /// Toggles translation: rich articles stream in place; plain-body articles
-    /// translate the whole body once. A length guard keeps an "answered"
-    /// imperative title from replacing the real one.
+    /// Toggles translation, including cancellation while characters are arriving.
+    /// Plain RSS bodies use the same native streaming path as extracted HTML.
     private func toggleTranslation(_ article: Article) {
         session.begin(articleID: article.id)
         if let html = renderedReaderHTML(for: article) {
@@ -327,7 +325,7 @@ struct MagazineReaderDetail: View {
             Text("It's removed from your list on all your devices. This can't be undone.")
         }
         .overlay(alignment: .top) {
-            if session.isTranslating(for: article.id) {
+            if renderedReaderHTML(for: article) == nil, session.isTranslating(for: article.id) {
                 MagazineTranslationBanner()
             }
         }
@@ -568,7 +566,7 @@ struct MagazineReaderDetail: View {
     /// paragraphs) — the pre-experiment reading surface.
     @ViewBuilder
     private func originalArticleBody(_ article: Article) -> some View {
-        if let html = article.contentHTML {
+        if let html = article.contentHTML ?? NativeArticleTranslator.plainBodyHTML(article.bodyParagraphs) {
             HTMLContentView(html: html, baseURL: article.url, translator: session.translator(for: article.id), typography: readerTypography)
                 .id(article.id)
         } else if let translation = session.plainTranslation(for: article.id) {
@@ -718,7 +716,7 @@ struct MagazineReaderDetail: View {
                         systemImage: translationActive(article) ? "character.bubble.fill" : "character.bubble"
                     )
                 }
-                .disabled(session.isTranslating(for: article.id))
+                .disabled(session.isTranslating(for: article.id) && !translationActive(article))
             }
             Button(
                 (store.feed(for: article.feedID)?.preferredViewMode ?? defaultBrowserMode) == .reader
@@ -769,7 +767,10 @@ struct MagazineReaderDetail: View {
 
     private func articleHeader(_ article: Article) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            MagazineArticleHeading(article: article, feedTitle: store.feed(for: article.feedID)?.displayTitle ?? "", namespace: heroNamespace, expanded: true)
+            MagazineArticleHeading(article: article, feedTitle: store.feed(for: article.feedID)?.displayTitle ?? "",
+                                   namespace: heroNamespace, expanded: true,
+                                   translatedTitle: translationActive(article) ? displayTitle(article) : nil,
+                                   titleTranslating: session.translator(for: article.id)?.isTitleTranslating ?? false)
             if translationActive(article) {
                 Group {
                     if TranslationSettings.readerProvider() == .gemini {

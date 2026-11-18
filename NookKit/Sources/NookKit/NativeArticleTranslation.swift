@@ -371,6 +371,7 @@ public final class NativeArticleTranslator {
     public private(set) var isActive = false
     public private(set) var isTranslating = false
     public private(set) var translatedTitle: String?
+    public private(set) var isTitleTranslating = false
     /// The validated Markdown currently displayed by the native reader. Exposed
     /// so Copy/Save as Markdown follows what the user is actually reading.
     public private(set) var translatedMarkdown: String?
@@ -379,11 +380,8 @@ public final class NativeArticleTranslator {
     /// Final Gemini Markdown parsed directly into native reader blocks. Until this
     /// is ready, `overrides` keeps the original-in-place typing presentation.
     private var markdownBlocks: [HTMLContentBlock]?
-    /// Markerless Gemini streaming state. Stable blocks never regress when the
-    /// router starts a Flash retry from the beginning of the document.
-    private var markerlessStableBlocks: [HTMLContentBlock] = []
-    private var markerlessLatestBlocks: [HTMLContentBlock] = []
-    private var markerlessSourceBlocks: [HTMLContentBlock] = []
+    private var textPlayback: TranslationTextPlayback?
+    private var documentPlayback: MarkdownTranslationPlayback?
     private var task: Task<Void, Never>?
     private var generation = 0
     /// The article's detected subject/field, passed to block translation so it
@@ -429,6 +427,7 @@ public final class NativeArticleTranslator {
         stop()
         isActive = true
         isTranslating = true
+        isTitleTranslating = true
         generation += 1
         run = generation
         let token = generation
@@ -574,11 +573,13 @@ public final class NativeArticleTranslator {
         // of every comment row under it, on the frame that presents the article.
         if isActive { isActive = false }
         if isTranslating { isTranslating = false }
+        if isTitleTranslating { isTitleTranslating = false }
+        textPlayback?.cancel()
+        textPlayback = nil
+        documentPlayback?.cancel()
+        documentPlayback = nil
         if !overrides.isEmpty { overrides = [:] }
         if markdownBlocks != nil { markdownBlocks = nil }
-        if !markerlessStableBlocks.isEmpty { markerlessStableBlocks = [] }
-        if !markerlessLatestBlocks.isEmpty { markerlessLatestBlocks = [] }
-        if !markerlessSourceBlocks.isEmpty { markerlessSourceBlocks = [] }
         if translatedTitle != nil { translatedTitle = nil }
         if translatedMarkdown != nil { translatedMarkdown = nil }
         conceptDomain = ""
@@ -598,14 +599,22 @@ public final class NativeArticleTranslator {
         language: String,
         token: Int
     ) async {
-        markerlessSourceBlocks = MarkdownNativeParser.blocks(
-            from: ArticleMarkdown.render(
-                template.originalBlocks,
-                baseURL: template.baseURL
-            ),
-            baseURL: template.baseURL,
-            protectedBlocks: [:]
+        let originals = MarkdownNativeParser.blocks(
+            from: ArticleMarkdown.render(template.originalBlocks, baseURL: template.baseURL),
+            baseURL: template.baseURL, protectedBlocks: [:]
         ) ?? template.originalBlocks
+        let playback = MarkdownTranslationPlayback(originals: originals, baseURL: template.baseURL,
+            isCurrent: { [weak self] in self?.generation == token && self?.isActive == true },
+            emitTitle: { [weak self] text, complete in
+                guard let self, generation == token else { return }
+                translatedTitle = text.isEmpty ? nil : text
+                isTitleTranslating = !complete
+            },
+            emitDocument: { [weak self] blocks in
+                guard let self, generation == token else { return }
+                markdownBlocks = blocks
+            })
+        documentPlayback = playback
 
         do {
             let result = try await GeminiMarkdownArticleTranslator.translate(
@@ -617,22 +626,23 @@ public final class NativeArticleTranslator {
                 },
                 onDocumentPartial: { [weak self] title, bodyMarkdown, blocks in
                     guard let self, token == generation else { return }
-                    updateMarkerlessPartial(
-                        title: title,
-                        bodyMarkdown: bodyMarkdown,
-                        blocks: blocks,
-                        baseURL: template.baseURL
-                    )
+                    playback.receive(title: title, blocks: blocks)
                 }
             )
             guard token == generation, isActive else { return }
+            // Cache hits already have a validated full document. Live requests
+            // drain their presentation before installing that same final result.
+            if !result.cacheHit {
+                await playback.finish(title: result.title, blocks: result.blocks)
+            }
+            guard token == generation, isActive else { return }
+            playback.cancel()
+            documentPlayback = nil
             translatedTitle = result.title
+            isTitleTranslating = false
             translatedMarkdown = result.markdown
             markdownBlocks = result.blocks
             overrides = [:]
-            markerlessStableBlocks = []
-            markerlessLatestBlocks = []
-            markerlessSourceBlocks = []
             isTranslating = false
         } catch is CancellationError {
             return
@@ -641,73 +651,13 @@ public final class NativeArticleTranslator {
             // Freeze the trustworthy visible prefix without a caret, then leave
             // the untouched suffix in its source language. Never discard content
             // that the reader has already shown as translated.
-            finalizeMarkerlessPartialAfterFailure()
+            await playback.finishPartial()
+            guard token == generation, isActive else { return }
+            playback.cancel()
+            documentPlayback = nil
+            isTitleTranslating = false
             isTranslating = false
         }
-    }
-
-    private func updateMarkerlessPartial(
-        title: String,
-        bodyMarkdown: String,
-        blocks parsed: [HTMLContentBlock],
-        baseURL: URL?
-    ) {
-        let cleanedTitle = MarkdownTranslationStream.plainProjection(title)
-        if !cleanedTitle.isEmpty { translatedTitle = cleanedTitle }
-
-        guard !bodyMarkdown.isEmpty, !parsed.isEmpty else { return }
-
-        markerlessLatestBlocks = parsed
-        let stableCount = max(0, parsed.count - 1)
-        if stableCount > markerlessStableBlocks.count {
-            markerlessStableBlocks.append(
-                contentsOf: parsed[markerlessStableBlocks.count..<stableCount]
-            )
-        }
-
-        let activeIndex = parsed.count - 1
-        var display = markerlessStableBlocks
-        if activeIndex == markerlessStableBlocks.count,
-           let active = parsed.last {
-            let activeMarkdown = ArticleMarkdown.render([active], baseURL: baseURL)
-            let original = markerlessSourceBlocks.indices.contains(activeIndex)
-                ? blockPlainText(markerlessSourceBlocks[activeIndex])
-                : ""
-            let headingLevel: Int?
-            if case .heading(let level, _) = active {
-                headingLevel = level
-            } else {
-                headingLevel = nil
-            }
-            display.append(
-                .mixedText(
-                    parts: [
-                        .streamingMarkdown(
-                            original: original,
-                            markdown: activeMarkdown
-                        ),
-                    ],
-                    headingLevel: headingLevel
-                )
-            )
-            display.append(
-                contentsOf: markerlessSourceBlocks.dropFirst(activeIndex + 1)
-            )
-        } else {
-            display.append(
-                contentsOf: markerlessSourceBlocks.dropFirst(display.count)
-            )
-        }
-        markdownBlocks = display
-    }
-
-    private func finalizeMarkerlessPartialAfterFailure() {
-        var display = markerlessStableBlocks
-        if markerlessLatestBlocks.count > display.count {
-            display.append(markerlessLatestBlocks[display.count])
-        }
-        display.append(contentsOf: markerlessSourceBlocks.dropFirst(display.count))
-        if !display.isEmpty { markdownBlocks = display }
     }
 
     private func run(title: String, blocks: [HTMLContentBlock], language: String, token: Int) async {
@@ -754,17 +704,28 @@ public final class NativeArticleTranslator {
             )
         }
 
-        // Title: a plain, bounded translation. Using the simple translator (not
-        // the block/marker one) keeps a short title from ever ballooning into a
-        // paragraph, and a length guard drops any runaway result.
+        // Plain title streaming retains the same length/runaway guard as the
+        // old one-shot path, while the presentation smooths provider snapshots.
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedTitle.isEmpty, let translated = try? await NaturalTranslator.translate(trimmedTitle, into: language, provider: provider) {
-            guard token == generation else { return }
-            let cleaned = translated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !cleaned.isEmpty, cleaned.count <= max(120, trimmedTitle.count * 4) {
-                translatedTitle = cleaned
+        if !trimmedTitle.isEmpty {
+            let playback = makeTextPlayback(token: token) { [weak self] text, complete in
+                self?.translatedTitle = text.isEmpty ? nil : text
+                self?.isTitleTranslating = !complete
             }
+            do {
+                let translated = try await NaturalTranslator.streamTitle(trimmedTitle, into: language, provider: provider) { partial in
+                    playback.receive(partial)
+                }
+                await playback.finish(translated)
+            } catch {
+                playback.cancel()
+                guard token == generation else { return }
+                translatedTitle = nil
+            }
+            guard token == generation else { return }
+            textPlayback = nil
         }
+        isTitleTranslating = false
 
         for (index, block) in blocks.enumerated() {
             guard token == generation, !Task.isCancelled else { return }
@@ -954,7 +915,7 @@ public final class NativeArticleTranslator {
     /// Streams a `.text`/`.heading` fragment segment-by-segment, emitting each
     /// intermediate `.mixedText` via `emit` — so a top-level block (writing its own
     /// override) and a nested one inside a quote/list (rebuilding its parent) get
-    /// the identical typing/caret/overlay effect — and returns the settled block.
+    /// the identical streaming ripple effect — and returns the settled block.
     /// `headingLevel` (non-nil for a heading) is carried on the streamed
     /// `.mixedText` so it renders at the heading's size/weight while typing, not as
     /// body text.
@@ -977,13 +938,16 @@ public final class NativeArticleTranslator {
             // (its plain original dimmed underneath, the translation typing over it).
             let originalPlain = plainText(html)
             var settledHTML = html
+            let playback = makeTextPlayback(token: token) { partial, complete in
+                emit(.mixedText(parts: [.streaming(original: originalPlain, text: partial, complete: complete)], headingLevel: headingLevel))
+            }
             let streamed = await translateFragmentStreaming(
                 html, language: language, context: context, token: token
-            ) { partial in
-                guard token == self.generation else { return }
-                emit(.mixedText(parts: [.streaming(original: originalPlain, text: partial)], headingLevel: headingLevel))
-            }
+            ) { partial in playback.receive(partial) }
             if let streamed { settledHTML = streamed.0 }
+            await playback.finish(plainText(settledHTML))
+            guard token == generation else { return (blockForHTML(html, headingLevel: headingLevel), context) }
+            textPlayback = nil
             let settled: HTMLContentBlock = headingLevel.map { .heading(level: $0, html: settledHTML) } ?? .text(settledHTML)
             return (settled, context)
         }
@@ -995,24 +959,29 @@ public final class NativeArticleTranslator {
             let joined = output.joined()
             return headingLevel.map { .heading(level: $0, html: joined) } ?? .text(joined)
         }
-        func mixed(activeIndex: Int, activePartial: String) -> HTMLContentBlock {
-            .mixedText(parts: mixedParts(output: output, activeIndex: activeIndex, activePartial: activePartial), headingLevel: headingLevel)
+        func mixed(activeIndex: Int, activePartial: String, complete: Bool = false) -> HTMLContentBlock {
+            .mixedText(parts: mixedParts(output: output, activeIndex: activeIndex, activePartial: activePartial, complete: complete), headingLevel: headingLevel)
         }
         for (segmentIndex, segment) in segments.enumerated() where segment.translatable {
             guard token == generation else { return (settledBlock(), context) }
             let active = segmentIndex
-            // Caret at the segment start the moment translation begins — before the
-            // first token — so it's clear which block is being translated.
             emit(mixed(activeIndex: active, activePartial: ""))
-            // Stream this segment token-by-token: the active segment overlays and
-            // erases its dimmed original while the others stay rendered as HTML.
+            let playback = makeTextPlayback(token: token) { partial, complete in
+                emit(mixed(activeIndex: active, activePartial: partial, complete: complete))
+            }
             let result = await translateFragmentStreaming(
                 segment.inner, language: language, context: context, token: token
-            ) { partial in
-                guard token == self.generation else { return }
-                emit(mixed(activeIndex: active, activePartial: partial))
+            ) { partial in playback.receive(partial) }
+            guard token == generation else { playback.cancel(); return (settledBlock(), context) }
+            guard let (translatedInner, newContext) = result else {
+                playback.cancel()
+                textPlayback = nil
+                emit(mixed(activeIndex: -1, activePartial: ""))
+                continue
             }
-            guard let (translatedInner, newContext) = result else { continue }
+            await playback.finish(plainText(translatedInner))
+            guard token == generation else { return (settledBlock(), context) }
+            textPlayback = nil
             context = newContext
             output[segmentIndex] = segment.open + translatedInner + segment.close
             guard token == generation else { return (settledBlock(), context) }
@@ -1022,16 +991,39 @@ public final class NativeArticleTranslator {
         return (settledBlock(), context)
     }
 
+    private func makeTextPlayback(token: Int, emit: @escaping (String, Bool) -> Void) -> TranslationTextPlayback {
+        let playback = TranslationTextPlayback(
+            isCurrent: { [weak self] in self?.generation == token && self?.isActive == true }, emit: emit)
+        textPlayback = playback
+        return playback
+    }
+
+    private func blockForHTML(_ html: String, headingLevel: Int?) -> HTMLContentBlock {
+        headingLevel.map { .heading(level: $0, html: html) } ?? .text(html)
+    }
+
+    /// Plain RSS bodies use the same streaming native reader path as rich feeds.
+    public static func plainBodyHTML(_ paragraphs: [String]) -> String? {
+        guard !paragraphs.isEmpty else { return nil }
+        return paragraphs.map { paragraph in
+            let safe = paragraph.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+                .replacingOccurrences(of: "\n", with: "<br>")
+            return "<p>\(safe)</p>"
+        }.joined()
+    }
+
     /// Builds the streaming block's parts: the active segment lays its dimmed
     /// original text under the streaming translation (`.streaming`), which types on
     /// top and erases the original as it grows — so the block never blanks and the
     /// translation overlays it in place — while every other non-empty segment
     /// renders as its HTML.
-    private func mixedParts(output: [String], activeIndex: Int, activePartial: String) -> [HTMLContentBlock.TextPart] {
+    private func mixedParts(output: [String], activeIndex: Int, activePartial: String, complete: Bool) -> [HTMLContentBlock.TextPart] {
         var parts: [HTMLContentBlock.TextPart] = []
         for (i, segment) in output.enumerated() {
             if i == activeIndex {
-                parts.append(.streaming(original: plainText(segment), text: activePartial))
+                parts.append(.streaming(original: plainText(segment), text: activePartial, complete: complete))
             } else if !segment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 parts.append(.html(segment))
             }
@@ -1162,37 +1154,16 @@ public final class NativeArticleTranslator {
         if let plain = await NaturalTranslator.translatePlainFallback(
             InlineMarkupTranslator.stripMarkers(template), into: language, domain: conceptDomain, keepTerms: keepTerms, glossary: glossary, provider: provider
         ) {
-            await paceEmit(plain, onPartial: onPartial, token: token)
+            onPartial(plain)
             return plain
         }
         // 4) Give up on this chunk; keep the original so the rest still translates.
         return template
     }
 
-    /// Emits `text` as growing prefixes over time so a bulk (non-streamed)
-    /// translation types in visibly instead of appearing all at once. Runs before
-    /// the caller returns, so the block doesn't settle until it has played — the
-    /// fix for a later block suddenly swapping whole when it escalates off the
-    /// token-streaming path. Clears within ~1.2s but never slower than ~70 chars/s.
-    private func paceEmit(_ text: String, onPartial: @escaping (String) -> Void, token: Int) async {
-        let chars = Array(text)
-        guard !chars.isEmpty else { return }
-        var shown = 0
-        while shown < chars.count {
-            guard token == generation else { return }
-            let backlog = chars.count - shown
-            let charsPerSecond = max(70.0, Double(backlog) / 1.2)
-            let step = max(1, Int((charsPerSecond * 0.016).rounded()))
-            shown = min(chars.count, shown + step)
-            onPartial(String(chars[0..<shown]))
-            try? await Task.sleep(nanoseconds: 16_000_000)
-            if Task.isCancelled { return }
-        }
-    }
-
     /// Translates a nested block (inside a quote/list). `onPartial` receives the
     /// child's intermediate states so the parent can rebuild its override live,
-    /// giving nested text the same streaming/caret/overlay effect as a top-level
+    /// giving nested text the same streaming ripple effect as a top-level
     /// block instead of popping in all at once.
     private func translateNested(
         _ block: HTMLContentBlock, language: String, context: String, token: Int,

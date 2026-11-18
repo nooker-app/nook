@@ -90,9 +90,9 @@ public enum ArticleMarkdown {
                 switch part {
                 case .html(let html):
                     inlineFragment(html, baseURL: baseURL)
-                case .streaming(_, let text):
+                case .streaming(_, let text, _):
                     escapePlainText(text)
-                case .streamingMarkdown(_, let markdown):
+                case .streamingMarkdown(_, let markdown, _):
                     markdown
                 }
             }.joined()

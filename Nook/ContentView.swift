@@ -2849,7 +2849,7 @@ private struct ReaderDetailView: View {
         if store.usesReaderContentByDefault, case .ready(let extracted) = store.readerContentState(for: article) {
             return extracted
         }
-        return article.contentHTML
+        return article.contentHTML ?? NativeArticleTranslator.plainBodyHTML(article.bodyParagraphs)
     }
 
     private func translationActive(_ article: Article) -> Bool {
@@ -2859,17 +2859,16 @@ private struct ReaderDetailView: View {
         return session.plainTranslation(for: article.id) != nil
     }
 
-    private func displayTitle(_ article: Article) -> String {
+    private func displayTitle(_ article: Article) -> String? {
         if renderedReaderHTML(for: article) != nil {
-            guard let translator = session.translator(for: article.id), translator.isActive else { return article.title }
-            return translator.translatedTitle ?? article.title
+            guard let translator = session.translator(for: article.id), translator.isActive else { return nil }
+            return translator.translatedTitle
         }
-        return session.plainTranslation(for: article.id)?.title ?? article.title
+        return session.plainTranslation(for: article.id)?.title
     }
 
-    /// Toggles translation: rich articles stream in place; plain-body articles
-    /// translate the whole body once. A length guard keeps an "answered"
-    /// imperative title from replacing the real one.
+    /// Toggles translation, including cancellation while characters are arriving.
+    /// Plain RSS bodies use the same native streaming path as extracted HTML.
     private func toggleTranslation(_ article: Article) {
         session.begin(articleID: article.id)
         if let html = renderedReaderHTML(for: article) {
@@ -3078,7 +3077,7 @@ private struct ReaderDetailView: View {
             Text("It's removed from your list on all your devices. This can't be undone.")
         }
         .overlay(alignment: .top) {
-            if session.isTranslating(for: article.id) {
+            if renderedReaderHTML(for: article) == nil, session.isTranslating(for: article.id) {
                 TranslationBanner()
             }
         }
@@ -3291,7 +3290,7 @@ private struct ReaderDetailView: View {
     /// paragraphs) — the pre-experiment reading surface.
     @ViewBuilder
     private func originalArticleBody(_ article: Article) -> some View {
-        if let html = article.contentHTML {
+        if let html = article.contentHTML ?? NativeArticleTranslator.plainBodyHTML(article.bodyParagraphs) {
             HTMLContentView(html: html, baseURL: article.url, translator: session.translator(for: article.id), typography: readerTypography)
                 .id(article.id)
         } else if let translation = session.plainTranslation(for: article.id) {
@@ -3422,11 +3421,11 @@ private struct ReaderDetailView: View {
                     }
                 }
             } label: {
-                Text(displayTitle(article))
-                    .font(.system(.largeTitle, design: .serif))
-                    .fontWeight(.semibold)
-                    .lineLimit(nil)
-                    .multilineTextAlignment(.leading)
+                ReaderTranslatedTitle(original: article.title,
+                                      translated: translationActive(article) ? displayTitle(article) : nil,
+                                      translating: session.translator(for: article.id)?.isTitleTranslating ?? false,
+                                      size: 26, magazine: false)
+                    .id(article.id)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(ReaderTitleButtonStyle())
@@ -3467,7 +3466,7 @@ private struct ReaderDetailView: View {
                             systemImage: translationActive(article) ? "character.bubble.fill" : "character.bubble"
                         )
                     }
-                    .disabled(session.isTranslating(for: article.id))
+                    .disabled(session.isTranslating(for: article.id) && !translationActive(article))
                 }
 
                 Menu {

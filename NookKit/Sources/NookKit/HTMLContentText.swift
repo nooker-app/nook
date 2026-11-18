@@ -465,10 +465,10 @@ indirect enum HTMLContentBlock: Equatable, Sendable {
         /// (dimmed) and the streaming translation types on top, with the original
         /// erased in proportion to how much has streamed — so the block never
         /// blanks and the translation visibly overlays and replaces it in place.
-        case streaming(original: String, text: String)
+        case streaming(original: String, text: String, complete: Bool = false)
         /// Gemini's cumulative Markdown stream. Syntactically complete inline
         /// markup is rendered immediately while incomplete delimiters stay hidden.
-        case streamingMarkdown(original: String, markdown: String)
+        case streamingMarkdown(original: String, markdown: String, complete: Bool = false)
     }
 }
 
@@ -2241,12 +2241,21 @@ private struct NativeMixedText: View {
                 switch part {
                 case .html(let html):
                     HTMLContentText(html: html, selectable: selectable, baseSize: headingLevel.map { typography.headingSize($0) }, bold: bold, typography: typography)
-                case .streaming(let original, let text):
+                case .streaming(let original, let text, let complete):
                     // The segment currently being translated (settles to `.html`
                     // once done): dimmed original underneath, translation typing on
                     // top, original erased as the translation streams.
+                    #if os(macOS)
+                    ReaderStreamingText(original: original, text: text, complete: complete, selectable: selectable,
+                                        baseSize: baseSize, bold: bold, typography: typography)
+                    #else
                     StreamingText(original: original, text: text, selectable: selectable, baseSize: baseSize, bold: bold, typography: typography)
-                case .streamingMarkdown(let original, let markdown):
+                    #endif
+                case .streamingMarkdown(let original, let markdown, let complete):
+                    #if os(macOS)
+                    ReaderStreamingText(original: original, text: markdown, complete: complete, selectable: selectable,
+                                        baseSize: baseSize, bold: bold, typography: typography, markdown: true)
+                    #else
                     StreamingMarkdownText(
                         original: original,
                         markdown: markdown,
@@ -2255,6 +2264,7 @@ private struct NativeMixedText: View {
                         bold: bold,
                         typography: typography
                     )
+                    #endif
                 }
             }
         }
@@ -2601,6 +2611,14 @@ enum StreamingMarkdownFormatter {
 
         static func visibleText(_ raw: String) -> String {
             raw
+                // An unfinished link is still plain text to the Markdown parser.
+                // Reveal its label, keeping brackets and the arriving URL out of
+                // the layout until the parser can produce a real Link node.
+                .replacingOccurrences(
+                    of: #"(?<!\\)!?\[([^\]\n]*)(?:\](?:\([^\n]*)?)?$"#,
+                    with: "$1",
+                    options: .regularExpression
+                )
                 .replacingOccurrences(
                     of: #"(?<!\\)(\*\*|__|~~|[*_`])"#,
                     with: "",
@@ -2674,7 +2692,14 @@ enum StreamingMarkdownFormatter {
             blockSeparator: blockSeparator,
             design: design
         )
-        renderer.render(document: Document(parsing: markdown))
+        // Hide an unfinished destination before parsing: `<https://…>` would
+        // otherwise become an auto-link while its outer closing `)` is pending.
+        let snapshot = markdown.replacingOccurrences(
+            of: #"(?<!\\)!?\[([^\]\n]*)\]\((?:<[^>\n]*>?|[^)\n]*)$"#,
+            with: "$1",
+            options: .regularExpression
+        )
+        renderer.render(document: Document(parsing: snapshot))
         #if canImport(AppKit)
         return (try? AttributedString(renderer.output, including: \.appKit))
             ?? AttributedString(renderer.output.string)
