@@ -523,9 +523,8 @@ struct MagazineView: View {
                     MagazineArticleHeading(article: article, feedTitle: row.feedDisplayTitle ?? "",
                                            namespace: hero, expanded: false, lead: lead, matched: opened != row.id)
                     MagazineCategoryLabels(store.categories(forArticle: article))
-                    Text(article.summary)
-                        .font(.system(size: lead ? 15 : 13))
-                        .foregroundStyle(.secondary).lineSpacing(5).lineLimit(3)
+                    MagazineTranslatedSummary(id: article.id, summary: article.summary, size: lead ? 15 : 13)
+                        .foregroundStyle(.secondary)
                         .frame(maxWidth: lead ? 900 : .infinity, alignment: .leading)
                     Spacer(minLength: lead ? 8 : 0)
                     HStack(spacing: 8) {

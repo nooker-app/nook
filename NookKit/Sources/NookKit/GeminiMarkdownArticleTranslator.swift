@@ -47,7 +47,8 @@ enum GeminiMarkdownArticleTranslator {
            let blocks = MarkdownNativeParser.blocks(
                from: cached.markdown,
                baseURL: template.baseURL,
-               protectedBlocks: [:]
+               protectedBlocks: [:],
+               separateLeadingParagraph: template.separateLeadingParagraph
            ) {
             return Result(
                 title: cached.translatedTitle,
@@ -116,7 +117,8 @@ enum GeminiMarkdownArticleTranslator {
                        let blocks = MarkdownNativeParser.blocks(
                            from: projection.bodyMarkdown,
                            baseURL: template.baseURL,
-                           protectedBlocks: [:]
+                           protectedBlocks: [:],
+                           separateLeadingParagraph: template.separateLeadingParagraph
                        ) {
                         // Network consumption, cumulative-string handling, and
                         // Markdown parsing all stay off the main actor. The UI
@@ -150,7 +152,8 @@ enum GeminiMarkdownArticleTranslator {
             final,
             source: template.markerlessDocumentMarkdown,
             baseURL: template.baseURL,
-            language: language
+            language: language,
+            separateLeadingParagraph: template.separateLeadingParagraph
         ) else {
             throw RouterError.invalid
         }
@@ -198,7 +201,8 @@ enum GeminiMarkdownArticleTranslator {
         _ raw: String,
         source: String,
         baseURL: URL?,
-        language: String
+        language: String,
+        separateLeadingParagraph: Bool
     ) -> ParsedDocument? {
         let markdown = stripOuterFence(raw)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,7 +215,8 @@ enum GeminiMarkdownArticleTranslator {
         let blocks = MarkdownNativeParser.blocks(
             from: split.bodyMarkdown,
             baseURL: baseURL,
-            protectedBlocks: [:]
+            protectedBlocks: [:],
+            separateLeadingParagraph: separateLeadingParagraph
         )
         else { return nil }
 

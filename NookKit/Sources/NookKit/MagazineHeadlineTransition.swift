@@ -2,24 +2,28 @@
 import SwiftUI
 
 /// The approved title ripple: 0.55 seconds, with the demo's vivid (1.5) strength.
-/// Only a new completed translation animates. Cached titles start at their final
+/// Only a new completed translation animates. Cached text starts at its final
 /// layout, and leaving the viewport or turning translation off settles at once.
+/// Summary replacements reserve three lines to keep the card/footer stationary.
 struct MagazineHeadlineTransition: View {
+    enum Style { case headline, summary }
     let title: String
     let size: CGFloat
     let lines: Int?
     let animated: Bool
+    let style: Style
     @State private var current: String
     @State private var previous: String?
     @State private var progress = 1.0
     @State private var width: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(title: String, size: CGFloat, lines: Int?, animated: Bool) {
+    init(title: String, size: CGFloat, lines: Int?, animated: Bool, style: Style = .headline) {
         self.title = title
         self.size = size
         self.lines = lines
         self.animated = animated
+        self.style = style
         _current = State(initialValue: title)
     }
 
@@ -42,7 +46,8 @@ struct MagazineHeadlineTransition: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(current)
             } else {
-                MagazineHeadline(current, size: size, lines: lines)
+                if style == .summary { summaryText(current) }
+                else { MagazineHeadline(current, size: size, lines: lines) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,13 +79,33 @@ struct MagazineHeadlineTransition: View {
     private func layer(_ value: String, incoming: Bool) -> some View {
         // Share the normal headline's exact type metrics. Do not wrap this in
         // MagazineHeadline: its hero-transition transaction disables animation.
-        MagazineHeadline.text(value, size: size)
-            .lineSpacing(size * 0.12)
-            .lineLimit(lines)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if style == .summary { summaryText(value) }
+            else {
+                MagazineHeadline.text(value, size: size)
+                    .lineSpacing(size * 0.12)
+                    .lineLimit(lines)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
             .textRenderer(MagazineTitleRipple(progress: progress, incoming: incoming,
                                               sweepWidth: width, reduceMotion: reduceMotion))
+    }
+
+    private func summaryText(_ value: String) -> some View {
+        // reservesSpace omits spacing for missing lines and measures Latin/CJK
+        // fallbacks differently. A real three-line font sample fixes both cases.
+        Text("Ag한\nAg한\nAg한")
+            .font(.system(size: size)).lineSpacing(5)
+            .hidden().accessibilityHidden(true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .topLeading) {
+                Text(value)
+                    .font(.system(size: size)).lineSpacing(5)
+                    .lineLimit(3).multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
     }
 
     private func settle() {

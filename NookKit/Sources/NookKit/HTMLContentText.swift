@@ -3283,7 +3283,7 @@ public struct HTMLContentText: View {
     /// import lands, and the regex strip is O(fragment) each time.
     private static let plainTextCache = SendableNSCache<NSString>()
 
-    private static func plainText(_ html: String) -> String {
+    static func plainText(_ html: String) -> String {
         if let cached = plainTextCache[html] { return cached as String }
         let stripped = html.replacingOccurrences(of: #"(?is)<[^>]+>"#, with: " ", options: .regularExpression)
         let result = HTMLContentParser.decodeEntities(stripped)

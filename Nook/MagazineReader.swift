@@ -131,7 +131,7 @@ struct MagazineReaderDetail: View {
             if translator.isActive {
                 translator.stop()
             } else if NaturalTranslator.isAvailable(for: TranslationSettings.readerProvider()) {
-                translator.start(html: html, baseURL: article.url, title: article.title, into: targetLanguageName)
+                translator.start(html: html, baseURL: article.url, title: article.title, summary: shouldShowSummary(article) ? article.summary : nil, into: targetLanguageName)
             } else {
                 session.setShowingSystemTranslation(true, for: article.id)
             }
@@ -396,7 +396,7 @@ struct MagazineReaderDetail: View {
             guard oldValue.articleID == newValue.articleID else { return }
             guard let translator = session.translator(for: article.id), translator.isActive,
                   case .ready(let extracted) = newValue.state else { return }
-            translator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
+            translator.start(html: extracted, baseURL: article.url, title: article.title, summary: shouldShowSummary(article) ? article.summary : nil, into: targetLanguageName)
         }
         .onChange(of: summariesEnabled) { _, enabled in
             guard !enabled else { return }
@@ -784,10 +784,8 @@ struct MagazineReaderDetail: View {
             }
 
             if shouldShowSummary(article) {
-                Text(article.summary)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
+                ReaderTranslatedSummary(original: article.summary, translator: session.translator(for: article.id))
+                    .id(article.id)
             }
 
         }

@@ -180,7 +180,7 @@ struct BetaSettingsView: View {
         case .intelligence:
             BetaSettingsForm {
                 MagazineTrendSettings()
-                ExperimentalSettingsSections()
+                ExperimentalSettingsSections(magazine: true)
             }
         case .about:
             AboutSettingsPane()

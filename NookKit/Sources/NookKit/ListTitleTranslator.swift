@@ -2,8 +2,8 @@ import Foundation
 import NaturalLanguage
 import Observation
 
-/// Translates the titles of on-screen article-list rows into the user's language,
-/// on device with Apple Intelligence, and streams each result token by token.
+/// Translates on-screen article-list titles and magazine previews into the user's
+/// language through the selected list provider, sharing one bounded queue/cache.
 ///
 /// Behavior (all opt-in, driven by `configure`):
 /// - Only rows that stay visible for `dwell` seconds are translated, so a quick
@@ -58,6 +58,9 @@ public final class ListTitleTranslator {
     @Observable
     public final class StateBox {
         public fileprivate(set) var state: TitleState?
+        /// Replacement-style previews observe completion only, so provider token
+        /// snapshots cannot repeatedly rebuild a card that still shows its source.
+        public private(set) var completedText: String?
         // First native layout reads this snapshot without registering SwiftUI
         // as an observer of every subsequent text prefix.
         @ObservationIgnored fileprivate(set) var textSnapshot: TitleState?
@@ -71,6 +74,7 @@ public final class ListTitleTranslator {
 
         fileprivate init(state: TitleState? = nil) {
             self.state = state
+            if case .translated(let text, _) = state { completedText = text }
             textSnapshot = state
             presentation = state.map(Presentation.init)
             hasPresentedState = state != nil
@@ -89,6 +93,10 @@ public final class ListTitleTranslator {
             #endif
             textSnapshot = newState
             state = newState
+            let completed: String?
+            if case .translated(let text, _) = newState { completed = text }
+            else { completed = nil }
+            if completedText != completed { completedText = completed }
             let nextPresentation = newState.map(Presentation.init)
             if presentation != nextPresentation { presentation = nextPresentation }
             if newState != nil, !hasPresentedState { hasPresentedState = true }
@@ -532,7 +540,7 @@ public final class ListTitleTranslator {
         pending.removeAll()
         // Reset each box's state in place (keep the map) so rows holding a box
         // reference update immediately and a re-enable reuses the same box.
-        for box in boxes.values where box.state != nil { box.state = nil }
+        for box in boxes.values where box.state != nil { box.setState(nil) }
     }
 
     /// Deletes every saved title translation — the in-memory caches, the

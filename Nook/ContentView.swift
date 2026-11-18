@@ -2876,7 +2876,7 @@ private struct ReaderDetailView: View {
             if translator.isActive {
                 translator.stop()
             } else if NaturalTranslator.isAvailable(for: TranslationSettings.readerProvider()) {
-                translator.start(html: html, baseURL: article.url, title: article.title, into: targetLanguageName)
+                translator.start(html: html, baseURL: article.url, title: article.title, summary: shouldShowSummary(article) ? article.summary : nil, into: targetLanguageName)
             } else {
                 session.setShowingSystemTranslation(true, for: article.id)
             }
@@ -3143,7 +3143,7 @@ private struct ReaderDetailView: View {
             guard oldValue.articleID == newValue.articleID else { return }
             guard let translator = session.translator(for: article.id), translator.isActive,
                   case .ready(let extracted) = newValue.state else { return }
-            translator.start(html: extracted, baseURL: article.url, title: article.title, into: targetLanguageName)
+            translator.start(html: extracted, baseURL: article.url, title: article.title, summary: shouldShowSummary(article) ? article.summary : nil, into: targetLanguageName)
         }
         .onChange(of: summariesEnabled) { _, enabled in
             guard !enabled else { return }
@@ -3444,10 +3444,8 @@ private struct ReaderDetailView: View {
             }
 
             if shouldShowSummary(article) {
-                Text(article.summary)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
+                ReaderTranslatedSummary(original: article.summary, translator: session.translator(for: article.id))
+                    .id(article.id)
             }
 
             HStack(spacing: 10) {
@@ -4154,6 +4152,7 @@ struct FiltersSettingsSections: View {
 }
 
 struct ExperimentalSettingsSections: View {
+    var magazine = false
     @AppStorage(ReaderStore.readerContentByDefaultKey) private var readerContentByDefault = true
     @AppStorage(ReaderStore.translateListTitlesKey) private var translateListTitles = false
     @AppStorage(ReaderStore.coherentArticleTranslationKey) private var coherentArticleTranslation = false
@@ -4178,8 +4177,13 @@ struct ExperimentalSettingsSections: View {
         }
 
         Section("Article List") {
-            Toggle("Translate titles in the list", isOn: $translateListTitles)
-            Text("Titles of the stories on screen are translated into your language with Apple Intelligence, shown beneath the original. Only titles that stay in view are translated, and results are cached. Titles already in your language are left as-is.")
+            Toggle(isOn: $translateListTitles) {
+                if magazine { Text("Translate titles and previews") }
+                else { Text("Translate titles in the list") }
+            }
+            (magazine
+                ? Text("Magazine titles and previews use the selected article list translation engine. Only stories that stay in view are translated, and results are cached. Text already in your language stays unchanged.")
+                : Text("Titles of the stories on screen are translated into your language with Apple Intelligence, shown beneath the original. Only titles that stay in view are translated, and results are cached. Titles already in your language are left as-is."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

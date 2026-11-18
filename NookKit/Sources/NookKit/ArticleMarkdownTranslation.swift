@@ -9,11 +9,13 @@ struct MarkdownTranslationTemplate: Sendable {
     let title: String
     let baseURL: URL?
     let originalBlocks: [HTMLContentBlock]
+    let separateLeadingParagraph: Bool
 
-    init(title: String, blocks: [HTMLContentBlock], baseURL: URL?) {
+    init(title: String, blocks: [HTMLContentBlock], baseURL: URL?, separateLeadingParagraph: Bool = false) {
         self.title = title
         self.baseURL = baseURL
         self.originalBlocks = blocks
+        self.separateLeadingParagraph = separateLeadingParagraph
     }
 
     var sourceIdentity: String {
@@ -130,6 +132,13 @@ enum MarkdownTranslationValidator {
         var codeBlocks: [String] = []
         var htmlSkeleton: [String] = []
 
+        mutating func visitParagraph(_ paragraph: Paragraph) {
+            // A standfirst and the first body paragraph are distinct surfaces.
+            // Merging them would move body prose into the header on handoff.
+            structure.append("p")
+            descendInto(paragraph)
+        }
+
         mutating func visitHeading(_ heading: Heading) {
             structure.append("h\(heading.level)")
             descendInto(heading)
@@ -200,7 +209,8 @@ enum MarkdownNativeParser {
     static func blocks(
         from markdown: String,
         baseURL: URL?,
-        protectedBlocks: [Int: HTMLContentBlock]
+        protectedBlocks: [Int: HTMLContentBlock],
+        separateLeadingParagraph: Bool = false
     ) -> [HTMLContentBlock]? {
         let document = Document(parsing: markdown)
         var output: [HTMLContentBlock] = []
@@ -208,7 +218,13 @@ enum MarkdownNativeParser {
             guard let converted = block(child, baseURL: baseURL, protectedBlocks: protectedBlocks) else {
                 continue
             }
-            append(converted, to: &output)
+            if separateLeadingParagraph, output.count == 1 {
+                // The reader header owns the standfirst. Body paragraphs may
+                // coalesce with each other, but never with that first paragraph.
+                output.append(converted)
+            } else {
+                append(converted, to: &output)
+            }
         }
         return output.isEmpty && !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? nil

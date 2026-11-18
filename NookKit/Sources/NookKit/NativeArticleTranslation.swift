@@ -380,6 +380,9 @@ public final class NativeArticleTranslator {
     /// Final Gemini Markdown parsed directly into native reader blocks. Until this
     /// is ready, `overrides` keeps the original-in-place typing presentation.
     private var markdownBlocks: [HTMLContentBlock]?
+    /// The optional standfirst is translated as the first paragraph of the same
+    /// document, then routed back to the header instead of duplicated in the body.
+    private var hasSummary = false
     private var textPlayback: TranslationTextPlayback?
     private var documentPlayback: MarkdownTranslationPlayback?
     private var task: Task<Void, Never>?
@@ -414,16 +417,28 @@ public final class NativeArticleTranslator {
     /// render the original (not yet translated, or not translatable). Internal:
     /// only the block list (same module) consults it.
     func translatedBlock(at index: Int) -> HTMLContentBlock? {
-        isActive ? overrides[index] : nil
+        isActive ? overrides[index + (hasSummary ? 1 : 0)] : nil
     }
 
     func completedMarkdownBlocks() -> [HTMLContentBlock]? {
-        isActive ? markdownBlocks : nil
+        guard isActive, let markdownBlocks else { return nil }
+        return hasSummary ? Array(markdownBlocks.dropFirst()) : markdownBlocks
+    }
+
+    func translatedSummaryBlock() -> HTMLContentBlock? {
+        guard isActive, hasSummary else { return nil }
+        return markdownBlocks?.first ?? overrides[0]
+    }
+
+    static func summaryBlock(_ summary: String?) -> HTMLContentBlock? {
+        guard let summary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let html = plainBodyHTML([summary]) else { return nil }
+        return .text(html)
     }
 
     /// Begins (or restarts) translation of `html` into `languageName`. `title`
     /// is translated first to seed context and exposed via `translatedTitle`.
-    public func start(html: String, baseURL: URL?, title: String, into languageName: String) {
+    public func start(html: String, baseURL: URL?, title: String, summary: String? = nil, into languageName: String) {
         stop()
         isActive = true
         isTranslating = true
@@ -437,14 +452,17 @@ public final class NativeArticleTranslator {
         provider = TranslationSettings.readerProvider()
         NaturalTranslator.prewarm(provider: provider)
         useCoherentMode = UserDefaults.standard.bool(forKey: ReaderStore.coherentArticleTranslationKey)
-        let blocks = HTMLContentParser.parse(html, baseURL: baseURL)
+        let summaryBlock = Self.summaryBlock(summary)
+        hasSummary = summaryBlock != nil
+        let blocks = (summaryBlock.map { [$0] } ?? []) + HTMLContentParser.parse(html, baseURL: baseURL)
         task = Task { [weak self] in
             guard let self else { return }
             if provider == .gemini {
                 let template = MarkdownTranslationTemplate(
                     title: title,
                     blocks: blocks,
-                    baseURL: baseURL
+                    baseURL: baseURL,
+                    separateLeadingParagraph: hasSummary
                 )
                 await runMarkdown(
                     template: template,
@@ -555,6 +573,13 @@ public final class NativeArticleTranslator {
     func _activateForTesting() {
         isActive = true
     }
+
+    func _installContentForTesting(summary: String?, blocks: [HTMLContentBlock], markdown: Bool) {
+        isActive = true
+        hasSummary = Self.summaryBlock(summary) != nil
+        if markdown { markdownBlocks = blocks }
+        else { overrides = Dictionary(uniqueKeysWithValues: blocks.enumerated().map { ($0.offset, $0.element) }) }
+    }
     #endif
 
     /// Turns translation off and reverts to the original content.
@@ -582,6 +607,7 @@ public final class NativeArticleTranslator {
         if markdownBlocks != nil { markdownBlocks = nil }
         if translatedTitle != nil { translatedTitle = nil }
         if translatedMarkdown != nil { translatedMarkdown = nil }
+        if hasSummary { hasSummary = false }
         conceptDomain = ""
         keepTerms = []
         keepTermsSeen = []
@@ -601,7 +627,7 @@ public final class NativeArticleTranslator {
     ) async {
         let originals = MarkdownNativeParser.blocks(
             from: ArticleMarkdown.render(template.originalBlocks, baseURL: template.baseURL),
-            baseURL: template.baseURL, protectedBlocks: [:]
+            baseURL: template.baseURL, protectedBlocks: [:], separateLeadingParagraph: template.separateLeadingParagraph
         ) ?? template.originalBlocks
         let playback = MarkdownTranslationPlayback(originals: originals, baseURL: template.baseURL,
             isCurrent: { [weak self] in self?.generation == token && self?.isActive == true },
@@ -640,7 +666,9 @@ public final class NativeArticleTranslator {
             documentPlayback = nil
             translatedTitle = result.title
             isTitleTranslating = false
-            translatedMarkdown = result.markdown
+            translatedMarkdown = hasSummary
+                ? ArticleMarkdown.render(Array(result.blocks.dropFirst()), baseURL: template.baseURL)
+                : result.markdown
             markdownBlocks = result.blocks
             overrides = [:]
             isTranslating = false

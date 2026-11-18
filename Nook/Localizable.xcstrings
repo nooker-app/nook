@@ -8176,6 +8176,64 @@
         }
       }
     },
+    "Translate titles and previews": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제목과 미리보기 번역"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイトルとプレビューを翻訳"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "翻译标题和预览"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "翻譯標題與預覽"
+          }
+        }
+      }
+    },
+    "Magazine titles and previews use the selected article list translation engine. Only stories that stay in view are translated, and results are cached. Text already in your language stays unchanged.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "매거진의 제목과 미리보기는 선택한 글 목록 번역 엔진을 사용합니다. 화면에 머무르는 글만 번역하며 결과를 저장해 재사용합니다. 이미 사용자의 언어로 작성된 내용은 그대로 표시합니다."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マガジンのタイトルとプレビューには、選択した記事一覧の翻訳エンジンを使用します。画面に留まる記事だけを翻訳し、結果をキャッシュします。すでにお使いの言語で書かれた内容はそのまま表示します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "杂志的标题和预览使用所选的文章列表翻译引擎。仅翻译停留在屏幕上的文章，并缓存结果。已经使用您所选语言的内容将保持不变。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "雜誌的標題與預覽使用所選的文章列表翻譯引擎。僅翻譯停留在畫面上的文章，並快取結果。已使用您所選語言的內容將維持不變。"
+          }
+        }
+      }
+    },
     "Translate titles in the list": {
       "localizations": {
         "ja": {
