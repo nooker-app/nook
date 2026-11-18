@@ -32,6 +32,28 @@ struct TranslationArrivalHistory {
     }
 
     var lastArrival: Double { starts.max() ?? 0 }
+
+    struct RenderSpan: Equatable {
+        let range: Range<Int>
+        let animated: Bool
+    }
+
+    /// Settled glyphs share a native text run, including the suffix following a
+    /// corrected word. Only arriving glyphs and the unfinished edge stay split.
+    func renderSpans(at now: Double, writing: Bool, duration: Double) -> [RenderSpan] {
+        let last = characters.lastIndex(where: { !$0.isWhitespace }) ?? -1
+        var spans: [RenderSpan] = []
+        var start = 0
+        for index in starts.indices {
+            let tail = writing && index <= last && index > last - 6
+            guard now < starts[index] + duration || tail else { continue }
+            if start < index { spans.append(.init(range: start..<index, animated: false)) }
+            spans.append(.init(range: index..<(index + 1), animated: true))
+            start = index + 1
+        }
+        if start < starts.count { spans.append(.init(range: start..<starts.count, animated: false)) }
+        return spans
+    }
 }
 
 private struct ArrivalStamp: TextAttribute { let start: Double; let index: Int }
@@ -63,6 +85,10 @@ private struct StreamRippleRenderer: TextRenderer {
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
+            if line.allSatisfy({ $0[ArrivalStamp.self] == nil }) {
+                context.draw(line)
+                continue
+            }
             for run in line {
                 guard let stamp = run[ArrivalStamp.self] else { context.draw(run); continue }
                 let progress = min(1, max(0, (now - stamp.start) / duration))
@@ -159,6 +185,7 @@ struct ReaderStreamingText: View {
     private let strength = ReaderTranslationMotion.strength
     @State private var history = TranslationArrivalHistory()
     @State private var styled = Text("")
+    @State private var attributed = AttributedString()
     @State private var animating = false
     @State private var sourceVisible = true
     @State private var originalFloor = 1.0
@@ -197,7 +224,10 @@ struct ReaderStreamingText: View {
                     .allowsHitTesting(!sourceVisible)
             }
             .onChange(of: now >= history.lastArrival + duration) { _, settled in
-                if settled { animating = false }
+                if settled {
+                    animating = false
+                    rebuildStyled(at: now)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -248,20 +278,30 @@ struct ReaderStreamingText: View {
             sourceVisible = true
             originalFloor = 1
         }
-        var text = Text("")
-        var index = attributed.characters.startIndex
-        for (offset, start) in history.starts.enumerated() {
-            let next = attributed.characters.index(after: index)
-            let glyph = Text(AttributedString(attributed[index..<next]))
-            let part = glyph.customAttribute(ArrivalStamp(start: start, index: offset))
-            text = Text("\(text)\(part)")
-            index = next
-        }
-        styled = text
+        self.attributed = attributed
+        rebuildStyled(at: now)
         animating = !plain.isEmpty && !reduced && !alreadyComplete && now < history.lastArrival + duration
         if !plain.isEmpty, sourceVisible {
             withAnimation(reduced || alreadyComplete ? nil : .easeOut(duration: 0.16)) { sourceVisible = false }
         }
+    }
+
+    private func rebuildStyled(at now: Double) {
+        let spans = history.renderSpans(at: now, writing: writing, duration: duration)
+        var result = Text("")
+        var index = attributed.characters.startIndex
+        for span in spans {
+            let end = attributed.characters.index(index, offsetBy: span.range.count)
+            let part = Text(AttributedString(attributed[index..<end]))
+            if span.animated {
+                let stamp = ArrivalStamp(start: history.starts[span.range.lowerBound], index: span.range.lowerBound)
+                result = Text("\(result)\(part.customAttribute(stamp))")
+            } else {
+                result = Text("\(result)\(part)")
+            }
+            index = end
+        }
+        styled = result
     }
 }
 

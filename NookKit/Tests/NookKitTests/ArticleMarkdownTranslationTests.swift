@@ -168,8 +168,13 @@ struct ArticleMarkdownTranslationTests {
     }
 
     @Test("Current Gemini tiers are explicit and cache-stable")
-    func modelTiers() {
+    func modelTiers() throws {
         #expect(GeminiTranslator.Model.flashLite.rawValue == "gemini-3.5-flash-lite")
-        #expect(GeminiTranslator.Model.flash.rawValue == "gemini-3.6-flash")
+        #expect(GeminiTranslator.Model.flashLite.thinkingLevel == "minimal")
+        #expect(GeminiTranslator.Model.flash.rawValue == "gemini-3.8-flash")
+        #expect(GeminiTranslator.Model.flash.thinkingLevel == "low")
+        let legacy = Data(#"["gemini-3.5-flash-lite","gemini-3.6-flash"]"#.utf8)
+        let models = try JSONDecoder().decode([GeminiTranslator.Model].self, from: legacy)
+        #expect(models == [.flashLite, .previousFlash])
     }
 }

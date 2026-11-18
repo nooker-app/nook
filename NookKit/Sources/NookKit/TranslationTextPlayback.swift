@@ -6,17 +6,18 @@ enum ReaderTranslationMotion {
     static let strength = 0.3
 }
 
-/// Receives cumulative snapshots but exposes one extended grapheme per beat.
-/// Revisions replace only the already-visible prefix; appended tokens never reset
-/// the beat or replay text. A stalled main thread does not release a whole batch.
+/// Schedules graphemes independently of provider chunks. A display frame can
+/// collect a few due beats; the renderer staggers those glyphs individually.
+/// A missed frame never dumps the entire backlog into the view hierarchy.
 struct TranslationRevealBuffer {
+    static let maximumFrameCharacters = 8
     private(set) var target: [Character] = []
     private(set) var visible = ""
     private(set) var shown = 0
     private(set) var nextBeat = 0.0
-    private(set) var interval = 0.037
+    private(set) var interval = 1.0 / 60
     private var receivedAt: Double?
-    private var arrivalRate = 28.0
+    private var arrivalRate = 60.0
 
     var isCaughtUp: Bool { shown == target.count }
 
@@ -36,13 +37,20 @@ struct TranslationRevealBuffer {
     }
 
     @discardableResult
-    mutating func step(at now: Double) -> Bool {
+    mutating func step(at now: Double, queuedCharacters: Int = 0) -> Bool {
         guard !isCaughtUp, now >= nextBeat else { return false }
-        let rate = min(56, max(10, arrivalRate * 1.08, Double(target.count - shown) / 1.3))
-        interval += (1 / rate - interval) * 0.18
-        visible.append(target[shown])
-        shown += 1
-        nextBeat = now + interval
+        let backlog = target.count - shown + max(0, queuedCharacters)
+        let rate = min(240, max(60, arrivalRate * 1.12, Double(backlog)))
+        interval += (1 / rate - interval) * 0.35
+        nextBeat = max(nextBeat, now - 1.0 / 30)
+        var advanced = 0
+        while !isCaughtUp, nextBeat <= now, advanced < Self.maximumFrameCharacters {
+            visible.append(target[shown])
+            shown += 1
+            advanced += 1
+            nextBeat += interval
+        }
+        if isCaughtUp { nextBeat = now + interval }
         return true
     }
 }
@@ -60,6 +68,7 @@ final class TranslationTextPlayback {
     private let isCurrent: () -> Bool
     private let emit: (String, Bool) -> Void
     private let settleDuration: Double
+    var queuedCharacters = 0
 
     init(settleDuration: Double = ReaderTranslationMotion.duration,
          isCurrent: @escaping () -> Bool,
@@ -99,7 +108,7 @@ final class TranslationTextPlayback {
             guard let self else { return }
             while !cancelled, isCurrent(), !Task.isCancelled {
                 let now = ProcessInfo.processInfo.systemUptime
-                buffer.step(at: now)
+                buffer.step(at: now, queuedCharacters: queuedCharacters)
                 if buffer.visible != lastPublished {
                     lastPublished = buffer.visible
                     emit(buffer.visible, false)
@@ -111,7 +120,9 @@ final class TranslationTextPlayback {
                     }
                     return
                 }
-                let delay = buffer.isCaughtUp ? 0.025 : max(0.008, buffer.nextBeat - ProcessInfo.processInfo.systemUptime)
+                // Updating the document more often than a frame only repeats
+                // Markdown parsing and SwiftUI layout without showing more frames.
+                let delay = buffer.isCaughtUp ? 0.025 : max(1.0 / 60, buffer.nextBeat - ProcessInfo.processInfo.systemUptime)
                 do { try await Task.sleep(for: .seconds(delay)) }
                 catch { return }
             }

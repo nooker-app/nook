@@ -10,12 +10,15 @@ public enum GeminiTranslator {
         case flashLite = "gemini-3.5-flash-lite"
         /// Stronger instruction following, used only when Lite produces an
         /// invalid translation. It has the same context/output limits as Lite.
-        case flash = "gemini-3.6-flash"
+        case flash = "gemini-3.8-flash"
+        /// Retained only so validated translations already cached by 3.6 decode.
+        case previousFlash = "gemini-3.6-flash"
 
-        fileprivate var thinkingLevel: String {
+        var thinkingLevel: String {
             switch self {
             case .flashLite: "minimal"
-            case .flash: "medium"
+            case .flash: "low"
+            case .previousFlash: "medium"
             }
         }
     }
