@@ -210,7 +210,8 @@ enum MarkdownNativeParser {
         from markdown: String,
         baseURL: URL?,
         protectedBlocks: [Int: HTMLContentBlock],
-        separateLeadingParagraph: Bool = false
+        separateLeadingParagraph: Bool = false,
+        coalesceParagraphs: Bool = true
     ) -> [HTMLContentBlock]? {
         let document = Document(parsing: markdown)
         var output: [HTMLContentBlock] = []
@@ -218,9 +219,10 @@ enum MarkdownNativeParser {
             guard let converted = block(child, baseURL: baseURL, protectedBlocks: protectedBlocks) else {
                 continue
             }
-            if separateLeadingParagraph, output.count == 1 {
-                // The reader header owns the standfirst. Body paragraphs may
-                // coalesce with each other, but never with that first paragraph.
+            if !coalesceParagraphs || (separateLeadingParagraph && output.count == 1) {
+                // Streaming keeps paragraph boundaries: joining a whole section
+                // makes every new glyph re-layout all previously settled prose.
+                // Other callers retain the original coalesced representation.
                 output.append(converted)
             } else {
                 append(converted, to: &output)

@@ -1,6 +1,17 @@
 import Foundation
 import Observation
 
+/// A stable observation boundary for one translated paragraph. Updating its
+/// text must not invalidate the document, header, or unrelated paragraph views.
+@MainActor @Observable
+final class NativeTranslationBlock {
+    private(set) var block: HTMLContentBlock?
+
+    func update(_ value: HTMLContentBlock?) {
+        if block != value { block = value }
+    }
+}
+
 /// Translates HTML fragments while preserving inline markup, the native-view
 /// counterpart to the web view's DOM engine. There is no live DOM here, so it
 /// serializes a fragment's inline tags into `⟦n⟧…⟦/n⟧` markers (opaque/void tags
@@ -376,10 +387,10 @@ public final class NativeArticleTranslator {
     /// so Copy/Save as Markdown follows what the user is actually reading.
     public private(set) var translatedMarkdown: String?
 
-    private var overrides: [Int: HTMLContentBlock] = [:]
-    /// Final Gemini Markdown parsed directly into native reader blocks. Until this
-    /// is ready, `overrides` keeps the original-in-place typing presentation.
-    private var markdownBlocks: [HTMLContentBlock]?
+    @ObservationIgnored private var blockStates: [Int: NativeTranslationBlock] = [:]
+    /// Only document structure is observed by the block list. Text changes are
+    /// published by the individual states and read inside their leaf row views.
+    private(set) var markdownBodyRows: [NativeTranslationBlock]?
     /// The optional standfirst is translated as the first paragraph of the same
     /// document, then routed back to the header instead of duplicated in the body.
     private var hasSummary = false
@@ -417,17 +428,41 @@ public final class NativeArticleTranslator {
     /// render the original (not yet translated, or not translatable). Internal:
     /// only the block list (same module) consults it.
     func translatedBlock(at index: Int) -> HTMLContentBlock? {
-        isActive ? overrides[index + (hasSummary ? 1 : 0)] : nil
+        isActive ? bodyState(at: index).block : nil
     }
 
+    func bodyState(at index: Int) -> NativeTranslationBlock {
+        state(at: index + (hasSummary ? 1 : 0))
+    }
+
+    private func state(at index: Int) -> NativeTranslationBlock {
+        if let existing = blockStates[index] { return existing }
+        let created = NativeTranslationBlock()
+        blockStates[index] = created
+        return created
+    }
+
+    private func installMarkdown(_ blocks: [HTMLContentBlock]) {
+        for (index, block) in blocks.enumerated() { state(at: index).update(block) }
+        for (index, state) in blockStates where index >= blocks.count { state.update(nil) }
+        let offset = hasSummary ? 1 : 0
+        let rows = (min(offset, blocks.count)..<blocks.count).map { state(at: $0) }
+        if markdownBodyRows?.count != rows.count ||
+            zip(markdownBodyRows ?? [], rows).contains(where: { $0 !== $1 }) {
+            markdownBodyRows = rows
+        }
+    }
+
+    /// Snapshot for export/tests. Views observe the stable rows instead; mapping
+    /// their values here inside a view body would subscribe to the whole document.
     func completedMarkdownBlocks() -> [HTMLContentBlock]? {
-        guard isActive, let markdownBlocks else { return nil }
-        return hasSummary ? Array(markdownBlocks.dropFirst()) : markdownBlocks
+        guard isActive, let markdownBodyRows else { return nil }
+        return markdownBodyRows.compactMap(\.block)
     }
 
     func translatedSummaryBlock() -> HTMLContentBlock? {
         guard isActive, hasSummary else { return nil }
-        return markdownBlocks?.first ?? overrides[0]
+        return state(at: 0).block
     }
 
     static func summaryBlock(_ summary: String?) -> HTMLContentBlock? {
@@ -575,10 +610,11 @@ public final class NativeArticleTranslator {
     }
 
     func _installContentForTesting(summary: String?, blocks: [HTMLContentBlock], markdown: Bool) {
-        isActive = true
-        hasSummary = Self.summaryBlock(summary) != nil
-        if markdown { markdownBlocks = blocks }
-        else { overrides = Dictionary(uniqueKeysWithValues: blocks.enumerated().map { ($0.offset, $0.element) }) }
+        if !isActive { isActive = true }
+        let includesSummary = Self.summaryBlock(summary) != nil
+        if hasSummary != includesSummary { hasSummary = includesSummary }
+        if markdown { installMarkdown(blocks) }
+        else { for (index, block) in blocks.enumerated() { state(at: index).update(block) } }
     }
     #endif
 
@@ -603,8 +639,8 @@ public final class NativeArticleTranslator {
         textPlayback = nil
         documentPlayback?.cancel()
         documentPlayback = nil
-        if !overrides.isEmpty { overrides = [:] }
-        if markdownBlocks != nil { markdownBlocks = nil }
+        for state in blockStates.values { state.update(nil) }
+        if markdownBodyRows != nil { markdownBodyRows = nil }
         if translatedTitle != nil { translatedTitle = nil }
         if translatedMarkdown != nil { translatedMarkdown = nil }
         if hasSummary { hasSummary = false }
@@ -627,7 +663,8 @@ public final class NativeArticleTranslator {
     ) async {
         let originals = MarkdownNativeParser.blocks(
             from: ArticleMarkdown.render(template.originalBlocks, baseURL: template.baseURL),
-            baseURL: template.baseURL, protectedBlocks: [:], separateLeadingParagraph: template.separateLeadingParagraph
+            baseURL: template.baseURL, protectedBlocks: [:], separateLeadingParagraph: template.separateLeadingParagraph,
+            coalesceParagraphs: false
         ) ?? template.originalBlocks
         let playback = MarkdownTranslationPlayback(originals: originals, baseURL: template.baseURL,
             isCurrent: { [weak self] in self?.generation == token && self?.isActive == true },
@@ -638,7 +675,7 @@ public final class NativeArticleTranslator {
             },
             emitDocument: { [weak self] blocks in
                 guard let self, generation == token else { return }
-                markdownBlocks = blocks
+                installMarkdown(blocks)
             })
         documentPlayback = playback
 
@@ -669,8 +706,7 @@ public final class NativeArticleTranslator {
             translatedMarkdown = hasSummary
                 ? ArticleMarkdown.render(Array(result.blocks.dropFirst()), baseURL: template.baseURL)
                 : result.markdown
-            markdownBlocks = result.blocks
-            overrides = [:]
+            installMarkdown(result.blocks)
             isTranslating = false
         } catch is CancellationError {
             return
@@ -859,14 +895,14 @@ public final class NativeArticleTranslator {
                         guard token == generation else { return }
                         var live = translatedInner
                         live[childIndex] = childBlock
-                        overrides[index] = .blockquote(live)
+                        state(at: index).update(.blockquote(live))
                     }
                 )
                 context = newContext
                 if let replacement {
                     translatedInner[childIndex] = replacement
                     guard token == generation else { return context }
-                    overrides[index] = .blockquote(translatedInner)
+                    state(at: index).update(.blockquote(translatedInner))
                 }
             }
             return context
@@ -885,7 +921,7 @@ public final class NativeArticleTranslator {
                             liveBlocks[childIndex] = childBlock
                             var liveItems = translatedItems
                             liveItems[itemIndex] = liveBlocks
-                            overrides[index] = .list(ordered: ordered, items: liveItems)
+                            state(at: index).update(.list(ordered: ordered, items: liveItems))
                         }
                     )
                     context = newContext
@@ -893,7 +929,7 @@ public final class NativeArticleTranslator {
                         translatedBlocks[childIndex] = replacement
                         translatedItems[itemIndex] = translatedBlocks
                         guard token == generation else { return context }
-                        overrides[index] = .list(ordered: ordered, items: translatedItems)
+                        state(at: index).update(.list(ordered: ordered, items: translatedItems))
                     }
                 }
             }
@@ -910,7 +946,7 @@ public final class NativeArticleTranslator {
                     cells[cellIndex].html = translatedCell
                     rows[rowIndex] = HTMLTable.Row(cells: cells)
                     guard token == generation else { return context }
-                    overrides[index] = .table(HTMLTable(rows: rows))
+                    state(at: index).update(.table(HTMLTable(rows: rows)))
                 }
             }
             return context
@@ -931,12 +967,12 @@ public final class NativeArticleTranslator {
     ) async -> String {
         let (settled, newContext) = await streamTextBlock(
             html, headingLevel: headingLevel, language: language, context: context, token: token,
-            emit: { [self] partial in overrides[index] = partial }
+            emit: { [self] partial in state(at: index).update(partial) }
         )
         guard token == generation else { return newContext }
         // Collapse to the final single block so the settled layout/import path is
         // identical to a non-streamed translation.
-        overrides[index] = settled
+        state(at: index).update(settled)
         return newContext
     }
 

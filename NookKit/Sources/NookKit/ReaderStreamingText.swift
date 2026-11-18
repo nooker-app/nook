@@ -208,7 +208,7 @@ struct ReaderStreamingText: View {
                     .accessibilityHidden(!sourceVisible)
                     .allowsHitTesting(sourceVisible)
                 Group {
-                    if complete && !animating {
+                    if !onScreen || complete && !animating {
                         if selectable { formattedText.textSelection(.enabled) }
                         else { formattedText.textSelection(.disabled) }
                     } else {
@@ -238,7 +238,14 @@ struct ReaderStreamingText: View {
         .onChange(of: typography) { _, _ in accept(text) }
         .onChange(of: baseSize) { _, _ in accept(text) }
         .onChange(of: reduced) { _, value in if value { animating = false } }
-        .onAppear { onScreen = true }
+        // Eager reader stacks keep off-screen paragraphs mounted, so appearance
+        // callbacks do not describe viewport visibility.
+        .onScrollVisibilityChange(threshold: 0.01) { visible in
+            onScreen = visible
+            let now = ProcessInfo.processInfo.systemUptime
+            animating = visible && !reduced && now < history.lastArrival + duration
+            rebuildStyled(at: now)
+        }
         .onDisappear { onScreen = false }
     }
 
@@ -287,6 +294,10 @@ struct ReaderStreamingText: View {
     }
 
     private func rebuildStyled(at now: Double) {
+        guard onScreen, !reduced else {
+            styled = Text(attributed)
+            return
+        }
         let spans = history.renderSpans(at: now, writing: writing, duration: duration)
         var result = Text("")
         var index = attributed.characters.startIndex

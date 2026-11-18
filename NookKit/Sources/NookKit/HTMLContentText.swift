@@ -131,15 +131,14 @@ public struct HTMLContentView: View {
         // of them — pays for an identity per block and nothing else.
         ScrollViewReader { proxy in
             HTMLBlockList(
-                blocks: translator?.completedMarkdownBlocks() ?? blocks,
+                blocks: blocks,
                 selectable: selectable,
                 anchorNamespace: anchorNamespace,
                 highlightedBlock: flashingBlock,
                 highlightedItem: flashingItem,
                 highlightStrength: flashStrength,
                 lazy: defersOffscreenBlocks,
-                // A completed Markdown document already contains every replacement.
-                translator: translator?.completedMarkdownBlocks() == nil ? translator : nil,
+                translator: translator,
                 typography: typography
             )
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,7 +152,7 @@ public struct HTMLContentView: View {
                 // the translated Markdown rather than from this HTML, so the indices
                 // the anchors were built from no longer describe what is on screen.
                 // Streaming is fine: an override replaces one block in place.
-                guard translator?.completedMarkdownBlocks() == nil else { return .handled }
+                guard translator?.markdownBodyRows == nil else { return .handled }
                 guard let target = anchorTarget(for: fragment, in: anchors),
                       target.block < blocks.count else {
                     // A link to an id this document does not contain. Doing nothing
@@ -345,50 +344,24 @@ struct HTMLBlockList: View {
         }
     }
 
-    /// The mark drawn behind the block a jump landed on.
-    ///
-    /// Tinted with the accent rather than a yellow of its own: this is the reader's
-    /// own colour saying "this one", and a highlighter yellow would read as content
-    /// the writer marked up. Inset slightly wider than the text so the block looks
-    /// wrapped rather than underlaid.
-    @ViewBuilder
-    private func highlight(for index: Int) -> some View {
-        // Present for the whole landing rather than only while visible: keying the
-        // `if` on the strength inserts and removes the shape instead of fading it,
-        // which is a pop in and a cut out with nothing in between.
-        //
-        // Skipped when the landing named an item: the item draws its own mark, and
-        // both would tint the same pixels twice.
-        if highlightedBlock == index, highlightedItem == nil {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.accentColor.opacity(0.16 * highlightStrength))
-                .padding(.horizontal, -8)
-                .padding(.vertical, -4)
-                .allowsHitTesting(false)
-        }
-    }
-
     @ViewBuilder
     private var rows: some View {
-        ForEach(blocks.indices, id: \.self) { index in
-            let block = displayedBlock(at: index)
-            let previous = index > blocks.startIndex ? displayedBlock(at: index - 1) : nil
-            let row = blockView(block, at: index)
-                .padding(.top, HTMLBlockSpacing.gap(
-                    from: previous,
-                    to: block,
-                    compact: compactSpacing,
-                    typography: typography
-                ))
-                .background(highlight(for: index))
-            // Identity only where an anchor can point: the top-level article list.
-            // Applied unconditionally there rather than only to blocks that own an
-            // id, because a LazyVStack can only scroll to a view it has an identity
-            // for, and the ids are known to the parse, not here.
-            //
-            // The modifier itself is conditional, not its argument. `.id(nil)` is
-            // still an explicit identity, and giving every nested row the same one
-            // is the opposite of leaving them alone.
+        let active = translator?.isActive == true ? translator : nil
+        let translatedRows = active?.markdownBodyRows
+        let count = translatedRows?.count ?? blocks.count
+        ForEach(0..<count, id: \.self) { index in
+            let row = HTMLBlockRow(
+                original: translatedRows == nil ? blocks[index] : nil,
+                previousOriginal: translatedRows == nil && index > 0 ? blocks[index - 1] : nil,
+                state: translatedRows?[index] ?? active?.bodyState(at: index),
+                previousState: index > 0 ? (translatedRows?[index - 1] ?? active?.bodyState(at: index - 1)) : nil,
+                selectable: selectable,
+                typography: typography,
+                compactSpacing: compactSpacing,
+                highlighted: highlightedBlock == index,
+                highlightedItem: highlightedBlock == index ? highlightedItem : nil,
+                highlightStrength: highlightStrength
+            )
             if let anchorNamespace {
                 row.id(anchorID(namespace: anchorNamespace, index: index))
             } else {
@@ -396,13 +369,46 @@ struct HTMLBlockList: View {
             }
         }
     }
+}
 
-    private func displayedBlock(at index: Int) -> HTMLContentBlock {
-        translator?.translatedBlock(at: index) ?? blocks[index]
+/// Read paragraph state in a leaf view, never in the document's ForEach closure.
+/// Streaming a glyph then updates this row (and its neighbour's spacing), not
+/// every text, image, table, and selection region in the article.
+private struct HTMLBlockRow: View {
+    let original: HTMLContentBlock?
+    let previousOriginal: HTMLContentBlock?
+    let state: NativeTranslationBlock?
+    let previousState: NativeTranslationBlock?
+    let selectable: Bool
+    let typography: ReaderTypography
+    let compactSpacing: Bool
+    let highlighted: Bool
+    let highlightedItem: Int?
+    let highlightStrength: Double
+
+    var body: some View {
+        if let block = state?.block ?? original {
+            blockView(block)
+                .padding(.top, HTMLBlockSpacing.gap(
+                    from: previousState?.block ?? previousOriginal,
+                    to: block,
+                    compact: compactSpacing,
+                    typography: typography
+                ))
+                .background {
+                    if highlighted, highlightedItem == nil {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.16 * highlightStrength))
+                            .padding(.horizontal, -8)
+                            .padding(.vertical, -4)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
     }
 
     @ViewBuilder
-    private func blockView(_ block: HTMLContentBlock, at index: Int) -> some View {
+    private func blockView(_ block: HTMLContentBlock) -> some View {
         switch block {
         case .text(let html):
             HTMLContentText(html: html, selectable: selectable, typography: typography)
@@ -426,7 +432,7 @@ struct HTMLBlockList: View {
                 typography: typography,
                 // Only the block a jump landed on passes an item down, so a nested
                 // list inside a quote never lights up for an id it does not hold.
-                highlightedItem: highlightedBlock == index ? highlightedItem : nil,
+                highlightedItem: highlightedItem,
                 highlightStrength: highlightStrength
             )
         case .image(let media):

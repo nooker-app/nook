@@ -48,7 +48,7 @@ enum GeminiMarkdownArticleTranslator {
                from: cached.markdown,
                baseURL: template.baseURL,
                protectedBlocks: [:],
-               separateLeadingParagraph: template.separateLeadingParagraph
+               separateLeadingParagraph: template.separateLeadingParagraph, coalesceParagraphs: false
            ) {
             return Result(
                 title: cached.translatedTitle,
@@ -118,7 +118,7 @@ enum GeminiMarkdownArticleTranslator {
                            from: projection.bodyMarkdown,
                            baseURL: template.baseURL,
                            protectedBlocks: [:],
-                           separateLeadingParagraph: template.separateLeadingParagraph
+                           separateLeadingParagraph: template.separateLeadingParagraph, coalesceParagraphs: false
                        ) {
                         // Network consumption, cumulative-string handling, and
                         // Markdown parsing all stay off the main actor. The UI
@@ -216,7 +216,7 @@ enum GeminiMarkdownArticleTranslator {
             from: split.bodyMarkdown,
             baseURL: baseURL,
             protectedBlocks: [:],
-            separateLeadingParagraph: separateLeadingParagraph
+            separateLeadingParagraph: separateLeadingParagraph, coalesceParagraphs: false
         )
         else { return nil }
 
