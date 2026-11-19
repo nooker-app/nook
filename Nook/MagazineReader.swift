@@ -64,6 +64,7 @@ struct MagazineRecommendationFeedbackButton: View {
         } label: {
             Label(canUndo ? "Undo" : (excluded ? "Preference saved" : "Not my taste"),
                   systemImage: canUndo ? "arrow.uturn.backward" : (excluded ? "checkmark" : "hand.thumbsdown"))
+                .labelStyle(.iconOnly)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(MagazineGlassButtonStyle())
