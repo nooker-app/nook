@@ -17,6 +17,7 @@ struct MagazineView: View {
     @State private var recommendationWindow = 120
     @AppStorage("magazineUnreadRecommendationOrder") private var prefersRecommendationOrder = true
     @State private var pendingRecommendation: MagazineRecommendationController.Dismissal?
+    @State private var pendingDisinterest: [MagazineRecommendationController.DisinterestUndo] = []
     @State private var libraryScope: String?
     @State private var libraryFolder: String?
     @State private var libraryPosition = ScrollPosition(edge: .top)
@@ -58,7 +59,7 @@ struct MagazineView: View {
         }
     }
 
-    var body: some View {
+    private var presentedWorkspace: some View {
         ZStack {
             workspace
                 .allowsHitTesting(opened == nil && !store.isBrowserPresented)
@@ -170,6 +171,10 @@ struct MagazineView: View {
                 set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
         } message: { Text(store.errorMessage ?? "") }
+    }
+
+    var body: some View {
+        presentedWorkspace
         .task {
             plus.syncFolder = { ReaderStore.shared.syncFolderURL }
             plus.loadDrafts()
@@ -201,7 +206,9 @@ struct MagazineView: View {
         .onChange(of: recommendationScope) { _, _ in
             scrollPosition.scrollTo(edge: .top)
         }
+        .onChange(of: store.syncFolderURL?.path) { _, _ in pendingDisinterest = [] }
         .onChange(of: recommendationReset) { _, _ in
+            pendingDisinterest = []
             pendingRecommendation = nil
             recommendations.reloadAfterReset()
         }
@@ -264,6 +271,9 @@ struct MagazineView: View {
                 pendingRecommendation = nil
             }
         }
+        .task(id: pendingDisinterest.last?.id) {
+            await expireDisinterestUndo()
+        }
         .task(id: readingTaskID) {
             guard recommendationsEnabled, store.isForegroundActive, let id = opened else { return }
             // ForegroundEngagementPolicy accounts for reader-window focus,
@@ -274,6 +284,13 @@ struct MagazineView: View {
             }
         }
         .focusedSceneValue(\.readerCommandActions, commands)
+    }
+
+    private func expireDisinterestUndo() async {
+        guard let last = pendingDisinterest.last else { return }
+        do { try await Task.sleep(for: .seconds(max(0, last.deadline.timeIntervalSinceNow))) } catch { return }
+        guard !Task.isCancelled, pendingDisinterest.last?.id == last.id else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { pendingDisinterest = [] }
     }
 
     private var recommendationTaskID: String {
@@ -395,7 +412,7 @@ struct MagazineView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 48).padding(.top, 34).padding(.bottom, 96)
+                .padding(.horizontal, 48).padding(.top, 34).padding(.bottom, 140)
                 .frame(maxWidth: 1280)
                 .frame(maxWidth: .infinity)
             }
@@ -403,14 +420,20 @@ struct MagazineView: View {
             .onScrollPhaseChange { _, phase in titleTranslator.setScrolling(phase != .idle) }
             .onDisappear { titleTranslator.setScrolling(false) }
             .overlay(alignment: .bottom) {
-                if !collectionBarVisible && opened == nil && libraryScope == nil {
-                    collectionTabs
-                        .padding(7)
-                        .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
-                        .shadow(color: .black.opacity(0.16), radius: 20, y: 6)
-                        .padding(.bottom, 20)
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                VStack(spacing: 10) {
+                    if !pendingDisinterest.isEmpty && opened == nil {
+                        disinterestUndoNotice
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                    }
+                    if !collectionBarVisible && opened == nil && libraryScope == nil {
+                        collectionTabs
+                            .padding(7)
+                            .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
+                            .shadow(color: .black.opacity(0.16), radius: 20, y: 6)
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
+                .padding(.horizontal, 20).padding(.bottom, 20)
             }
             .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.36, bounce: 0.12), value: collectionBarVisible)
         }
@@ -595,7 +618,7 @@ struct MagazineView: View {
         guard isRecommendationList else { return store.listWindow.rows }
         guard rankedScope == recommendationScope else { return [] }
         return rankedRecommendations.prefix(recommendationWindow).compactMap { pick in
-            guard store.listWindow.contains(pick.articleID),
+            guard !recommendations.isNotInterested(pick.articleID), store.listWindow.contains(pick.articleID),
                   let article = store.listedArticle(withID: pick.articleID), !article.isRead else { return nil }
             return ArticleRowModel(article, feedDisplayTitle: store.feed(for: article.feedID)?.displayTitle,
                                    isSavedOffline: store.isOfflineSaved(article.id))
@@ -631,7 +654,8 @@ struct MagazineView: View {
                                 : Text("Read and star stories to make future picks more personal."))
                     }
                     MagazineArticleHeading(article: article, feedTitle: row.feedDisplayTitle ?? "",
-                                           namespace: hero, expanded: false, lead: lead, matched: opened != row.id)
+                                           namespace: hero, expanded: false, lead: lead, matched: opened != row.id,
+                                           trailingControlSpace: isRecommendationList && !lead ? 38 : 0)
                     MagazineCategoryLabels(store.categories(forArticle: article))
                     MagazineTranslatedSummary(id: article.id, summary: article.summary, size: lead ? 15 : 13)
                         .foregroundStyle(.secondary)
@@ -648,6 +672,9 @@ struct MagazineView: View {
                         Text("·")
                         ArticleReadingTimeLabel(article: article, viewportBound: true)
                         Spacer()
+                        if recommendations.isNotInterested(article.id) {
+                            Image(systemName: "hand.thumbsdown").help("Excluded from recommendations")
+                        }
                         if article.isStarred { Image(systemName: "star.fill").foregroundStyle(.orange) }
                         Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .medium))
                     }.font(.system(size: 11)).foregroundStyle(.secondary)
@@ -668,13 +695,32 @@ struct MagazineView: View {
                 if lead && opened == nil {
                     recommendationAction(row.id)
                         .padding(22)
+                } else if isRecommendationList && opened == nil {
+                    Button { markNotInterested(row.id) } label: {
+                        Image(systemName: "hand.thumbsdown")
+                    }
+                    .buttonStyle(MagazineGlassButtonStyle())
+                    .accessibilityLabel("Not interested")
+                    .help("Remove this recommendation without marking it read. Similar topics will be recommended less.")
+                    .padding(24)
                 }
             }
             .magazineReveal(paused: opened != nil)
             .magazinePreviewDemand(active: opened == nil && store.isForegroundActive)
             .focused($focusedArticle, equals: row.id)
             .id(row.id)
-            .contextMenu { ArticleRowMenu(store: store, id: article.id) }
+            .contextMenu {
+                if recommendations.isNotInterested(article.id) {
+                    Button("Include in recommendations again", systemImage: "arrow.uturn.backward") {
+                        recommendations.restoreRecommendation(article.id)
+                    }
+                    Divider()
+                } else if isRecommendationList {
+                    Button("Not interested", systemImage: "hand.thumbsdown") { markNotInterested(article.id) }
+                    Divider()
+                }
+                ArticleRowMenu(store: store, id: article.id)
+            }
             .task {
                 guard opened == nil else { return }
                 if isRecommendationList {
@@ -846,6 +892,38 @@ struct MagazineView: View {
         scrollPosition.scrollTo(edge: .top)
     }
 
+    private func markNotInterested(_ articleID: Article.ID) {
+        guard opened == nil else { return }
+        recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            pendingDisinterest.append(recommendations.markNotInterested(articleID))
+        }
+    }
+
+    private var disinterestUndoNotice: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("\(pendingDisinterest.count) recommendations excluded")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Still unread. You can find them in Newest.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                    for undo in pendingDisinterest.reversed() { recommendations.undoDisinterest(undo) }
+                    pendingDisinterest = []
+                }
+            } label: {
+                Label("Undo", systemImage: "arrow.uturn.backward")
+            }
+            .buttonStyle(MagazineGlassButtonStyle())
+            .help("Undo this recommendation change")
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: RoundedRectangle(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.16), radius: 16, y: 5)
+    }
+
     @ViewBuilder private func recommendationAction(_ articleID: Article.ID) -> some View {
         if let pending = pendingRecommendation, pending.articleID == articleID {
             Button {
@@ -918,6 +996,7 @@ struct MagazineArticleHeading: View {
     var translatedTitle: String?
     var titleTranslating = false
     var openInApp: (() -> Void)?
+    var trailingControlSpace: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -932,6 +1011,7 @@ struct MagazineArticleHeading: View {
                     MagazineAuthorLine(authors: article.authors, expanded: expanded)
                 }
             }
+            .padding(.trailing, trailingControlSpace)
             Group {
                 if expanded {
                     ReaderArticleLink(url: article.url, openInApp: openInApp) { _ in

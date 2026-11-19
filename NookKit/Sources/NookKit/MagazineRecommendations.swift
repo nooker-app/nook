@@ -16,6 +16,15 @@ struct MagazineReadingHistory: Codable, Sendable {
     /// Deliberate choices from a recommendation surface. A repeated click on
     /// the same story refreshes its timestamp instead of multiplying its vote.
     var selections: [Article.ID: Date]?
+    /// Explicit disinterest is durable. It never changes the article's read flag
+    /// and, unlike a temporary "another story" skip, does not expire into view.
+    var notInterested: [Article.ID: Date]?
+
+    func disinterestWeight(for article: Article, now: Date) -> Double {
+        guard let date = notInterested?[article.id] else { return 0 }
+        let age = max(0, now.timeIntervalSince(date))
+        return age < 90 * 86400 ? exp(-age / (30 * 86400)) : 0
+    }
 
     mutating func select(_ id: Article.ID, now: Date) {
         var recent = (selections ?? [:]).filter { now.timeIntervalSince($0.value) < 90 * 86400 }
@@ -50,6 +59,7 @@ struct MagazineReadingHistory: Codable, Sendable {
     }
 
     func weight(for article: Article, now: Date) -> Double {
+        guard notInterested?[article.id] == nil else { return 0 }
         let reading = entries[article.id].map { entry in
             entry.seconds >= 10
                 ? min(2, entry.seconds / 45) * exp(-max(0, now.timeIntervalSince(entry.lastRead)) / (30 * 86400))
@@ -93,7 +103,9 @@ actor MagazineRecommendationRanker {
                 now: Date, useSemantics: Bool = true) -> [MagazineRecommendation] {
         // Membership comes from ReaderStore's complete filtered result, not its
         // first rendering window. Prefer unread articles within that scope.
-        let eligible = candidates.filter { !history.isDismissed($0.id, now: now) }
+        let eligible = candidates.filter {
+            history.notInterested?[$0.id] == nil && !history.isDismissed($0.id, now: now)
+        }
         let unread = eligible.filter { !$0.isRead }
         // Every eligible unread story participates, regardless of age or list
         // pagination. Limit rendering and semantic inference, never membership.
@@ -105,11 +117,17 @@ actor MagazineRecommendationRanker {
         }.sorted { lhs, rhs in
             lhs.1 == rhs.1 ? newer(lhs.0, rhs.0) : lhs.1 > rhs.1
         }.prefix(120)
-        guard !evidence.isEmpty else {
+        let negativeEvidence = library.compactMap { article -> (Article, Double)? in
+            let weight = history.disinterestWeight(for: article, now: now)
+            return weight > 0 ? (article, weight) : nil
+        }.sorted { lhs, rhs in
+            lhs.1 == rhs.1 ? newer(lhs.0, rhs.0) : lhs.1 > rhs.1
+        }.prefix(120)
+        guard !evidence.isEmpty || !negativeEvidence.isEmpty else {
             return pool.map { MagazineRecommendation(articleID: $0.id, personalized: false) }
         }
 
-        let documents = pool + evidence.map(\.0)
+        let documents = pool + evidence.map(\.0) + negativeEvidence.map(\.0)
         var frequency: [String: Double] = [:]
         var terms: [Article.ID: Set<String>] = [:]
         for article in documents {
@@ -138,10 +156,20 @@ actor MagazineRecommendationRanker {
         }
         let norm = sqrt(profile.values.reduce(0) { $0 + $1 * $1 })
         if norm > 0 { profile = profile.mapValues { $0 / norm } }
+        var aversions: [String: Double] = [:]
+        let negativeTotal = max(1, negativeEvidence.reduce(0) { $0 + $1.1 })
+        for (article, weight) in negativeEvidence {
+            for (term, value) in vector(article) {
+                aversions[term, default: 0] += value * weight / negativeTotal
+            }
+        }
         var ranked = pool.map { article in
-            let affinity = vector(article).reduce(0) { $0 + $1.value * (profile[$1.key] ?? 0) }
-            let source = (feeds[article.feedID] ?? 0) / total
-            let category = article.categories.map { (categories[$0] ?? 0) / total }.max() ?? 0
+            let content = vector(article)
+            let affinity = content.reduce(0) { $0 + $1.value * (profile[$1.key] ?? 0) }
+            // A weak topic signal, never a blanket penalty on a feed or author.
+            let disinterest = content.reduce(0) { $0 + $1.value * (aversions[$1.key] ?? 0) }
+            let source = (feeds[article.feedID] ?? 0) / (total > 0 ? total : 1)
+            let category = article.categories.map { (categories[$0] ?? 0) / (total > 0 ? total : 1) }.max() ?? 0
             let freshness = exp(-max(0, now.timeIntervalSince(article.publishedAt)) / (7 * 86400))
             // A small novelty bonus gives unfamiliar publications a way in.
             let discovery = source == 0 ? 0.04 : 0
@@ -149,7 +177,7 @@ actor MagazineRecommendationRanker {
                 $0.seconds >= 10 ? 0.28 * exp(-max(0, now.timeIntervalSince($0.lastRead)) / 86400) : 0
             } ?? 0
             return Scored(article: article, score: 0.48 * affinity + 0.16 * source
-                + 0.10 * category + 0.26 * freshness + discovery - seen)
+                + 0.10 * category + 0.26 * freshness + discovery - seen - 0.20 * disinterest)
         }.sorted(by: higher)
 
         if useSemantics {
@@ -260,6 +288,40 @@ public final class MagazineRecommendationController {
         fileprivate let previous: Date?
     }
 
+    public struct DisinterestUndo: Identifiable {
+        public let id = UUID()
+        public let articleID: Article.ID
+        public let deadline: Date
+        fileprivate let scope: String
+        fileprivate let timestamp: Date
+        fileprivate let previous: Date?
+    }
+
+    public func isNotInterested(_ articleID: Article.ID) -> Bool {
+        history.notInterested?[articleID] != nil
+    }
+
+    public func markNotInterested(_ articleID: Article.ID, now: Date = .now) -> DisinterestUndo {
+        let undo = DisinterestUndo(articleID: articleID, deadline: now.addingTimeInterval(5),
+                                  scope: scope, timestamp: now, previous: history.notInterested?[articleID])
+        if history.notInterested == nil { history.notInterested = [:] }
+        history.notInterested?[articleID] = now
+        saveFeedback()
+        return undo
+    }
+
+    @discardableResult public func undoDisinterest(_ undo: DisinterestUndo) -> Bool {
+        guard undo.scope == scope, history.notInterested?[undo.articleID] == undo.timestamp else { return false }
+        history.notInterested?[undo.articleID] = undo.previous
+        saveFeedback()
+        return true
+    }
+
+    public func restoreRecommendation(_ articleID: Article.ID) {
+        history.notInterested?[articleID] = nil
+        saveFeedback()
+    }
+
     /// "Another story" is feedback about this pick, not dislike of its author
     /// or topic. Apply it immediately, without changing read/starred/library data.
     public func dismissRecommendation(_ articleID: Article.ID, now: Date = .now) -> Dismissal {
@@ -280,6 +342,7 @@ public final class MagazineRecommendationController {
 
     public func restoreRecommendations() {
         history.dismissals = nil
+        history.notInterested = nil
         saveFeedback()
     }
 

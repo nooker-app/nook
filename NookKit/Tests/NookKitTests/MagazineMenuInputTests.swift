@@ -13,6 +13,66 @@ struct MagazineMenuInputTests {
         func updateNSView(_ view: NSView, context: Context) {}
     }
 
+    @Observable class ToolbarState {
+        var visible = false
+        var interactive = true
+    }
+
+    private struct ToolbarReader: View {
+        let state: ToolbarState
+        let target: NSView
+        let presentation: MagazineMenuPresentation
+
+        var body: some View {
+            ZStack {
+                ReaderInput(target: target)
+                MagazineMorphingMenu("Parser", systemImage: "text.viewfinder", height: 180, iconOnly: true) { _ in
+                    Text("Parser options")
+                }
+                // A nested child must not override its parent's hidden state.
+                .magazineMenuContainer(visible: true, interactive: true)
+                .magazineMenuContainer(visible: state.visible, interactive: state.interactive)
+            }
+            .frame(width: 640, height: 480)
+            .magazineMorphingMenus(presentation)
+        }
+    }
+
+    @Test("Lifted menu buttons inherit initial visibility and stop intercepting input when their toolbar hides or disables")
+    func toolbarVisibilityIsInherited() async throws {
+        _ = NSApplication.shared
+        let target = NSView()
+        let state = ToolbarState()
+        let host = NSHostingView(rootView: ToolbarReader(state: state, target: target, presentation: .init()))
+        host.frame = NSRect(x: 0, y: 0, width: 640, height: 480)
+        let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        let center = NSPoint(x: 320, y: 240)
+        func settle() async throws {
+            host.layoutSubtreeIfNeeded()
+            _ = host.fittingSize
+            try await Task.sleep(for: .milliseconds(150))
+            host.layoutSubtreeIfNeeded()
+        }
+
+        try await settle()
+        #expect(host.hitTest(center) === target)
+        state.visible = true
+        try await settle()
+        #expect(host.hitTest(center) !== target)
+        state.interactive = false
+        try await settle()
+        #expect(host.hitTest(center) === target)
+        state.interactive = true
+        try await settle()
+        #expect(host.hitTest(center) !== target)
+        state.visible = false
+        try await settle()
+        #expect(host.hitTest(center) === target)
+    }
+
     @Test("Closed menus pass pointer input through to the reader at the top, body and bottom", arguments: [false, true])
     func closedMenusDoNotCoverReader(iconOnly: Bool) async throws {
         _ = NSApplication.shared

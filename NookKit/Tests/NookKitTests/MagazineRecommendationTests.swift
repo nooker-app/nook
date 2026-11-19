@@ -212,6 +212,89 @@ struct MagazineRecommendationTests {
                                                    personalized: true).isEmpty)
     }
 
+    @Test("Disinterest excludes the exact story durably and softly lowers related topics without blocking its feed")
+    func disinterestRanking() async throws {
+        var rejected = article("rejected", title: "Football stadium championship league results", feed: "mixed")
+        rejected.isStarred = true
+        let related = article("related", title: rejected.title, feed: "sports")
+        let unrelated = article("unrelated", title: "Swift native macOS architecture", feed: "mixed", age: 60)
+        var history = MagazineReadingHistory()
+        history.notInterested = [rejected.id: now]
+        #expect(history.weight(for: rejected, now: now) == 0)
+        let ranker = MagazineRecommendationRanker()
+        let result = await ranker.ranked(candidates: [rejected, related, unrelated], library: [rejected],
+            history: history, now: now, useSemantics: false)
+        #expect(result.map(\.articleID) == [unrelated.id, related.id])
+        #expect(result.allSatisfy { $0.personalized })
+        #expect(history.disinterestWeight(for: rejected, now: now.addingTimeInterval(60 * 86400))
+                < history.disinterestWeight(for: rejected, now: now))
+        let muchLater = await ranker.ranked(candidates: [rejected, related, unrelated], library: [rejected],
+            history: history, now: now.addingTimeInterval(365 * 86400), useSemantics: false)
+        #expect(!muchLater.contains { $0.articleID == rejected.id })
+        #expect(muchLater.count == 2)
+        let restored = try JSONDecoder().decode(MagazineReadingHistory.self, from: JSONEncoder().encode(history))
+        #expect(restored.notInterested?[rejected.id] == now)
+        let legacy = try JSONDecoder().decode(MagazineReadingHistory.self, from: Data(#"{"entries":{}}"#.utf8))
+        #expect(legacy.notInterested == nil)
+    }
+
+    @Test("Exclusions persist per library even with personalization off; undo and per-story restoration recover picks")
+    @MainActor func disinterestPersistenceAndUndo() async throws {
+        let suite = "RecommendationDisinterest.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let first = article("first", title: "Swift native macOS")
+        let second = article("second", title: "Garden", age: 60)
+        let writer = MagazineRecommendationController(defaults: defaults)
+        writer.selectLibrary("one")
+        let undo = writer.markNotInterested(first.id, now: now)
+        #expect(undo.deadline == now.addingTimeInterval(5))
+        #expect(await writer.rankedRecommendations(candidates: [first, second], library: [],
+            personalized: false).map(\.articleID) == [second.id])
+        let reader = MagazineRecommendationController(defaults: defaults)
+        reader.selectLibrary("one")
+        #expect(reader.isNotInterested(first.id))
+        reader.selectLibrary("two")
+        #expect(!reader.isNotInterested(first.id))
+        #expect(!reader.undoDisinterest(undo))
+        writer.selectLibrary("two")
+        #expect(!writer.undoDisinterest(undo))
+        writer.selectLibrary("one")
+        #expect(writer.undoDisinterest(undo))
+        #expect(await writer.rankedRecommendations(candidates: [first, second], library: [],
+            personalized: false).map(\.articleID) == [first.id, second.id])
+        let stale = writer.markNotInterested(first.id)
+        writer.restoreRecommendation(first.id)
+        #expect(!writer.undoDisinterest(stale))
+        #expect(!writer.isNotInterested(first.id))
+    }
+
+    @Test("Rapid exclusions can be undone together; clearing recommendations invalidates outstanding receipts")
+    @MainActor func disinterestBatchAndReset() throws {
+        let suite = "RecommendationDisinterestBatch.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let controller = MagazineRecommendationController(defaults: defaults)
+        controller.selectLibrary("one")
+        let first = controller.markNotInterested("a", now: now)
+        let second = controller.markNotInterested("b", now: now.addingTimeInterval(1))
+        let repeatChoice = controller.markNotInterested("a", now: now.addingTimeInterval(2))
+        #expect(!controller.undoDisinterest(first))
+        #expect(controller.undoDisinterest(repeatChoice))
+        #expect(controller.undoDisinterest(second))
+        #expect(controller.undoDisinterest(first))
+        #expect(!controller.isNotInterested("a"))
+        #expect(!controller.isNotInterested("b"))
+        let stale = controller.markNotInterested("a")
+        controller.restoreRecommendations()
+        #expect(!controller.isNotInterested("a"))
+        #expect(!controller.undoDisinterest(stale))
+        _ = controller.markNotInterested("b")
+        MagazineRecommendationController.reset(defaults: defaults)
+        controller.reloadAfterReset()
+        #expect(!controller.isNotInterested("b"))
+    }
+
     @Test("A large library ranks off the main actor without excluding candidates")
     func largeLibrary() async {
         let articles = (0..<6000).map {

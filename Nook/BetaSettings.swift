@@ -198,14 +198,14 @@ private struct MagazineRecommendationSettings: View {
     var body: some View {
         Section("Your magazine") {
             Toggle("Personalize recommendations", isOn: $enabled)
-            Text("Nook ranks every unread story on this Mac using your choices, reading time, starred stories, and topics. Your interests stay on this device. Marking a feed as read does not train recommendations.")
+            Text("Nook ranks every unread story on this Mac using your choices, reading time, stars, and Not interested feedback. Your interests stay on this device. Marking a feed as read does not train recommendations.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Reset reading interests…") { confirmingReset = true }
                 .confirmationDialog("Reset reading interests?", isPresented: $confirmingReset) {
                     Button("Reset reading interests", role: .destructive) { MagazineRecommendationController.reset() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("This resets recommendation interests. Recently Read, your articles, and stars stay unchanged; starred stories still help guide recommendations.")
+                    Text("This resets recommendation interests and excluded recommendations. Recently Read, your articles, and stars stay unchanged; starred stories still help guide recommendations.")
                 }
         }
     }

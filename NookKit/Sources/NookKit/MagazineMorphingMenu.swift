@@ -79,8 +79,46 @@ private struct MagazineMenuAnchor: Identifiable {
     let icon: String
     let iconOnly: Bool
     let enabled: Bool
+    let container: MagazineMenuContainerState
     let panelSize: CGSize
     let content: AnyView
+
+    var canPresent: Bool { enabled && container.visible && container.interactive }
+}
+
+private struct MagazineMenuContainerState: Equatable {
+    var visible = true
+    var interactive = true
+    var animation: Animation?
+}
+
+private struct MagazineMenuContainerKey: EnvironmentKey {
+    static let defaultValue = MagazineMenuContainerState()
+}
+
+private extension EnvironmentValues {
+    var magazineMenuContainer: MagazineMenuContainerState {
+        get { self[MagazineMenuContainerKey.self] }
+        set { self[MagazineMenuContainerKey.self] = newValue }
+    }
+}
+
+private struct MagazineMenuContainer: ViewModifier {
+    let visible: Bool
+    let interactive: Bool
+    let animation: Animation?
+    @Environment(\.magazineMenuContainer) private var parent
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.magazineMenuContainer, MagazineMenuContainerState(
+                visible: parent.visible && visible, interactive: parent.interactive && interactive,
+                animation: animation ?? parent.animation))
+            .opacity(visible ? 1 : 0)
+            .allowsHitTesting(visible && interactive)
+            .accessibilityHidden(!visible || !interactive)
+            .animation(animation, value: visible)
+    }
 }
 
 private struct MagazineMenuAnchors: PreferenceKey {
@@ -101,6 +139,7 @@ public struct MagazineMorphingMenu<Content: View>: View {
     @State private var id = UUID()
     @Environment(MagazineMenuPresentation.self) private var presentation
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.magazineMenuContainer) private var container
 
     public init(
         _ title: String, systemImage: String, width: CGFloat = 320, height: CGFloat, iconOnly: Bool = false,
@@ -125,7 +164,7 @@ public struct MagazineMorphingMenu<Content: View>: View {
         .anchorPreference(key: MagazineMenuAnchors.self, value: .bounds) { bounds in
             [MagazineMenuAnchor(
                 id: id, bounds: bounds, title: title, icon: icon, iconOnly: iconOnly, enabled: enabled,
-                panelSize: panelSize,
+                container: container, panelSize: panelSize,
                 content: AnyView(content(MagazineMenuDismissAction { delay in
                     presentation.dismiss(id, after: delay)
                 }))
@@ -135,6 +174,13 @@ public struct MagazineMorphingMenu<Content: View>: View {
 }
 
 public extension View {
+    /// Keeps a toolbar and its lifted menu surfaces in the same visibility and
+    /// input state. Ordinary opacity/hit-testing modifiers cannot reach the host
+    /// overlay; environment values propagate through nested toolbar children.
+    func magazineMenuContainer(visible: Bool, interactive: Bool, animation: Animation? = nil) -> some View {
+        modifier(MagazineMenuContainer(visible: visible, interactive: interactive, animation: animation))
+    }
+
     /// Place outside the reader's ScrollView, inside its navigation chrome.
     func magazineMorphingMenus(_ presentation: MagazineMenuPresentation) -> some View {
         modifier(MagazineMenuHost(presentation: presentation))
@@ -165,8 +211,10 @@ private struct MagazineMenuHost: ViewModifier {
                                 presentation: presentation, focusedHeader: $focusedHeader
                             )
                             .zIndex(presentation.activeID == entry.id ? 2 : 0)
-                            .allowsHitTesting(!presentation.isPresented || presentation.activeID == entry.id)
-                            .accessibilityHidden(presentation.isPresented && presentation.activeID != entry.id)
+                            .opacity(entry.container.visible ? 1 : 0)
+                            .animation(entry.container.animation, value: entry.container.visible)
+                            .allowsHitTesting(entry.canPresent && (!presentation.isPresented || presentation.activeID == entry.id))
+                            .accessibilityHidden(!entry.canPresent || (presentation.isPresented && presentation.activeID != entry.id))
                         }
                     }
                     .clipped()
@@ -180,7 +228,7 @@ private struct MagazineMenuHost: ViewModifier {
                         return .handled
                     }
                     .onChange(of: geometry.size) { _, _ in presentation.reset() }
-                    .onChange(of: entries.map(\.id)) { _, ids in
+                    .onChange(of: entries.filter(\.canPresent).map(\.id)) { _, ids in
                         if let active = presentation.activeID, !ids.contains(active) { presentation.reset() }
                     }
                 }
@@ -255,8 +303,8 @@ private struct MagazineMenuSurface: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain).pointerStyle(entry.enabled ? .link : .default)
-            .disabled(!entry.enabled)
-            .focusable()
+            .disabled(!entry.canPresent)
+            .focusable(entry.canPresent)
             // The platform's rectangular focus ring lags the spring's bounds.
             // Keep focus for keyboard input without a second, detached surface.
             .focusEffectDisabled()

@@ -170,9 +170,11 @@ struct MagazineReaderDetail: View {
                     floatingReadingTools(article)
                         // Give the pull-to-next indicator the same bottom space
                         // without changing the scroll view's reserved inset.
-                        .opacity(contentReady && pull.edge != .bottom ? 1 : 0)
+                        .magazineMenuContainer(
+                            visible: contentReady && pull.edge != .bottom,
+                            interactive: contentReady && pull.edge == nil,
+                            animation: reduceMotion ? nil : .easeOut(duration: pull.edge == .bottom ? 0.15 : 0.25))
                         .offset(y: contentReady || reduceMotion ? 0 : 12)
-                        .allowsHitTesting(contentReady && pull.edge == nil)
                         .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: contentReady)
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: pull.edge == .bottom)
                 }
