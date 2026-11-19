@@ -20,6 +20,24 @@ private struct ReaderCloseShortcut: View {
     }
 }
 
+/// The same stored publication date shown in the article list and Classic
+/// reader, formatted with the app's language and the user's local time zone.
+struct MagazinePublicationDate: View {
+    let date: Date
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "calendar")
+                .accessibilityHidden(true)
+            Text("Published").fixedSize()
+            Text(date.localized(date: .abbreviated, time: .shortened))
+                .textSelection(.enabled)
+        }
+        .accessibilityElement(children: .combine)
+        .help(date.localized(date: .complete, time: .complete))
+    }
+}
+
 struct MagazineReaderDetail: View {
     @Bindable var store: ReaderStore
     let articleID: Article.ID
@@ -1003,6 +1021,8 @@ struct MagazineBrowserPanel: View {
                     Text(article.title).font(.system(size: 13, weight: .semibold))
                         .lineLimit(1).help(article.title)
                     Text(currentURL?.host() ?? article.url.host() ?? "")
+                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    MagazinePublicationDate(date: article.publishedAt)
                         .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

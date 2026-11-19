@@ -1030,6 +1030,10 @@ struct MagazineArticleHeading: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .modifier(MagazineMatch(id: "title-\(article.id)", namespace: namespace, enabled: matched, properties: .position))
                 .transition(.opacity)
+            if expanded {
+                MagazinePublicationDate(date: article.publishedAt)
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
             MagazineArticleThumbnail(article: article, height: expanded ? 240 : (lead ? 180 : 130), expanded: expanded, lead: lead)
                 .id("\(article.id)|\(article.url)")
                 .modifier(MagazineMatch(id: "image-\(article.id)", namespace: namespace, enabled: matched))
