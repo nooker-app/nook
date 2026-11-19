@@ -2307,9 +2307,58 @@ private struct ArticleListStatusBar: View {
     }
 }
 
+/// Modifier state belongs to each control so holding Command never invalidates
+/// the reader body or restarts its translation work. Resolve click-time flags too
+/// for rapid Command-clicks and keyboard activation between state updates.
+struct ReaderArticleLink<Label: View>: View {
+    let url: URL
+    var openInApp: (() -> Void)? = nil
+    @ViewBuilder var label: (Bool) -> Label
+    @State private var commandPressed = false
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Button {
+            let flags = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+            if commandPressed || flags.contains(.command) || openInApp == nil {
+                openURL(url)
+            } else {
+                openInApp?()
+            }
+        } label: {
+            label(commandPressed)
+        }
+        .onModifierKeysChanged(mask: .command) { _, keys in
+            commandPressed = keys.contains(.command)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+            commandPressed = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            commandPressed = NSEvent.modifierFlags.contains(.command)
+        }
+    }
+}
+
+/// Reserve both captions so the floating bar's other controls stay in place.
+struct ReaderArticleLinkLabel: View {
+    let title: LocalizedStringKey
+    let commandPressed: Bool
+
+    var body: some View {
+        Label {
+            ZStack {
+                Text(title).hidden().accessibilityHidden(true)
+                Text("Open in Browser").hidden().accessibilityHidden(true)
+                Text(commandPressed ? LocalizedStringKey("Open in Browser") : title)
+            }
+        } icon: { Image(systemName: "safari") }
+    }
+}
+
 /// Makes the large reader title read as an interactive control: it tints to
 /// the accent color and shows a pointer on hover, and dims while pressed.
-private struct ReaderTitleButtonStyle: ButtonStyle {
+struct ReaderTitleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         Title(configuration: configuration)
     }
@@ -2745,10 +2794,11 @@ private struct InAppBrowserPanel: View {
                     .help(isTranslationOn ? "Show Original Text" : "Translate")
                 }
 
-                Button { openURL(article.url) } label: {
-                    Image(systemName: "safari")
+                ReaderArticleLink(url: article.url) { commandPressed in
+                    Label(commandPressed ? "Open in Browser" : "Open Original", systemImage: "safari")
+                        .labelStyle(.iconOnly)
+                        .help(commandPressed ? "Open in Browser" : "Open Original")
                 }
-                .help("Open Original")
 
                 ShareLink(item: article.url) {
                     Image(systemName: "square.and.arrow.up")
@@ -3013,8 +3063,8 @@ private struct ReaderDetailView: View {
                 Divider()
 
                 HStack {
-                    Link(destination: article.url) {
-                        Label("Open Original", systemImage: "safari")
+                    ReaderArticleLink(url: article.url) { commandPressed in
+                        ReaderArticleLinkLabel(title: "Open Original", commandPressed: commandPressed)
                     }
 
                     ArticleShareMenu(
@@ -3414,15 +3464,11 @@ private struct ReaderDetailView: View {
             .font(.callout)
             .foregroundStyle(.secondary)
 
-            Button {
-                if NSEvent.modifierFlags.contains(.command) {
-                    openURL(article.url)
-                } else {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        store.presentBrowser(for: article)
-                    }
+            ReaderArticleLink(url: article.url, openInApp: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    store.presentBrowser(for: article)
                 }
-            } label: {
+            }) { _ in
                 ReaderTranslatedTitle(original: article.title,
                                       translated: translationActive(article) ? displayTitle(article) : nil,
                                       translating: session.translator(for: article.id)?.isTitleTranslating ?? false,

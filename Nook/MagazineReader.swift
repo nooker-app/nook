@@ -719,11 +719,13 @@ struct MagazineReaderDetail: View {
                 }
                 .disabled(session.isTranslating(for: article.id) && !translationActive(article))
             }
-            Button(
-                (store.feed(for: article.feedID)?.preferredViewMode ?? defaultBrowserMode) == .reader
-                    ? LocalizedStringKey("Open in Reader") : LocalizedStringKey("Open Original in App"),
-                systemImage: "safari"
-            ) { store.presentBrowser(for: article) }
+            ReaderArticleLink(url: article.url, openInApp: { store.presentBrowser(for: article) }) { commandPressed in
+                ReaderArticleLinkLabel(
+                    title: (store.feed(for: article.feedID)?.preferredViewMode ?? defaultBrowserMode) == .reader
+                        ? "Open in Reader" : "Open Original in App",
+                    commandPressed: commandPressed)
+            }
+            .help("Open in Reader — ⌘-click to open in browser")
 
             if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
                 MagazineParserMenu(store: store, article: article)
@@ -771,7 +773,8 @@ struct MagazineReaderDetail: View {
             MagazineArticleHeading(article: article, feedTitle: store.feed(for: article.feedID)?.displayTitle ?? "",
                                    namespace: heroNamespace, expanded: true,
                                    translatedTitle: translationActive(article) ? displayTitle(article) : nil,
-                                   titleTranslating: session.translator(for: article.id)?.isTitleTranslating ?? false)
+                                   titleTranslating: session.translator(for: article.id)?.isTitleTranslating ?? false,
+                                   openInApp: { store.presentBrowser(for: article) })
             if translationActive(article) {
                 Group {
                     if TranslationSettings.readerProvider() == .gemini {
@@ -1020,7 +1023,9 @@ struct MagazineBrowserPanel: View {
                                 Menu("Article Parser") { ReaderParserMenuItems(store: store, article: article, surface: .browser) }
                             }
                             if canTranslate { translationButton }
-                            Button("Open Original", systemImage: "safari") { openURL(currentURL ?? article.url) }
+                            ReaderArticleLink(url: currentURL ?? article.url) { commandPressed in
+                                ReaderArticleLinkLabel(title: "Open Original", commandPressed: commandPressed)
+                            }
                         } label: { Image(systemName: "ellipsis") }
                         .help("More reader actions").accessibilityLabel("More reader actions")
                     } else {
@@ -1036,7 +1041,12 @@ struct MagazineBrowserPanel: View {
                                 isTranslationOn.toggle()
                             }
                         }
-                        iconButton("Open Original", symbol: "safari") { openURL(currentURL ?? article.url) }
+                        ReaderArticleLink(url: currentURL ?? article.url) { commandPressed in
+                            Label(commandPressed ? "Open in Browser" : "Open Original", systemImage: "safari")
+                                .labelStyle(.iconOnly)
+                                .help(commandPressed ? "Open in Browser" : "Open Original")
+                        }
+                        .buttonStyle(MagazineGlassButtonStyle())
                     }
                     ShareLink(item: currentURL ?? article.url) { Image(systemName: "square.and.arrow.up") }
                         .buttonStyle(MagazineGlassButtonStyle())

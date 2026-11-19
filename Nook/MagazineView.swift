@@ -917,6 +917,7 @@ struct MagazineArticleHeading: View {
     var matched = true
     var translatedTitle: String?
     var titleTranslating = false
+    var openInApp: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -933,9 +934,14 @@ struct MagazineArticleHeading: View {
             }
             Group {
                 if expanded {
-                    ReaderTranslatedTitle(original: article.title, translated: translatedTitle,
-                                          translating: titleTranslating, size: 36)
-                        .id(article.id)
+                    ReaderArticleLink(url: article.url, openInApp: openInApp) { _ in
+                        ReaderTranslatedTitle(original: article.title, translated: translatedTitle,
+                                              translating: titleTranslating, size: 36)
+                            .id(article.id)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(ReaderTitleButtonStyle())
+                    .help("Open in Reader — ⌘-click to open in browser")
                 } else {
                     MagazineTranslatedHeadline(id: article.id, title: article.title, size: lead ? 30 : 23)
                         .id("\(article.id)|\(article.title)")
