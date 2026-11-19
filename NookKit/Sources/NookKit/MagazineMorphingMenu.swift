@@ -77,6 +77,7 @@ private struct MagazineMenuAnchor: Identifiable {
     let bounds: Anchor<CGRect>
     let title: String
     let icon: String
+    let iconOnly: Bool
     let enabled: Bool
     let panelSize: CGSize
     let content: AnyView
@@ -94,6 +95,7 @@ private struct MagazineMenuAnchors: PreferenceKey {
 public struct MagazineMorphingMenu<Content: View>: View {
     private let title: String
     private let icon: String
+    private let iconOnly: Bool
     private let panelSize: CGSize
     private let content: (MagazineMenuDismissAction) -> Content
     @State private var id = UUID()
@@ -101,11 +103,12 @@ public struct MagazineMorphingMenu<Content: View>: View {
     @Environment(\.isEnabled) private var enabled
 
     public init(
-        _ title: String, systemImage: String, width: CGFloat = 320, height: CGFloat,
+        _ title: String, systemImage: String, width: CGFloat = 320, height: CGFloat, iconOnly: Bool = false,
         @ViewBuilder content: @escaping (MagazineMenuDismissAction) -> Content
     ) {
         self.title = title
         icon = systemImage
+        self.iconOnly = iconOnly
         panelSize = CGSize(width: width, height: height)
         self.content = content
     }
@@ -113,7 +116,7 @@ public struct MagazineMorphingMenu<Content: View>: View {
     public var body: some View {
         HStack(spacing: 7) {
             Image(systemName: icon).frame(width: 17)
-            Text(title)
+            if !iconOnly { Text(title) }
             Color.clear.frame(width: 14, height: 14)
         }
         .font(.system(size: 13, weight: .medium))
@@ -121,7 +124,7 @@ public struct MagazineMorphingMenu<Content: View>: View {
         .hidden()
         .anchorPreference(key: MagazineMenuAnchors.self, value: .bounds) { bounds in
             [MagazineMenuAnchor(
-                id: id, bounds: bounds, title: title, icon: icon, enabled: enabled,
+                id: id, bounds: bounds, title: title, icon: icon, iconOnly: iconOnly, enabled: enabled,
                 panelSize: panelSize,
                 content: AnyView(content(MagazineMenuDismissAction { delay in
                     presentation.dismiss(id, after: delay)
@@ -226,15 +229,25 @@ private struct MagazineMenuSurface: View {
                 if expanded { presentation.dismiss() }
                 else { presentation.open(entry.id, reduceMotion: reduceMotion) }
             } label: {
-                HStack(spacing: 7) {
+                HStack(spacing: entry.iconOnly ? 0 : 7) {
                     Image(systemName: entry.icon).frame(width: 17)
-                    Text(entry.title).fixedSize()
-                    Spacer(minLength: 0)
+                    if !entry.iconOnly { Text(entry.title).fixedSize() }
+                    Spacer(minLength: entry.iconOnly ? 7 : 0)
                     MagazineDisclosureGlyph(progress: expanded ? 1 : 0)
                         .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                         .foregroundStyle(.secondary)
                         .frame(width: 14, height: 14)
                         .accessibilityHidden(true)
+                }
+                .overlay(alignment: .leading) {
+                    if entry.iconOnly {
+                        // Reveal the heading inside the expanding surface without
+                        // changing the compact button's layout or disclosure path.
+                        Text(entry.title).lineLimit(1)
+                            .padding(.leading, 24).padding(.trailing, 21)
+                            .opacity(revealed ? 1 : 0)
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
                 }
                 .font(.system(size: 13, weight: .medium))
                 .padding(.horizontal, expanded ? 18 : 12)
@@ -249,6 +262,7 @@ private struct MagazineMenuSurface: View {
             .focusEffectDisabled()
             .focused(focusedHeader, equals: entry.id)
             .accessibilityLabel(entry.title)
+            .help(entry.title)
             .accessibilityValue(Text(expanded ? "Expanded" : "Collapsed", bundle: .module))
             .onMoveCommand { direction in
                 if direction == .down && !expanded && entry.enabled {

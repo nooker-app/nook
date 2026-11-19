@@ -76,7 +76,8 @@ public struct MagazineParserMenu: View {
 
     public var body: some View {
         MagazineMorphingMenu(
-            String(localized: "Parser", bundle: .module), systemImage: "text.viewfinder", width: 352, height: 254
+            String(localized: "Parser", bundle: .module), systemImage: "text.viewfinder", width: 352, height: 254,
+            iconOnly: true
         ) { dismiss in
             ParserChoices(store: store, article: article, dismiss: dismiss)
         }

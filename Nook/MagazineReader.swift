@@ -729,36 +729,16 @@ struct MagazineReaderDetail: View {
 
             if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
                 MagazineParserMenu(store: store, article: article)
-            }
-            MagazineMorphingMenu(String(localized: "More"), systemImage: "ellipsis", height: 216) { dismiss in
-                VStack(spacing: 5) {
-                    if store.usesReaderContentByDefault || store.isOfflineSaved(article.id) {
-                        Button {
-                            dismiss()
-                            store.refreshReaderContent(for: article)
-                        } label: {
-                            MagazineMenuRowLabel(String(localized: "Refresh"), systemImage: "arrow.clockwise")
-                        }
-                        .disabled(store.isReparsing(article))
-                    }
-                    Button {
-                        dismiss()
-                        openURL(article.url)
-                    } label: {
-                        MagazineMenuRowLabel(String(localized: "Open in Browser"), systemImage: "arrow.up.right.square")
-                    }
-                    Divider().padding(.horizontal, 10)
-                    Button(role: .destructive) {
-                        dismiss()
-                        pendingDeleteID = article.id
-                    } label: {
-                        MagazineMenuRowLabel(String(localized: "Delete Article"), systemImage: "trash")
-                            .foregroundStyle(.red)
-                    }
+                Button { store.refreshReaderContent(for: article) } label: {
+                    Image(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(MagazinePlainButtonStyle())
-                .padding(.horizontal, 12)
+                .disabled(store.isReparsing(article))
+                .help("Refresh").accessibilityLabel(Text("Refresh"))
             }
+            Button(role: .destructive) { pendingDeleteID = article.id } label: {
+                Image(systemName: "trash")
+            }
+            .help("Delete Article").accessibilityLabel(Text("Delete Article"))
         }
         .buttonStyle(MagazineGlassButtonStyle())
         .padding(8)

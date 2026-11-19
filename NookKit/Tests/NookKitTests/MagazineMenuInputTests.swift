@@ -13,15 +13,15 @@ struct MagazineMenuInputTests {
         func updateNSView(_ view: NSView, context: Context) {}
     }
 
-    @Test("Closed menus pass pointer input through to the reader at the top, body and bottom")
-    func closedMenusDoNotCoverReader() async throws {
+    @Test("Closed menus pass pointer input through to the reader at the top, body and bottom", arguments: [false, true])
+    func closedMenusDoNotCoverReader(iconOnly: Bool) async throws {
         _ = NSApplication.shared
         let target = NSView()
         let presentation = MagazineMenuPresentation()
         let host = NSHostingView(rootView:
             ZStack(alignment: .topTrailing) {
                 ReaderInput(target: target)
-                MagazineMorphingMenu("Menu", systemImage: "ellipsis", height: 180) { _ in
+                MagazineMorphingMenu("Menu", systemImage: "ellipsis", height: 180, iconOnly: iconOnly) { _ in
                     Text("Menu content")
                 }
                 .padding(20)
