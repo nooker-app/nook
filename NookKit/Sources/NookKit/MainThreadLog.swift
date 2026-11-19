@@ -594,7 +594,7 @@ private final class MainThreadProbe: @unchecked Sendable {
 
 extension Double {
     fileprivate func rounded(toPlaces places: Int) -> Double {
-        let factor = pow(10.0, Double(places)); return (self * factor).rounded() / factor
+        let factor = Foundation.pow(10.0, Double(places)); return (self * factor).rounded() / factor
     }
 }
 #endif

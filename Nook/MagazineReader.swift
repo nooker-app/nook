@@ -95,6 +95,7 @@ struct MagazineReaderDetail: View {
     let nextTitle: String?
     let previousTitle: String?
     let backToCollection: Bool
+    let backToMap: Bool
     let onClose: () -> Void
     let onNavigate: (Bool) -> Void
     @State private var contentReady = false
@@ -742,7 +743,7 @@ struct MagazineReaderDetail: View {
     private var readerToolbar: some View {
         HStack(spacing: 10) {
             Button(
-                backToCollection ? LocalizedStringKey("Back to Collection") : LocalizedStringKey("Back to Magazine"),
+                backToMap ? LocalizedStringKey("Back to Map") : backToCollection ? LocalizedStringKey("Back to Collection") : LocalizedStringKey("Back to Magazine"),
                 systemImage: "arrow.left", action: onClose
             )
             .keyboardShortcut(.cancelAction)

@@ -10,6 +10,8 @@ struct MagazineView: View {
     @State private var opened: Article.ID?
     @State private var frozenRows: [ArticleRowModel]?
     @State private var recommendations = MagazineRecommendationController()
+    @State private var recommendationMap = RecommendationMapController()
+    @AppStorage("magazineRecommendationMap") private var prefersRecommendationMap = false
     @State private var recommendation: MagazineRecommendation?
     @State private var recommendationLoaded = false
     @State private var rankedRecommendations: [MagazineRecommendation] = []
@@ -71,6 +73,7 @@ struct MagazineView: View {
                                      nextTitle: adjacentRow(forward: true)?.title,
                                      previousTitle: adjacentRow(forward: false)?.title,
                                      backToCollection: libraryScope != nil,
+                                     backToMap: isRecommendationMap,
                                      onClose: closeArticle, onNavigate: navigate)
                     .background {
                         NookTheme.canvas
@@ -233,7 +236,7 @@ struct MagazineView: View {
             self.dismissedArticle = nil
         }
         .task(id: recommendationTaskID) {
-            guard opened == nil, initialLoadFinished, isBrowsingMagazine, !libraryFolderIsEmpty else { return }
+            guard opened == nil, initialLoadFinished, isBrowsingMagazine, !libraryFolderIsEmpty, !isRecommendationMap else { return }
             recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
             let pending = pendingRecommendation
             let scope = recommendationScope
@@ -295,7 +298,7 @@ struct MagazineView: View {
     }
 
     private var recommendationTaskID: String {
-        "\(recommendationScope)|\(prefersRecommendationOrder)|\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
+        "\(recommendationScope)|\(prefersRecommendationOrder)|\(prefersRecommendationMap)|\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
     }
 
     private var recommendationScope: String {
@@ -307,6 +310,7 @@ struct MagazineView: View {
     }
 
     private var isRecommendationList: Bool { isUnreadCollection && prefersRecommendationOrder }
+    private var isRecommendationMap: Bool { isUnreadCollection && prefersRecommendationMap && libraryScope == nil }
     private var showsFeaturedStory: Bool { !isUnreadCollection && store.smartSelection != .recent }
     private var collectionIsEmpty: Bool {
         if libraryFolderIsEmpty { return true }
@@ -352,7 +356,27 @@ struct MagazineView: View {
         }
     }
 
-    private var magazine: some View {
+    @ViewBuilder private var magazine: some View {
+        if isRecommendationMap && store.isStorageConfigured && initialLoadFinished {
+            VStack(spacing: 0) {
+                HStack {
+                    collectionTabs
+                    Spacer(minLength: 12)
+                    readingOrderPicker
+                }.padding(.horizontal, 30).padding(.top, 18)
+                RecommendationMapView(model: recommendationMap, store: store, feedback: recommendations,
+                    personalized: recommendationsEnabled, active: opened == nil && !store.isBrowserPresented,
+                    onOpen: { openArticle($0, fromRecommendation: true) }, onDislike: { markNotInterested($0.id) })
+            }
+            .overlay(alignment: .bottom) {
+                if !pendingDisinterest.isEmpty && opened == nil {
+                    disinterestUndoNotice.padding(.bottom, 55)
+                }
+            }
+        } else { magazineCards }
+    }
+
+    private var magazineCards: some View {
         GeometryReader { geometry in
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
@@ -578,6 +602,20 @@ struct MagazineView: View {
         HStack(spacing: 2) {
             readingOrderButton("Recommended", recommended: true)
             readingOrderButton("Newest", recommended: false)
+            if libraryScope == nil {
+                Button {
+                    prefersRecommendationMap = true
+                    store.searchText = ""
+                } label: {
+                    Label("Map", systemImage: "point.3.connected.trianglepath.dotted")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(prefersRecommendationMap ? NookTheme.accent : .secondary)
+                        .padding(.horizontal, 12).frame(height: 28)
+                        .background(prefersRecommendationMap ? NookTheme.accent.opacity(0.14) : .clear, in: Capsule())
+                }
+                .buttonStyle(MagazinePlainButtonStyle(capsule: true))
+                .accessibilityAddTraits(prefersRecommendationMap ? .isSelected : [])
+            }
         }
         .padding(3)
         .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
@@ -585,16 +623,17 @@ struct MagazineView: View {
 
     private func readingOrderButton(_ title: LocalizedStringKey, recommended: Bool) -> some View {
         Button {
+            prefersRecommendationMap = false
             prefersRecommendationOrder = recommended
             if !recommended && store.sortOrder(for: .unread) != .newest { store.toggleSortOrder(for: .unread) }
         } label: {
             Text(title).font(.system(size: 11, weight: .medium))
-                .foregroundStyle(prefersRecommendationOrder == recommended ? NookTheme.accent : .secondary)
+                .foregroundStyle(!prefersRecommendationMap && prefersRecommendationOrder == recommended ? NookTheme.accent : .secondary)
                 .padding(.horizontal, 12).frame(height: 28)
-                .background(prefersRecommendationOrder == recommended ? NookTheme.accent.opacity(0.14) : .clear, in: Capsule())
+                .background(!prefersRecommendationMap && prefersRecommendationOrder == recommended ? NookTheme.accent.opacity(0.14) : .clear, in: Capsule())
         }
         .buttonStyle(MagazinePlainButtonStyle(capsule: true))
-        .accessibilityAddTraits(prefersRecommendationOrder == recommended ? .isSelected : [])
+        .accessibilityAddTraits(!prefersRecommendationMap && prefersRecommendationOrder == recommended ? .isSelected : [])
     }
 
     private var collectionTabs: some View {
@@ -636,6 +675,13 @@ struct MagazineView: View {
 
     private var readingOrder: [ArticleRowModel] {
         if let frozenRows { return frozenRows }
+        if isRecommendationMap {
+            return recommendationMap.readerArticleIDs.compactMap { id in
+                guard let article = store.listedArticle(withID: id) else { return nil }
+                return ArticleRowModel(article, feedDisplayTitle: store.feed(for: article.feedID)?.displayTitle,
+                    isSavedOffline: store.isOfflineSaved(id))
+            }
+        }
         guard let lead = leadRow else { return rows }
         return [lead] + rows.filter { $0.id != lead.id }
     }
@@ -906,8 +952,13 @@ struct MagazineView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(pendingDisinterest.count) recommendations excluded")
                     .font(.system(size: 12, weight: .medium))
-                Text("Still unread. You can find them in Newest.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                if pendingDisinterest.contains(where: { store.listedArticle(withID: $0.articleID)?.isRead == true }) {
+                    Text("Reading status is unchanged. You can find them in All Articles.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                } else {
+                    Text("Still unread. You can find them in Newest.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
             }
             Button {
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {

@@ -917,6 +917,27 @@ public final class ReaderStore {
     /// SwiftUI body. Includes in-place read/star patches and filter changes.
     public var magazineContentRevision: Int { displayRevision }
 
+    #if os(macOS)
+    func recommendationMapSnapshot() async -> RecommendationLibrarySnapshot {
+        let scope = syncFolderURL?.standardizedFileURL.path ?? "local"
+        var eligible = articles.filter { !filteredArticleIDs.contains($0.id) }
+        for index in eligible.indices {
+            if let body = bodyCache[eligible[index].id] {
+                eligible[index].bodyParagraphs = body.bodyParagraphs
+            }
+        }
+        let library = ReaderLibrary(feeds: feeds, articles: eligible, lastRefreshedAt: nil,
+                                    folders: [], categories: categories)
+        var html = await readerContentStore?.recommendationHTML(for: eligible) ?? [:]
+        for article in eligible {
+            if case .ready(let content) = readerContentStates[article.id] { html[article.id] = content }
+        }
+        return await Task.detached(priority: .utility) {
+            RecommendationLibrarySnapshot(scope: scope, library: library, readerHTML: html)
+        }.value
+    }
+    #endif
+
     /// Recomputes `displayedArticles` from the current inputs.
     ///
     /// User-driven changes (source/feed selection, search) pass `debounced:

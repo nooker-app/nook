@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Reading status is unchanged. You can find them in All Articles.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "읽음 상태는 그대로예요. 모든 글에서 다시 찾을 수 있어요."
+          }
+        }
+      }
+    },
+    "Back to Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지도로 돌아가기"
+          }
+        }
+      }
+    },
+    "Map": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지도"
+          }
+        }
+      }
+    },
     "Not my taste": {
       "extractionState": "manual",
       "localizations": {

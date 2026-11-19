@@ -49,6 +49,19 @@ public actor ReaderContentStore {
         merged[articleID]?.value
     }
 
+    /// A content-only snapshot for local related-article indexing. Never fetches
+    /// pages or records parser failures while building a recommendation graph.
+    func recommendationHTML(for articles: [Article]) -> [Article.ID: String] {
+        var result: [Article.ID: String] = [:]
+        for article in articles {
+            guard let value = merged[article.id]?.value, value.status == .success,
+                  let html = value.html,
+                  NookPostOrigin.cachedBodyIsCurrent(value.sourceFingerprint, for: article) else { continue }
+            result[article.id] = html
+        }
+        return result
+    }
+
     /// Records this device's extraction result for an article, stamping it with a
     /// fresh clock that beats any peer, and persists our shard.
     public func record(_ value: ReaderContentValue, for articleID: Article.ID) {

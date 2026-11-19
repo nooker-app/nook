@@ -21,6 +21,9 @@ let package = Package(
         // these types.
         .package(url: "https://github.com/nooker-app/nook-plus-protocol.git", exact: "0.4.1"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.1.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.33.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.33.0"),
+        .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.4.0"),
     ],
     targets: [
         .target(
@@ -32,6 +35,10 @@ let package = Package(
                 .product(name: "NookPlusProtocol", package: "nook-plus-protocol"),
                 .product(name: "NookPlusServiceAPI", package: "nook-plus-protocol"),
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
+                .product(name: "MLXEmbedders", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLXLLM", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLX", package: "mlx-swift", condition: .when(platforms: [.macOS])),
+                .product(name: "Tokenizers", package: "swift-transformers", condition: .when(platforms: [.macOS])),
             ],
             resources: [
                 .process("Localizable.xcstrings"),
@@ -40,6 +47,7 @@ let package = Package(
                 // commit. `.copy` and not `.process`: it is loaded with `loadFileURL`, so it
                 // has to reach the bundle as the exact same file.
                 .copy("Legibility.html"),
+                .copy("RecommendationMap/Models.json"),
             ],
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),

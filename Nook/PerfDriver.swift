@@ -475,7 +475,7 @@ private final class PerfKeyEventSink: @unchecked Sendable {
 
 private extension Double {
     func rounded(toPlaces places: Int) -> Double {
-        let factor = pow(10, Double(places))
+        let factor = Foundation.pow(10, Double(places))
         return (self * factor).rounded() / factor
     }
 }

@@ -1,6 +1,413 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Not interested": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "취향 아님"
+          }
+        }
+      }
+    },
+    "%lld unread · %lld read": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "안 읽은 글 %lld개 · 읽은 글 %lld개"
+          }
+        }
+      }
+    },
+    "About the map": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지도 읽는 법"
+          }
+        }
+      }
+    },
+    "Building your map…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추천 지도를 만드는 중"
+          }
+        }
+      }
+    },
+    "Cached original articles are included. Otherwise, Nook uses the content provided by the feed. Connections help you explore related ideas; they do not explain why a story was recommended.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "원문이 캐시된 글은 본문도 비교하고, 그렇지 않으면 RSS 내용을 사용해요. 연결선은 관련 내용을 탐색하기 위한 것이며 추천 순위를 결정한 이유를 뜻하지는 않아요."
+          }
+        }
+      }
+    },
+    "Connecting stories: %lld / %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 연결 중: %lld / %lld"
+          }
+        }
+      }
+    },
+    "Continue exploring": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 글에서 이어 읽기"
+          }
+        }
+      }
+    },
+    "Detailed connections require Apple silicon. You can still explore connections based on the words in your articles.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "의미 기반 연결에는 Apple Silicon이 필요해요. 이 Mac에서는 글 내용의 단어를 기반으로 연결을 탐색할 수 있어요."
+          }
+        }
+      }
+    },
+    "Download interrupted. Try again to continue with completed files.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다운로드를 완료하지 못했어요. 다시 시도하면 완료된 파일부터 이어서 설치해요."
+          }
+        }
+      }
+    },
+    "Download models": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 다운로드"
+          }
+        }
+      }
+    },
+    "Download the local models (2.9 GB) to connect articles by meaning, across categories and languages. Article text stays on this Mac. Once downloaded, exploration works offline.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로컬 모델(2.9GB)을 내려받으면 카테고리와 언어가 달라도 의미가 관련된 글을 연결해요. 글 내용은 이 Mac에서만 처리되며, 설치 후에는 오프라인으로 사용할 수 있어요."
+          }
+        }
+      }
+    },
+    "Enable deeper connections": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "의미 기반 연결 사용하기"
+          }
+        }
+      }
+    },
+    "Find a story": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 찾아 연결 살펴보기"
+          }
+        }
+      }
+    },
+    "Fit map": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전체 지도"
+          }
+        }
+      }
+    },
+    "Focus on connections": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 글의 연결에 집중"
+          }
+        }
+      }
+    },
+    "Focus selected story": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 글로"
+          }
+        }
+      }
+    },
+    "Follow your curiosity.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "취향을 따라, 다음 글로."
+          }
+        }
+      }
+    },
+    "Looking more closely at these connections…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결을 더 자세히 살펴보고 있어요"
+          }
+        }
+      }
+    },
+    "No close connections yet. Choose another point to keep exploring.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 뚜렷하게 연결되는 글이 없어요. 다른 점을 눌러 탐색해 보세요."
+          }
+        }
+      }
+    },
+    "No matching stories": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일치하는 글이 없어요"
+          }
+        }
+      }
+    },
+    "No stories to connect": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결할 글이 없어요"
+          }
+        }
+      }
+    },
+    "Numbers show unread recommendation ranks. Dimmed points with a checkmark are stories you have read. Colors show categories; connections compare the actual titles and content, even across categories.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "숫자는 안 읽은 글의 추천 순위예요. 흐린 점과 체크 표시는 이미 읽은 글이에요. 점의 색은 카테고리이며, 연결선은 카테고리가 달라도 제목과 실제 내용이 관련된 글을 이어줘요."
+          }
+        }
+      }
+    },
+    "On-device connections": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 Mac에서 글 연결하기"
+          }
+        }
+      }
+    },
+    "Read": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "읽은 글"
+          }
+        }
+      }
+    },
+    "Read story": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 읽기"
+          }
+        }
+      }
+    },
+    "Ready for offline exploration": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오프라인으로 탐색할 준비가 됐어요"
+          }
+        }
+      }
+    },
+    "Recommendation map. Scroll to pan, pinch to zoom, and select a story to preview it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추천 글 지도. 스크롤로 이동하고 핀치로 확대합니다. 글을 클릭하면 미리보기가 열립니다."
+          }
+        }
+      }
+    },
+    "Related subject and context": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "본문의 주제와 맥락"
+          }
+        }
+      }
+    },
+    "Scroll to pan · Pinch to zoom · Drag to explore": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스크롤로 이동 · 핀치 / 휠로 확대 · 점을 당겨 탐색"
+          }
+        }
+      }
+    },
+    "Select a point to preview, double-click to read. Scroll to pan, pinch or use the wheel to zoom, and drag a point to explore its neighborhood. Search also finds stories you have read.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "점을 클릭하면 미리보기가, 두 번 클릭하면 리더가 열려요. 스크롤로 이동하고 핀치나 휠로 확대해 보세요. 점을 당기면 주변 연결도 움직여요. 검색으로 이미 읽은 글도 찾을 수 있어요."
+          }
+        }
+      }
+    },
+    "Selected story": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 읽을거리"
+          }
+        }
+      }
+    },
+    "Start with a story. Discover the ideas around it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마음에 드는 글에서 시작해, 연결된 생각을 발견하세요."
+          }
+        }
+      }
+    },
+    "The map is available. Detailed connections could not be updated.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지도를 계속 탐색할 수 있어요. 의미 기반 연결을 갱신하지 못했어요."
+          }
+        }
+      }
+    },
+    "Uncategorized": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미분류"
+          }
+        }
+      }
+    },
+    "Your articles will appear here as your library grows.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "피드에서 가져온 글들이 이곳에 연결되어 나타나요."
+          }
+        }
+      }
+    },
+    "Zoom in": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확대"
+          }
+        }
+      }
+    },
+    "Zoom out": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "축소"
+          }
+        }
+      }
+    },
     "Recently Read": {
       "extractionState": "manual",
       "localizations": {

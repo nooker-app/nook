@@ -1,0 +1,56 @@
+[
+  {
+    "kind": "embedding",
+    "id": "mlx-community/Qwen3-Embedding-0.6B-8bit",
+    "revision": "407ad2329cd30702720aafe83f74a1ba30fdfbca",
+    "files": [
+      {
+        "name": "config.json",
+        "bytes": 857,
+        "sha256": "65fb46306262bac47c6a89e5ad8a766c3d40d559057c1931e9c10976266a4fc7"
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 633152041,
+        "sha256": "fe956e8d346b4f08215a3cfc48a874354f900c20a59e965b75df0d9d77c54b28"
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 11423705,
+        "sha256": "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a"
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 5404,
+        "sha256": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0"
+      }
+    ]
+  },
+  {
+    "kind": "reranker",
+    "id": "vserifsaglam/Qwen3-Reranker-4B-4bit-MLX",
+    "revision": "9655b27c01d2ff1c49f7e672a04b70d630161b46",
+    "files": [
+      {
+        "name": "config.json",
+        "bytes": 937,
+        "sha256": "62ced005985d6059a889644c75e2c644133e2631c757890600627d112cf54401"
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 2262637937,
+        "sha256": "8003a82d273cfbf540f3dd96775dd9065d438a9d91ca4983e7a9c4d0dd9e1448"
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 11422654,
+        "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+      },
+      {
+        "name": "tokenizer_config.json",
+        "bytes": 5404,
+        "sha256": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0"
+      }
+    ]
+  }
+]

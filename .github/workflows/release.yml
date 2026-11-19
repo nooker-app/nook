@@ -30,6 +30,10 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      # MLX compiles its Metal kernels into the app's resource bundle.
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Resolve version
         id: version
         run: |
