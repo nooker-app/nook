@@ -7,12 +7,13 @@ struct ArticleEmptyStateTests {
     func collectionStates() {
         #expect(resolve(feeds: [ReaderStore.savedLinksFeedID]) == .saved)
         let cases: [(SmartSource, ArticleEmptyState)] = [(.unread, .unread), (.today, .today),
-            (.starred, .starred), (.filtered, .filtered), (.offline, .offline), (.all, .all)]
+            (.starred, .starred), (.recent, .recent), (.filtered, .filtered), (.offline, .offline), (.all, .all)]
         for (source, expected) in cases { #expect(resolve(smart: source) == expected) }
         #expect(resolve(category: "category") == .category)
         #expect(resolve(feeds: ["feed"]) == .feed)
         #expect(resolve(smart: .all, subscribed: false) == .subscriptions)
         #expect(resolve(smart: .starred, subscribed: false) == .starred)
+        #expect(resolve(smart: .recent, subscribed: false) == .recent)
     }
 
     @Test("Search and an explicitly empty folder take precedence over stale collection selection")

@@ -13,6 +13,17 @@ struct MagazineReadingHistory: Codable, Sendable {
     var entries: [Article.ID: Entry] = [:]
     // Optional so profiles written before explicit feedback still decode.
     var dismissals: [Article.ID: Date]?
+    /// Deliberate choices from a recommendation surface. A repeated click on
+    /// the same story refreshes its timestamp instead of multiplying its vote.
+    var selections: [Article.ID: Date]?
+
+    mutating func select(_ id: Article.ID, now: Date) {
+        var recent = (selections ?? [:]).filter { now.timeIntervalSince($0.value) < 90 * 86400 }
+        recent[id] = now
+        selections = Dictionary(uniqueKeysWithValues: recent.sorted {
+            $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value
+        }.prefix(500).map { ($0.key, $0.value) })
+    }
 
     func isDismissed(_ id: Article.ID, now: Date) -> Bool {
         dismissals?[id].map { now.timeIntervalSince($0) < 30 * 86400 } ?? false
@@ -44,7 +55,10 @@ struct MagazineReadingHistory: Codable, Sendable {
                 ? min(2, entry.seconds / 45) * exp(-max(0, now.timeIntervalSince(entry.lastRead)) / (30 * 86400))
                 : 0
         } ?? 0
-        return (article.isStarred ? 3 : 0) + reading
+        let selection = selections?[article.id].map {
+            0.75 * exp(-max(0, now.timeIntervalSince($0)) / (30 * 86400))
+        } ?? 0
+        return (article.isStarred ? 3 : 0) + reading + selection
     }
 }
 
@@ -71,12 +85,20 @@ actor MagazineRecommendationRanker {
 
     func rank(candidates: [Article], library: [Article], history: MagazineReadingHistory,
               now: Date, useSemantics: Bool = true) -> MagazineRecommendation? {
+        ranked(candidates: candidates, library: library, history: history,
+               now: now, useSemantics: useSemantics).first
+    }
+
+    func ranked(candidates: [Article], library: [Article], history: MagazineReadingHistory,
+                now: Date, useSemantics: Bool = true) -> [MagazineRecommendation] {
         // Membership comes from ReaderStore's complete filtered result, not its
         // first rendering window. Prefer unread articles within that scope.
         let eligible = candidates.filter { !history.isDismissed($0.id, now: now) }
         let unread = eligible.filter { !$0.isRead }
-        let pool = Array((unread.isEmpty ? eligible : unread).sorted(by: newer).prefix(600))
-        guard !pool.isEmpty, !Task.isCancelled else { return nil }
+        // Every eligible unread story participates, regardless of age or list
+        // pagination. Limit rendering and semantic inference, never membership.
+        let pool = (unread.isEmpty ? eligible : unread).sorted(by: newer)
+        guard !pool.isEmpty, !Task.isCancelled else { return [] }
         let evidence = library.compactMap { article -> (Article, Double)? in
             let weight = history.weight(for: article, now: now)
             return weight > 0 ? (article, weight) : nil
@@ -84,14 +106,14 @@ actor MagazineRecommendationRanker {
             lhs.1 == rhs.1 ? newer(lhs.0, rhs.0) : lhs.1 > rhs.1
         }.prefix(120)
         guard !evidence.isEmpty else {
-            return MagazineRecommendation(articleID: pool[0].id, personalized: false)
+            return pool.map { MagazineRecommendation(articleID: $0.id, personalized: false) }
         }
 
         let documents = pool + evidence.map(\.0)
         var frequency: [String: Double] = [:]
         var terms: [Article.ID: Set<String>] = [:]
         for article in documents {
-            if Task.isCancelled { return nil }
+            if Task.isCancelled { return [] }
             guard terms[article.id] == nil else { continue }
             let words = tokens(article)
             terms[article.id] = words
@@ -157,10 +179,10 @@ actor MagazineRecommendationRanker {
                 ranked.sort(by: higher)
             }
         }
-        if tokenCache.count > 1500 { tokenCache.removeAll(keepingCapacity: true) }
+        if tokenCache.count > 20000 { tokenCache.removeAll(keepingCapacity: true) }
         if vectorCache.count > 512 { vectorCache.removeAll(keepingCapacity: true) }
-        guard !Task.isCancelled, let first = ranked.first else { return nil }
-        return MagazineRecommendation(articleID: first.article.id, personalized: true)
+        guard !Task.isCancelled else { return [] }
+        return ranked.map { MagazineRecommendation(articleID: $0.article.id, personalized: true) }
     }
 
     private func newer(_ lhs: Article, _ rhs: Article) -> Bool {
@@ -276,6 +298,12 @@ public final class MagazineRecommendationController {
         revision &+= 1
     }
 
+    public func recordSelection(articleID: Article.ID, now: Date = .now) {
+        guard !scope.isEmpty else { return }
+        history.select(articleID, now: now)
+        saveFeedback()
+    }
+
     public func recordReading(articleID: Article.ID, seconds: Double, now: Date = .now) {
         guard !scope.isEmpty else { return }
         history.record(articleID, seconds: seconds, now: now)
@@ -293,6 +321,11 @@ public final class MagazineRecommendationController {
             defaults.removeObject(forKey: key)
         }
         defaults.set(defaults.integer(forKey: resetKey) + 1, forKey: resetKey)
+    }
+
+    public func rankedRecommendations(candidates: [Article], library: [Article], personalized: Bool) async -> [MagazineRecommendation] {
+        await ranker.ranked(candidates: candidates.filter { !$0.isRead }, library: personalized ? library : [],
+                            history: history, now: .now)
     }
 
     public func recommend(candidates: [Article], library: [Article], personalized: Bool) async -> MagazineRecommendation? {

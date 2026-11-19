@@ -12,6 +12,10 @@ struct MagazineView: View {
     @State private var recommendations = MagazineRecommendationController()
     @State private var recommendation: MagazineRecommendation?
     @State private var recommendationLoaded = false
+    @State private var rankedRecommendations: [MagazineRecommendation] = []
+    @State private var rankedScope: String?
+    @State private var recommendationWindow = 120
+    @AppStorage("magazineUnreadRecommendationOrder") private var prefersRecommendationOrder = true
     @State private var pendingRecommendation: MagazineRecommendationController.Dismissal?
     @State private var libraryScope: String?
     @State private var libraryFolder: String?
@@ -194,7 +198,7 @@ struct MagazineView: View {
         .onChange(of: store.searchText, initial: true) { _, _ in
             store.debounceSearch()
         }
-        .onChange(of: store.activeSearchQuery) { _, _ in
+        .onChange(of: recommendationScope) { _, _ in
             scrollPosition.scrollTo(edge: .top)
         }
         .onChange(of: recommendationReset) { _, _ in
@@ -224,10 +228,24 @@ struct MagazineView: View {
             guard opened == nil, initialLoadFinished, isBrowsingMagazine, !libraryFolderIsEmpty else { return }
             recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
             let pending = pendingRecommendation
+            let scope = recommendationScope
+            let showsList = isRecommendationList
             if pending == nil { recommendationLoaded = false }
             do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
-            let result = await recommendations.recommend(candidates: store.visibleArticles,
-                library: store.libraryArticles, personalized: recommendationsEnabled)
+            let result: MagazineRecommendation?
+            let ranked: [MagazineRecommendation]
+            if showsList {
+                ranked = await recommendations.rankedRecommendations(candidates: store.visibleArticles,
+                    library: store.libraryArticles, personalized: recommendationsEnabled)
+                result = nil
+            } else if store.smartSelection == .recent {
+                ranked = []
+                result = nil
+            } else {
+                ranked = []
+                result = await recommendations.recommend(candidates: store.visibleArticles,
+                    library: store.libraryArticles, personalized: recommendationsEnabled)
+            }
             if let pending {
                 let remaining = pending.deadline.timeIntervalSinceNow
                 if remaining > 0 {
@@ -237,6 +255,11 @@ struct MagazineView: View {
             guard !Task.isCancelled else { return }
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
                 recommendation = result
+                if showsList {
+                    if rankedScope != scope { recommendationWindow = 120 }
+                    rankedRecommendations = ranked
+                    rankedScope = scope
+                }
                 recommendationLoaded = true
                 pendingRecommendation = nil
             }
@@ -254,7 +277,27 @@ struct MagazineView: View {
     }
 
     private var recommendationTaskID: String {
-        "\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
+        "\(recommendationScope)|\(prefersRecommendationOrder)|\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
+    }
+
+    private var recommendationScope: String {
+        "\(store.smartSelection?.rawValue ?? "")|\(store.feedSelection.sorted())|\(store.categorySelection ?? "")|\(store.activeSearchQuery)|\(store.syncFolderURL?.path ?? "local")"
+    }
+
+    private var isUnreadCollection: Bool {
+        store.smartSelection == .unread && store.feedSelection.isEmpty && store.categorySelection == nil
+    }
+
+    private var isRecommendationList: Bool { isUnreadCollection && prefersRecommendationOrder }
+    private var showsFeaturedStory: Bool { !isUnreadCollection && store.smartSelection != .recent }
+    private var collectionIsEmpty: Bool {
+        if libraryFolderIsEmpty { return true }
+        // Reader retention can leave the final, now-read story in the store's
+        // unread scope until navigation. It is no longer a recommendation.
+        if isRecommendationList && frozenRows == nil {
+            return !store.visibleArticles.contains { !$0.isRead }
+        }
+        return store.visibleArticles.isEmpty
     }
 
     private func configureTitleTranslator() {
@@ -310,10 +353,13 @@ struct MagazineView: View {
                             Button("Choose Sync Folder", action: chooseSyncFolder).buttonStyle(MagazineGlassButtonStyle())
                         }
                         .frame(maxWidth: .infinity, minHeight: 320)
-                    } else if rows.isEmpty || libraryFolderIsEmpty {
+                    } else if collectionIsEmpty {
                         emptyCollection
                     } else {
-                        if store.activeSearchQuery.isEmpty {
+                        if isRecommendationList && rankedScope != recommendationScope {
+                            magazineLoading
+                        }
+                        if showsFeaturedStory && store.activeSearchQuery.isEmpty {
                             if let lead = leadRow { card(lead, lead: true) }
                             else if !recommendationLoaded { magazineLoading }
                             else {
@@ -326,10 +372,21 @@ struct MagazineView: View {
                             }
                         }
                         HStack {
-                            Text(store.activeSearchQuery.isEmpty ? "From your subscriptions" : "Search results")
+                            Text(sectionTitle)
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(.secondary)
                             Rectangle().fill(.primary.opacity(0.09)).frame(height: 1)
+                            if isUnreadCollection { readingOrderPicker }
+                        }
+                        if isRecommendationList {
+                            Text(recommendationsEnabled
+                                 ? "Every unread story, ranked for you. Your choices and reading shape the next picks."
+                                 : "All unread stories are included. Turn on personalization in Settings to rank them by your interests.")
+                                .font(.callout).foregroundStyle(.secondary)
+                            if rankedScope == recommendationScope && rankedRecommendations.isEmpty {
+                                Button("Show recommendations again") { recommendations.restoreRecommendations() }
+                                    .buttonStyle(MagazineGlassButtonStyle())
+                            }
                         }
                         let columns = min(3, max(1, Int((geometry.size.width - 96) / 300)))
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22, alignment: .top), count: columns),
@@ -424,7 +481,7 @@ struct MagazineView: View {
                 MagazineTrendTicker(articles: store.visibleArticles,
                                     sourceID: String(store.magazineContentRevision),
                                     active: opened == nil && isBrowsingMagazine,
-                                    openArticle: openArticle)
+                                    openArticle: { openArticle($0) })
                 Group {
                     if store.activeSearchQuery.isEmpty {
                         Text("\(libraryFolderIsEmpty ? 0 : store.listWindow.totalCount) stories")
@@ -438,39 +495,82 @@ struct MagazineView: View {
     }
 
     private var collectionBar: some View {
-        HStack(spacing: 16) {
-            if libraryScope == nil {
-                collectionTabs
-                    .padding(4).glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
-            } else {
-                Label("Stories in this collection", systemImage: "rectangle.stack")
-                    .font(.callout).foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                collectionScope.fixedSize()
+                Spacer(minLength: 0)
+                collectionSearch
             }
-            Spacer(minLength: 0)
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(searchFocused ? NookTheme.accent : .secondary)
-                TextField("Search Articles", text: $store.searchText).textFieldStyle(.plain)
-                    .focused($searchFocused)
-                if !store.searchText.isEmpty {
-                    Button {
-                        store.searchText = ""
-                        searchFocused = true
-                    } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(MagazinePlainButtonStyle()).foregroundStyle(.secondary)
-                        .accessibilityLabel("Clear Search")
-                }
+            VStack(alignment: .leading, spacing: 14) {
+                collectionScope
+                collectionSearch
             }
-            .font(.system(size: 12))
-            .padding(.horizontal, 13).frame(width: searchFocused ? 290 : 230, height: 36)
-            .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
-            .overlay {
-                Capsule().strokeBorder(NookTheme.accent.opacity(searchFocused ? 0.5 : 0), lineWidth: 1)
-                    .allowsHitTesting(false)
-                }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: searchFocused)
         }
         .padding(.bottom, 4)
+    }
+
+    @ViewBuilder private var collectionScope: some View {
+        if libraryScope == nil {
+            collectionTabs
+                .padding(4).glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
+        } else {
+            Label("Stories in this collection", systemImage: "rectangle.stack")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private var collectionSearch: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(searchFocused ? NookTheme.accent : .secondary)
+            TextField("Search Articles", text: $store.searchText).textFieldStyle(.plain)
+                .focused($searchFocused)
+            if !store.searchText.isEmpty {
+                Button {
+                    store.searchText = ""
+                    searchFocused = true
+                } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(MagazinePlainButtonStyle()).foregroundStyle(.secondary)
+                    .accessibilityLabel("Clear Search")
+            }
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 13).frame(width: searchFocused ? 290 : 230, height: 36)
+        .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(NookTheme.accent.opacity(searchFocused ? 0.5 : 0), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: searchFocused)
+    }
+
+    private var sectionTitle: LocalizedStringKey {
+        if !store.activeSearchQuery.isEmpty { return "Search results" }
+        if store.smartSelection == .recent { return "Recently opened" }
+        return isRecommendationList ? "Recommended for you" : "From your subscriptions"
+    }
+
+    private var readingOrderPicker: some View {
+        HStack(spacing: 2) {
+            readingOrderButton("Recommended", recommended: true)
+            readingOrderButton("Newest", recommended: false)
+        }
+        .padding(3)
+        .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
+    }
+
+    private func readingOrderButton(_ title: LocalizedStringKey, recommended: Bool) -> some View {
+        Button {
+            prefersRecommendationOrder = recommended
+            if !recommended && store.sortOrder(for: .unread) != .newest { store.toggleSortOrder(for: .unread) }
+        } label: {
+            Text(title).font(.system(size: 11, weight: .medium))
+                .foregroundStyle(prefersRecommendationOrder == recommended ? NookTheme.accent : .secondary)
+                .padding(.horizontal, 12).frame(height: 28)
+                .background(prefersRecommendationOrder == recommended ? NookTheme.accent.opacity(0.14) : .clear, in: Capsule())
+        }
+        .buttonStyle(MagazinePlainButtonStyle(capsule: true))
+        .accessibilityAddTraits(prefersRecommendationOrder == recommended ? .isSelected : [])
     }
 
     private var collectionTabs: some View {
@@ -490,11 +590,21 @@ struct MagazineView: View {
         }
     }
 
-    private var rows: [ArticleRowModel] { frozenRows ?? store.listWindow.rows }
+    private var rows: [ArticleRowModel] {
+        if let frozenRows { return frozenRows }
+        guard isRecommendationList else { return store.listWindow.rows }
+        guard rankedScope == recommendationScope else { return [] }
+        return rankedRecommendations.prefix(recommendationWindow).compactMap { pick in
+            guard store.listWindow.contains(pick.articleID),
+                  let article = store.listedArticle(withID: pick.articleID), !article.isRead else { return nil }
+            return ArticleRowModel(article, feedDisplayTitle: store.feed(for: article.feedID)?.displayTitle,
+                                   isSavedOffline: store.isOfflineSaved(article.id))
+        }
+    }
 
     private var leadRow: ArticleRowModel? {
         if let frozenLead { return frozenLead }
-        guard store.activeSearchQuery.isEmpty, let recommendation,
+        guard showsFeaturedStory, store.activeSearchQuery.isEmpty, let recommendation,
               store.listWindow.contains(recommendation.articleID),
               let article = store.listedArticle(withID: recommendation.articleID) else { return nil }
         return ArticleRowModel(article, feedDisplayTitle: store.feed(for: article.feedID)?.displayTitle, isSavedOffline: false)
@@ -508,7 +618,7 @@ struct MagazineView: View {
 
     @ViewBuilder private func card(_ row: ArticleRowModel, lead: Bool) -> some View {
         if let article = store.listedArticle(withID: row.id) {
-            Button { openArticle(article.id) } label: {
+            Button { openArticle(article.id, fromRecommendation: isRecommendationList || lead) } label: {
                 VStack(alignment: .leading, spacing: lead ? 20 : 18) {
                     if lead {
                         Label(recommendation?.personalized == true ? "Picked for you" : "Fresh from your subscriptions",
@@ -529,7 +639,12 @@ struct MagazineView: View {
                     Spacer(minLength: lead ? 8 : 0)
                     HStack(spacing: 8) {
                         if !article.isRead { Circle().fill(NookTheme.accent).frame(width: 5, height: 5) }
-                        Text(article.publishedAt, style: .date)
+                        if store.smartSelection == .recent, let date = store.recentlyRead.opened[article.id] {
+                            Image(systemName: "clock")
+                            Text(date, format: .relative(presentation: .named))
+                        } else {
+                            Text(article.publishedAt, style: .date)
+                        }
                         Text("·")
                         ArticleReadingTimeLabel(article: article, viewportBound: true)
                         Spacer()
@@ -560,11 +675,25 @@ struct MagazineView: View {
             .focused($focusedArticle, equals: row.id)
             .id(row.id)
             .contextMenu { ArticleRowMenu(store: store, id: article.id) }
-            .onAppear { if opened == nil { store.listWindow.rowAppeared(id: row.id) } }
+            .task {
+                guard opened == nil else { return }
+                if isRecommendationList {
+                    let scope = recommendationScope
+                    let window = recommendationWindow
+                    guard let index = rankedRecommendations.firstIndex(where: { $0.articleID == row.id }),
+                          index >= window - 30, window < rankedRecommendations.count else { return }
+                    await Task.yield()
+                    guard !Task.isCancelled, opened == nil, scope == recommendationScope,
+                          recommendationWindow == window else { return }
+                    recommendationWindow += 120
+                } else {
+                    store.listWindow.rowAppeared(id: row.id)
+                }
+            }
         }
     }
 
-    private func openArticle(_ id: Article.ID) {
+    private func openArticle(_ id: Article.ID, fromRecommendation: Bool = false) {
         guard opened == nil, let article = store.listedArticle(withID: id) else { return }
         // A new click may interrupt a dismissal; use the current collection.
         dismissedArticle = nil
@@ -575,6 +704,10 @@ struct MagazineView: View {
         frozenRows = order.contains(where: { $0.id == id }) ? order : [
             ArticleRowModel(article, feedDisplayTitle: store.feed(for: article.feedID)?.displayTitle, isSavedOffline: false)
         ] + order
+        if fromRecommendation && recommendationsEnabled {
+            recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
+            recommendations.recordSelection(articleID: id)
+        }
         store.selectedArticleID = id
         store.retainArticle(id: id)
         withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.35, bounce: 0.08)) {

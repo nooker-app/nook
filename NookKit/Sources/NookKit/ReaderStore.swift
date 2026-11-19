@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 @Observable
 public final class ReaderStore {
+    public let recentlyRead: RecentlyReadHistory
     public var feeds: [Feed] = [] {
         didSet {
             // O(1) row lookups: every visible row resolves its feed title, and a
@@ -639,7 +640,8 @@ public final class ReaderStore {
     public private(set) var isPreparingLocalReset = false
     private var didQuiesceForLocalReset = false
 
-    private init() {
+    private init(historyDefaults: UserDefaults = .standard) {
+        recentlyRead = RecentlyReadHistory(defaults: historyDefaults)
         // These preferences are read out of `UserDefaults` by non-view code, and
         // nothing observes that. Mirroring them here — and refreshing on the defaults
         // notification the Settings controls trigger — is what makes an open reader
@@ -958,6 +960,8 @@ public final class ReaderStore {
         filterExecutionCount += 1
         #endif
 
+        recentlyRead.selectLibrary(syncFolderURL?.standardizedFileURL.path ?? "local")
+        let recentlyOpened = recentlyRead.opened
         let snapshot = articles
         let feedTitles = Dictionary(feeds.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         // Rows show the user's custom name; search keeps matching the feed's own title.
@@ -1015,7 +1019,7 @@ public final class ReaderStore {
             #endif
             applyDisplayed(computeDisplay(Self.computeVisibleArticles(
                 snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
-                smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order
+                smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order, recentlyOpened: recentlyOpened
             )), source: source)
             return
         }
@@ -1026,13 +1030,13 @@ public final class ReaderStore {
                 computeDisplay(Self.computeVisibleArticles(
                     snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
                     smartSelection: smartSelection, categorySelection: categorySelection, retained: retained,
-                    filteredIDs: filteredIDs, query: query, order: order, isCancelled: { Task.isCancelled }
+                    filteredIDs: filteredIDs, query: query, order: order, recentlyOpened: recentlyOpened, isCancelled: { Task.isCancelled }
                 ))
             }
             #else
             computeDisplay(Self.computeVisibleArticles(
                 snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
-                smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order, isCancelled: { Task.isCancelled }
+                smartSelection: smartSelection, categorySelection: categorySelection, retained: retained, filteredIDs: filteredIDs, query: query, order: order, recentlyOpened: recentlyOpened, isCancelled: { Task.isCancelled }
             ))
             #endif
         }
@@ -1205,10 +1209,12 @@ public final class ReaderStore {
         filteredIDs: Set<Article.ID>,
         query: String,
         order: ArticleSortOrder,
+        recentlyOpened: [Article.ID: Date],
         isCancelled: () -> Bool = { false }
     ) -> [Article] {
         func matchesSource(_ article: Article) -> Bool {
             if !feedSelection.isEmpty { return feedSelection.contains(article.feedID) }
+            if smartSelection == .recent { return recentlyOpened[article.id] != nil }
             if let smartSelection { return article.matches(.smart(smartSelection)) }
             return true
         }
@@ -1219,6 +1225,7 @@ public final class ReaderStore {
             case .some(.unread), .some(.all), .none: return true
             case .some(.today): return Calendar.current.isDateInToday(article.publishedAt)
             case .some(.starred): return article.isStarred
+            case .some(.recent): return recentlyOpened[article.id] != nil
             case .some(.filtered): return false
             // The Downloaded source is handled before this compute (from the
             // offline store), so it's never the selection here.
@@ -1252,7 +1259,15 @@ public final class ReaderStore {
             if matches && matchesQuery(article) { result.append(article) }
         }
         guard !isCancelled() else { return [] }
-        result.sort { Article.isOrdered($0, $1, by: order) }
+        if feedSelection.isEmpty, categorySelection == nil, smartSelection == .recent {
+            result.sort {
+                let lhs = recentlyOpened[$0.id] ?? .distantPast
+                let rhs = recentlyOpened[$1.id] ?? .distantPast
+                return lhs == rhs ? $0.id < $1.id : lhs > rhs
+            }
+        } else {
+            result.sort { Article.isOrdered($0, $1, by: order) }
+        }
         return isCancelled() ? [] : result
     }
 
@@ -1329,6 +1344,7 @@ public final class ReaderStore {
     /// Toggles a category's sort order (re-tapping its segment), persists it, and
     /// re-sorts the list immediately.
     public func toggleSortOrder(for source: SmartSource) {
+        guard source != .recent else { return }
         sortOrders[source.rawValue] = sortOrder(for: source).toggled()
         persistSortOrders()
         scheduleArticleFilter()
@@ -2699,11 +2715,23 @@ public final class ReaderStore {
         return !ids.isEmpty && feedSelection == ids
     }
 
+    /// Called by the presented reading surface, never by bulk read mutations or
+    /// speculative selection. Opening is remembered even with auto-read disabled.
+    public func recordRecentlyOpened(articleID: Article.ID, now: Date = .now) {
+        guard listedArticle(withID: articleID) != nil else { return }
+        recentlyRead.selectLibrary(syncFolderURL?.standardizedFileURL.path ?? "local")
+        recentlyRead.record(articleID, now: now)
+        if smartSelection == .recent { scheduleArticleFilter(animated: false) }
+    }
+
     public func count(for source: SmartSource) -> Int {
         switch source {
         case .unread: totalUnread
         case .today: todayCount
         case .starred: starredCount
+        case .recent: recentlyRead.opened.keys.filter {
+            articleIndexByID[$0] != nil && !filteredArticleIDs.contains($0)
+        }.count
         // `.all` excludes filtered articles (they live only under `.filtered`).
         case .all: allCount
         case .filtered: filteredArticleIDs.count
@@ -5182,8 +5210,8 @@ public final class ReaderStore {
 
     /// Test-only factory (the app uses `shared`): lets regression tests drive
     /// store flows on an isolated instance without touching global state.
-    static func _makeForTesting(storage: ReaderStorage? = nil) -> ReaderStore {
-        let store = ReaderStore()
+    static func _makeForTesting(storage: ReaderStorage? = nil, historyDefaults: UserDefaults = .standard) -> ReaderStore {
+        let store = ReaderStore(historyDefaults: historyDefaults)
         store.storage = storage
         if storage != nil {
             store.deviceID = "test"

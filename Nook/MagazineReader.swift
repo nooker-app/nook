@@ -338,6 +338,7 @@ struct MagazineReaderDetail: View {
             text: Self.translationText(for: article)
         )
         .task(id: article.id) {
+            store.recordRecentlyOpened(articleID: article.id)
             contentReady = false
             do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
             contentReady = true
@@ -904,6 +905,7 @@ struct MagazineBrowserPanel: View {
             translationInFlight = false
         }
         .task(id: article.id) {
+            store.recordRecentlyOpened(articleID: article.id)
             store.retainArticle(id: article.id)
             let detected = await Task.detached { MagazineReaderDetail.detectLanguage(for: article) }.value
             if !Task.isCancelled { detectedLanguage = detected }

@@ -2679,6 +2679,7 @@ private struct InAppBrowserPanel: View {
         .padding(.bottom, 14)
         .offset(y: max(0, dragOffset))
         .task(id: article.id) {
+            store.recordRecentlyOpened(articleID: article.id)
             store.retainArticle(id: article.id)
             if markReadOnOpen {
                 store.markArticleOpened(articleID: article.id)
@@ -3090,6 +3091,7 @@ private struct ReaderDetailView: View {
             text: Self.translationText(for: article)
         )
         .task(id: article.id) {
+            store.recordRecentlyOpened(articleID: article.id)
             // The change handler has normally bound the article already; binding
             // here too keeps the language detection below from being dropped.
             if session.begin(articleID: article.id) {

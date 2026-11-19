@@ -572,6 +572,7 @@ struct ReaderDetailView: View {
             }
         }
         .task(id: article.id) {
+            store.recordRecentlyOpened(articleID: article.id)
             // Detect the article's language so translation is offered only when
             // it differs from the app's language; reset any prior translation.
             isShowingTranslation = false
@@ -1650,6 +1651,7 @@ struct InAppBrowserSheet: View {
             }
         }
         .task(id: article.id) {
+            store.recordRecentlyOpened(articleID: article.id)
             store.retainArticle(id: article.id)
             if markReadOnOpen {
                 store.markArticleOpened(articleID: article.id)

@@ -509,6 +509,7 @@ extension Article {
         // static test never matches.
         case .smart(.filtered): false
         case .smart(.offline): false
+        case .smart(.recent): false
         case .feed(let feedID): self.feedID == feedID
         }
     }
@@ -552,6 +553,7 @@ public enum SmartSource: String, CaseIterable, Identifiable, Sendable {
     case unread
     case today
     case starred
+    case recent
     case all
     /// Articles hidden by the user's filters. Kept out of `library` so it doesn't
     /// sit in the main list; the sidebar pins it separately at the bottom.
@@ -563,7 +565,7 @@ public enum SmartSource: String, CaseIterable, Identifiable, Sendable {
     /// The sources shown in the main Library list. `filtered` and `offline` are
     /// deliberately excluded — they're pinned at the very bottom of the sidebar,
     /// out of the way, and only surfaced when relevant.
-    public static let library: [SmartSource] = [.unread, .today, .starred, .all]
+    public static let library: [SmartSource] = [.unread, .today, .starred, .recent, .all]
 
     public var id: Self { self }
 
@@ -571,6 +573,7 @@ public enum SmartSource: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .unread: String(localized: "Unread", bundle: Bundle.module)
         case .today: String(localized: "Today", bundle: Bundle.module)
+        case .recent: String(localized: "Recently Read", bundle: Bundle.module)
         case .starred: String(localized: "Starred", bundle: Bundle.module)
         case .all: String(localized: "All Articles", bundle: Bundle.module)
         case .filtered: String(localized: "Filtered", bundle: Bundle.module)
@@ -582,6 +585,7 @@ public enum SmartSource: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .unread: "largecircle.fill.circle"
         case .today: "calendar"
+        case .recent: "clock.arrow.circlepath"
         case .starred: "star"
         case .all: "tray.full"
         case .filtered: "line.3.horizontal.decrease.circle"

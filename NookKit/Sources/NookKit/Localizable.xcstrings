@@ -1,6 +1,39 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Recently Read": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 읽은 글"
+          }
+        }
+      }
+    },
+    "No recently opened stories": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근에 연 글이 없어요"
+          }
+        }
+      }
+    },
+    "Stories you open appear here, even when automatic read marking is off.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "직접 열어 본 글을 최근 순서대로 모아드려요. 자동 읽음 처리를 꺼두어도 기록돼요."
+          }
+        }
+      }
+    },
       "Prepare visible articles": {
         "extractionState": "manual",
         "localizations": {

@@ -151,7 +151,68 @@ struct MagazineRecommendationTests {
         #expect(defaults.integer(forKey: MagazineRecommendationController.resetKey) == 1)
     }
 
-    @Test("A large library ranks off the main actor with a bounded candidate pool")
+    @Test("All unread ages and pages participate; a year-old match beats 700 newer stories")
+    func entireUnreadLibrary() async {
+        var reference = article("reference", title: "Swift native macOS architecture", feed: "swift")
+        reference.isStarred = true
+        reference.isRead = true
+        let old = article("old", title: reference.title, feed: "swift", age: 365 * 86400)
+        let fresh = (0..<700).map {
+            article("fresh-\($0)", title: "Football stadium league results", feed: "sports", age: Double($0))
+        }
+        let candidates = fresh + [old, reference]
+        let ranked = await MagazineRecommendationRanker().ranked(candidates: candidates, library: candidates,
+            history: .init(), now: now, useSemantics: false)
+        #expect(ranked.count == 701)
+        #expect(ranked.first?.articleID == old.id)
+        #expect(Set(ranked.map(\.articleID)) == Set((fresh + [old]).map(\.id)))
+    }
+
+    @Test("Choosing a recommendation immediately teaches interests without reading time; repeats don't inflate weight")
+    func explicitChoices() async throws {
+        let reference = article("reference", title: "Swift native macOS architecture", feed: "swift")
+        let match = article("match", title: reference.title, feed: "swift", age: 86400)
+        let fresh = article("fresh", title: "Football stadium league results", feed: "sports")
+        let ranker = MagazineRecommendationRanker()
+        var history = try JSONDecoder().decode(MagazineReadingHistory.self, from: Data(#"{"entries":{}}"#.utf8))
+        #expect(await ranker.rank(candidates: [match, fresh], library: [reference], history: history,
+                                 now: now, useSemantics: false)?.articleID == fresh.id)
+        for _ in 0..<20 { history.select(reference.id, now: now) }
+        #expect(history.weight(for: reference, now: now) == 0.75)
+        #expect(history.entries.isEmpty)
+        #expect(await ranker.rank(candidates: [match, fresh], library: [reference], history: history,
+                                 now: now, useSemantics: false)?.articleID == match.id)
+        let restored = try JSONDecoder().decode(MagazineReadingHistory.self, from: JSONEncoder().encode(history))
+        #expect(restored.selections?[reference.id] == now)
+    }
+
+    @Test("Recommendation list persists choices and respects personalization, dismissals, and unread membership")
+    @MainActor func listController() async throws {
+        let suite = "RecommendationList.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var reference = article("reference", title: "Swift native macOS architecture", feed: "swift")
+        reference.isRead = true
+        let match = article("match", title: reference.title, feed: "swift", age: 100)
+        let fresh = article("fresh", title: "Football stadium league results", feed: "sports")
+        let candidates = [reference, match, fresh]
+        let writer = MagazineRecommendationController(defaults: defaults)
+        writer.selectLibrary("one")
+        writer.recordSelection(articleID: reference.id)
+        let reader = MagazineRecommendationController(defaults: defaults)
+        reader.selectLibrary("one")
+        #expect(await reader.rankedRecommendations(candidates: candidates, library: candidates,
+                                                   personalized: true).first?.articleID == match.id)
+        #expect(await reader.rankedRecommendations(candidates: candidates, library: candidates,
+                                                   personalized: false).map(\.articleID) == [fresh.id, match.id])
+        _ = reader.dismissRecommendation(match.id)
+        #expect(await reader.rankedRecommendations(candidates: candidates, library: candidates,
+                                                   personalized: true).map(\.articleID) == [fresh.id])
+        #expect(await reader.rankedRecommendations(candidates: [reference], library: candidates,
+                                                   personalized: true).isEmpty)
+    }
+
+    @Test("A large library ranks off the main actor without excluding candidates")
     func largeLibrary() async {
         let articles = (0..<6000).map {
             article("\($0)", title: "Topic \($0 % 40) Swift architecture research update \($0)",
@@ -160,10 +221,10 @@ struct MagazineRecommendationTests {
         var history = MagazineReadingHistory()
         for article in articles.suffix(100) { history.record(article.id, seconds: 30, now: now) }
         let start = ContinuousClock.now
-        let result = await MagazineRecommendationRanker().rank(candidates: articles, library: articles,
+        let result = await MagazineRecommendationRanker().ranked(candidates: articles, library: articles,
             history: history, now: now, useSemantics: false)
         print("Magazine rank, 6000 articles: \(start.duration(to: .now))")
-        #expect(result != nil)
+        #expect(result.count == 6000)
         let semanticStart = ContinuousClock.now
         let semanticResult = await MagazineRecommendationRanker().rank(candidates: articles, library: articles,
             history: history, now: now)

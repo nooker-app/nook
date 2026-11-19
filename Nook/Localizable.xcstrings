@@ -1,6 +1,105 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Recently opened": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근에 열어 본 글"
+          }
+        }
+      }
+    },
+    "Recommended for you": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "나를 위한 추천"
+          }
+        }
+      }
+    },
+    "Recommended": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추천순"
+          }
+        }
+      }
+    },
+    "Newest": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최신순"
+          }
+        }
+      }
+    },
+    "Every unread story, ranked for you. Your choices and reading shape the next picks.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기간에 관계없이 모든 안 읽은 글에서 골랐어요. 선택하고 읽을수록 취향에 가까워져요."
+          }
+        }
+      }
+    },
+    "All unread stories are included. Turn on personalization in Settings to rank them by your interests.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기간에 관계없이 모든 안 읽은 글이 포함돼요. 설정에서 맞춤 추천을 켜면 관심사에 맞춰 정렬돼요."
+          }
+        }
+      }
+    },
+    "Personalize recommendations": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 취향에 맞게 추천"
+          }
+        }
+      }
+    },
+    "Nook ranks every unread story on this Mac using your choices, reading time, starred stories, and topics. Your interests stay on this device. Marking a feed as read does not train recommendations.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추천 글 선택, 읽은 시간, 별표와 주제를 바탕으로 이 Mac에서 모든 안 읽은 글의 순위를 매겨요. 관심사는 이 기기에만 저장되며, 일괄 읽음 처리는 추천에 영향을 주지 않아요."
+          }
+        }
+      }
+    },
+    "This resets recommendation interests. Recently Read, your articles, and stars stay unchanged; starred stories still help guide recommendations.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "추천 관심사를 초기화해요. 최근 읽은 글, 기사와 별표는 유지되며 별표한 글은 계속 추천에 반영돼요."
+          }
+        }
+      }
+    },
     "More": {
       "extractionState": "manual",
       "localizations": {

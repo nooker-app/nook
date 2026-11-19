@@ -2,7 +2,7 @@ import Foundation
 
 /// The selected collection, not just an empty result, determines the next step.
 public enum ArticleEmptyState: Equatable, Sendable {
-    case search, saved, unread, today, starred, filtered, offline, category, feed, folder, subscriptions, all
+    case search, saved, unread, today, starred, recent, filtered, offline, category, feed, folder, subscriptions, all
 
     public static func resolve(query: String, feedIDs: Set<Feed.ID>, categoryID: String?,
                                smart: SmartSource?, hasSubscriptions: Bool, emptyFolder: Bool = false) -> Self {
@@ -15,6 +15,7 @@ public enum ArticleEmptyState: Equatable, Sendable {
         case .unread: return .unread
         case .today: return .today
         case .starred: return .starred
+        case .recent: return .recent
         case .filtered: return .filtered
         case .offline: return .offline
         case .all, nil: return hasSubscriptions ? .all : .subscriptions
@@ -28,6 +29,7 @@ public enum ArticleEmptyState: Equatable, Sendable {
         case .unread: String(localized: "You're All Caught Up", bundle: .module)
         case .today: String(localized: "Nothing new today", bundle: .module)
         case .starred: String(localized: "Your favorites start here", bundle: .module)
+        case .recent: String(localized: "No recently opened stories", bundle: .module)
         case .filtered: String(localized: "No filtered stories", bundle: .module)
         case .offline: String(localized: "No downloaded stories", bundle: .module)
         case .category: String(localized: "No stories with this label yet", bundle: .module)
@@ -40,6 +42,7 @@ public enum ArticleEmptyState: Equatable, Sendable {
 
     public var message: String {
         switch self {
+        case .recent: String(localized: "Stories you open appear here, even when automatic read marking is off.", bundle: .module)
         case .search: String(localized: "Try another search or clear it to see this collection again.", bundle: .module)
         case .saved: String(localized: "Links you save to Nook appear here. You can keep reading from your subscriptions.", bundle: .module)
         case .unread: String(localized: "You've read everything in this collection. Revisit a story or check for new ones.", bundle: .module)
@@ -62,6 +65,7 @@ public enum ArticleEmptyState: Equatable, Sendable {
         case .unread: "checkmark.circle"
         case .today: "sun.max"
         case .starred: "star"
+        case .recent: "clock.arrow.circlepath"
         case .filtered: "line.3.horizontal.decrease.circle"
         case .offline: "arrow.down.circle"
         case .category: "tag"
