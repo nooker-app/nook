@@ -5,6 +5,21 @@ import NookKit
 import SwiftUI
 import Translation
 
+/// A second shortcut for the existing close action, without replacing the
+/// toolbar's Escape shortcut. Window-local shortcuts precede the native Close
+/// command and disappear with the reader; a browser disables the reader below.
+private struct ReaderCloseShortcut: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) { EmptyView() }
+            .buttonStyle(.plain)
+            .keyboardShortcut("w", modifiers: .command)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 struct MagazineReaderDetail: View {
     @Bindable var store: ReaderStore
     let articleID: Article.ID
@@ -180,6 +195,7 @@ struct MagazineReaderDetail: View {
                 }
             }
             .magazineMorphingMenus(menuPresentation)
+            .background { ReaderCloseShortcut(action: onClose) }
     }
 
     private var presentedArticle: Article? {
@@ -902,6 +918,7 @@ struct MagazineBrowserPanel: View {
             store.markArticleOpened(articleID: article.id)
         }
         .onExitCommand(perform: dismissReader)
+        .background { ReaderCloseShortcut(action: onClose) }
     }
 
     private func dismissReader() {
