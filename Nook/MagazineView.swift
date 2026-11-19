@@ -66,7 +66,8 @@ struct MagazineView: View {
                 .disabled(store.isBrowserPresented)
                 .accessibilityHidden(opened != nil || store.isBrowserPresented)
             if let opened {
-                MagazineReaderDetail(store: store, articleID: opened, heroNamespace: hero,
+                MagazineReaderDetail(store: store, recommendations: recommendations,
+                                     articleID: opened, heroNamespace: hero,
                                      nextTitle: adjacentRow(forward: true)?.title,
                                      previousTitle: adjacentRow(forward: false)?.title,
                                      backToCollection: libraryScope != nil,

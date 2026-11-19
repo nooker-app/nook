@@ -38,8 +38,57 @@ struct MagazinePublicationDate: View {
     }
 }
 
+/// Separate from reading tools: feedback changes recommendations, never the
+/// article's read state or the reader's current selection.
+struct MagazineRecommendationFeedbackButton: View {
+    @Bindable var recommendations: MagazineRecommendationController
+    let articleID: Article.ID
+    let libraryID: String
+    @State private var undo: MagazineRecommendationController.DisinterestUndo?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let excluded = recommendations.isNotInterested(articleID)
+        let canUndo = excluded && undo?.articleID == articleID
+        Button {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+                if let undo, canUndo {
+                    recommendations.undoDisinterest(undo)
+                    self.undo = nil
+                } else if excluded {
+                    recommendations.restoreRecommendation(articleID)
+                } else {
+                    undo = recommendations.markNotInterested(articleID)
+                }
+            }
+        } label: {
+            Label(canUndo ? "Undo" : (excluded ? "Preference saved" : "Not my taste"),
+                  systemImage: canUndo ? "arrow.uturn.backward" : (excluded ? "checkmark" : "hand.thumbsdown"))
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(MagazineGlassButtonStyle())
+        .padding(8)
+        .glassEffect(.regular.tint(NookTheme.accent.opacity(0.025)), in: Capsule())
+        .shadow(color: .black.opacity(0.12), radius: 16, y: 5)
+        .help(excluded ? "Include in recommendations again" : "Exclude this story and recommend fewer similar topics.")
+        .accessibilityValue(Text(excluded ? "Preference saved" : ""))
+        .onChange(of: libraryID, initial: true) { _, scope in
+            undo = nil
+            recommendations.selectLibrary(scope)
+        }
+        .task(id: undo?.id) {
+            guard let pending = undo else { return }
+            do { try await Task.sleep(for: .seconds(max(0, pending.deadline.timeIntervalSinceNow))) }
+            catch { return }
+            guard !Task.isCancelled, undo?.id == pending.id else { return }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { undo = nil }
+        }
+    }
+}
+
 struct MagazineReaderDetail: View {
     @Bindable var store: ReaderStore
+    @Bindable var recommendations: MagazineRecommendationController
     let articleID: Article.ID
     let heroNamespace: Namespace.ID
     let nextTitle: String?
@@ -730,6 +779,19 @@ struct MagazineReaderDetail: View {
     /// Reading tools remain within reach after the heading scrolls away. This
     /// inset reserves space so the last paragraph and links never sit under it.
     private func floatingReadingTools(_ article: Article) -> some View {
+        HStack(spacing: 12) {
+            readingToolsCapsule(article)
+            MagazineRecommendationFeedbackButton(
+                recommendations: recommendations, articleID: article.id,
+                libraryID: store.syncFolderURL?.standardizedFileURL.path ?? "local"
+            )
+            .id(article.id)
+        }
+        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func readingToolsCapsule(_ article: Article) -> some View {
         HStack(spacing: 8) {
             if summariesEnabled {
                 let summary = session.summary(for: article.id)
@@ -780,8 +842,6 @@ struct MagazineReaderDetail: View {
         .padding(8)
         .glassEffect(.regular.tint(NookTheme.accent.opacity(0.025)), in: Capsule())
         .shadow(color: .black.opacity(0.12), radius: 16, y: 5)
-        .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 16)
-        .frame(maxWidth: .infinity)
     }
 
     private func articleHeader(_ article: Article) -> some View {
