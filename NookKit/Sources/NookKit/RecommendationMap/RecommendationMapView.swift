@@ -333,7 +333,7 @@ public struct RecommendationMapView: View {
             Text("About the map", bundle: .module).font(.headline)
             Text("Numbers show unread recommendation ranks. Dimmed points with a checkmark are stories you have read. Colors show categories; connections compare the actual titles and content, even across categories.", bundle: .module)
             Text("Cached original articles are included. Otherwise, Nook uses the content provided by the feed. Connections help you explore related ideas; they do not explain why a story was recommended.", bundle: .module)
-            Text("Select a point to preview, double-click to read. Scroll to pan, pinch or use the wheel to zoom, and drag a point to explore its neighborhood. Search also finds stories you have read.", bundle: .module)
+            Text("Select a point to preview, double-click to read. In 3D, drag to rotate and Shift-drag to pan. Scroll to pan, pinch or use the wheel to zoom. Switch to 2D to drag individual points. Search also finds stories you have read.", bundle: .module)
             RecommendationModelSettings()
         }.font(.callout).lineSpacing(4).padding(24)
         }.frame(width: 390, height: 620).buttonStyle(MagazineGlassButtonStyle())
@@ -343,14 +343,23 @@ public struct RecommendationMapView: View {
 private struct RecommendationMapCanvas: View {
     @Bindable var model: RecommendationMapController
     @State private var control = RecommendationCanvasControl()
+    @AppStorage("recommendationMapSpatial") private var spatial = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        RecommendationCanvasHost(model: model, control: control, reduceMotion: reduceMotion)
+        RecommendationCanvasHost(model: model, control: control, reduceMotion: reduceMotion, spatial: spatial)
             .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
             .onChange(of: model.focusRequest) { _, _ in control.view?.updateSelection(model.selectedID); control.focus() }
             .overlay(alignment: .bottom) {
                 HStack(spacing: 12) {
+                    Button { spatial.toggle() } label: {
+                        Text(verbatim: spatial ? "3D" : "2D").font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(spatial ? NookTheme.accent : .secondary)
+                    }
+                    .accessibilityValue(Text(verbatim: spatial ? "3D" : "2D"))
+                    .help(Text("Switch between 2D and 3D", bundle: .module))
+                    .accessibilityLabel(Text("Switch between 2D and 3D", bundle: .module))
+                    Divider().frame(height: 14)
                     Button { control.fit() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                         .help(Text("Fit map", bundle: .module)).accessibilityLabel(Text("Fit map", bundle: .module))
                     Divider().frame(height: 14)
@@ -368,6 +377,15 @@ private struct RecommendationMapCanvas: View {
                 }
                 .font(.system(size: 12)).buttonStyle(MagazinePlainButtonStyle(capsule: true))
                 .padding(.horizontal, 18).padding(.vertical, 13).glassEffect(.regular, in: .capsule).padding(.bottom, 20)
+            }
+            .overlay(alignment: .topLeading) {
+                if spatial && !model.graph.nodes.isEmpty {
+                    Text("Drag to rotate · Scroll to pan · Pinch to zoom", bundle: .module)
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(NookTheme.canvas.opacity(0.8), in: Capsule())
+                        .padding(14).allowsHitTesting(false)
+                }
             }
             .overlay {
                 if model.loading && model.graph.nodes.isEmpty {

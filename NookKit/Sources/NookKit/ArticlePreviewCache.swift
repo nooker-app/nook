@@ -43,7 +43,14 @@ public actor ArticlePreviewCache {
     private let images = NSCache<NSURL, CGImage>()
 
     init(directory: URL? = nil, session: URLSession? = nil) {
-        self.directory = directory ?? URL.cachesDirectory.appending(path: "Nook/ArticlePreviews", directoryHint: .isDirectory)
+        #if DEBUG
+        let perfDirectory = PerfLaunch.isActive ? PerfLaunch.value(for: "-NookPerfPreviewCache").map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        } : nil
+        #else
+        let perfDirectory: URL? = nil
+        #endif
+        self.directory = directory ?? perfDirectory ?? URL.cachesDirectory.appending(path: "Nook/ArticlePreviews", directoryHint: .isDirectory)
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 25

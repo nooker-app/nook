@@ -5,6 +5,8 @@ performance harness. Generated fixtures live under `perf-data/`; captured logs
 live under `perf-runs/`. Both paths are ignored by Git. The runner restores a
 golden copy before every launch and passes `-NookPerfLibrary`, so it neither
 opens the user's real library nor writes its bookmark/UserDefaults.
+Each launch also gets an isolated article-preview cache. A scenario may explicitly
+pass `-NookPerfPreviewCache <path>` to reuse a measured cache across launches.
 
 ## Generate golden libraries
 
@@ -228,3 +230,16 @@ run), for CI-style use:
 ```sh
 python3 .claude/skills/ui-behavior-forensics/perfreport.py --compare before-abc1234 after-p2 --strict
 ```
+
+## Magazine and 3D map
+
+`tools/perf/scripts/magazine.json` measures the actual Beta grid with repeated
+native gesture/momentum flicks. `magazine-media.json` exercises real preview
+fetches and Apple Intelligence title/excerpt translation against a local copy
+of an actual RSS library. Its detailed frame CSVs remain beside the launch logs;
+`python3 tools/perf/media-report.py <archived-log> <launch-directory>` groups
+the callbacks by scrolling and media-animation windows. `tools/perf/orbit.sh` compiles the real map canvas
+in a standalone optimized native-window benchmark with 20,000 fixture nodes.
+It opens a foreground window and exits after 260 display callbacks. See
+[the measurement report](../../docs/perf/magazine-and-spatial-map.md) for scope,
+controls and results. Classic scenarios and their table probe are unchanged.

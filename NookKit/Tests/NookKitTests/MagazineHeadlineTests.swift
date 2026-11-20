@@ -1,6 +1,8 @@
 #if os(macOS)
 import AppKit
+import Observation
 import SwiftUI
+import Synchronization
 import Testing
 @testable import NookKit
 
@@ -9,15 +11,23 @@ import Testing
 struct MagazineHeadlineTests {
     @Test func partialTranslationNeverReplacesTheReadableTitle() {
         let original = "A quieter way to read"
-        #expect(MagazineTranslatedHeadline.displayTitle(original: original, state: nil, enabled: true) == original)
-        #expect(MagazineTranslatedHeadline.displayTitle(original: original,
-            state: .translating("조금", provider: .appleIntelligence), enabled: true) == original)
-        #expect(MagazineTranslatedHeadline.displayTitle(original: original,
-            state: .translated("조금 더 여유롭게 읽는 법", provider: .appleIntelligence), enabled: true) == "조금 더 여유롭게 읽는 법")
-        #expect(MagazineTranslatedHeadline.displayTitle(original: original,
-            state: .translated(" ", provider: .gemini), enabled: true) == original)
-        #expect(MagazineTranslatedHeadline.displayTitle(original: original,
-            state: .translated("조금 더 여유롭게 읽는 법", provider: .gemini), enabled: false) == original)
+        let translator = ListTitleTranslator()
+        let box = translator.box(for: "headline")
+        func displayed(_ enabled: Bool = true) -> String {
+            MagazineTranslatedHeadline.displayTitle(original: original, translation: box.completedText, enabled: enabled)
+        }
+        let changed = Mutex(false)
+        withObservationTracking { _ = displayed() } onChange: { changed.withLock { $0 = true } }
+        #expect(displayed() == original)
+        translator._deliverForTesting(.translating("조금", provider: .appleIntelligence), for: "headline")
+        #expect(displayed() == original)
+        #expect(!changed.withLock { $0 }, "Provider partials must not rebuild the original headline")
+        translator._deliverForTesting(.translated("조금 더 여유롭게 읽는 법", provider: .appleIntelligence), for: "headline")
+        #expect(displayed() == "조금 더 여유롭게 읽는 법")
+        #expect(changed.withLock { $0 })
+        #expect(displayed(false) == original)
+        translator._deliverForTesting(.translated(" ", provider: .gemini), for: "headline")
+        #expect(displayed() == original)
     }
 
     @Test("Ripple endpoints keep the normal headline's wrapping and height", arguments: [220.0, 360.0, 720.0])

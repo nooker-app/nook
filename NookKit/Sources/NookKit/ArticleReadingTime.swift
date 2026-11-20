@@ -55,7 +55,7 @@ public struct ArticleReadingTimeLabel: View {
     private var active: Bool { !viewportBound || visible }
     private var value: Int { resolvedID == id ? (minutes ?? fallback) : fallback }
     private var taskID: String {
-        "\(id)|\(article?.url.absoluteString ?? "")|\(article.flatMap(NookPostOrigin.fingerprint) ?? "")|\(active)|\(revision)"
+        "\(id)|\(article?.url.absoluteString ?? "")|\(article.flatMap { NookPostOrigin.isNookPost(articleID: $0.id) ? NookPostOrigin.fingerprint(of: $0) : nil } ?? "")|\(active)|\(revision)"
     }
 
     public var body: some View {

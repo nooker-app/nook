@@ -1,0 +1,7 @@
+{
+  "repetitions": 5,
+  "launchArgs": ["-macLayoutMode", "magazine", "-macLayoutIntroductionHandled", "YES", "-translateListTitles", "NO", "-magazineUnreadRecommendationOrder", "NO"],
+  "steps": [
+    {"id":"M1","setup":[{"type":"selectSmart","target":"unread"},{"type":"scrollStart"}],"action":{"type":"flicks","count":12}}
+  ]
+}

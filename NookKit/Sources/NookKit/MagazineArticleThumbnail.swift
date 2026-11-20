@@ -15,22 +15,37 @@ extension EnvironmentValues {
 public extension View {
     /// A lazy grid's onAppear includes prefetched rows. Actual viewport
     /// visibility owns the request instead, including cancellation on exit.
-    func magazinePreviewDemand(active: Bool) -> some View {
-        modifier(MagazinePreviewDemand(active: active))
+    func magazinePreviewDemand(active: Bool, paused: Bool = false) -> some View {
+        modifier(MagazinePreviewDemand(active: active, paused: paused))
     }
 }
 
 private struct MagazinePreviewDemand: ViewModifier {
     var active: Bool
+    var paused: Bool
     @State private var visible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
             // Headline glyph layout deliberately disables animation to keep
             // ellipses stable. Move the entire card as one geometry group when a
             // preceding card grows, or its title jumps ahead of the other rows.
             .geometryGroup()
+            .opacity(visible || paused ? 1 : 0)
+            .offset(y: reduceMotion || visible || paused ? 0 : 16)
             .environment(\.magazinePreviewVisible, visible && active)
-            .onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
+            // One viewport subscription drives both the reveal and preview
+            // demand. A separate animated observer doubled the graph updates.
+            .onScrollVisibilityChange(threshold: 0.01) { next in
+                guard next != visible else { return }
+                if next && !paused {
+                    withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.34)) { visible = true }
+                } else {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { visible = next }
+                }
+            }
             .onDisappear { visible = false }
     }
 }
@@ -101,6 +116,11 @@ public struct MagazineArticleThumbnail: View {
     }
 
     private func show(_ result: CGImage, animated: Bool) {
+        #if DEBUG
+        MainThreadLog.add("magazine.thumbnail.show", ms: 0)
+        if animated { MainThreadLog.add("magazine.thumbnail.reveal", ms: 0) }
+        MainThreadLog.note("magazine.thumbnail", extra: "animated=\(animated ? 1 : 0)")
+        #endif
         image = result
         withAnimation(animated && !reduceMotion ? .spring(duration: 0.48, bounce: 0) : nil) {
             revealed = true

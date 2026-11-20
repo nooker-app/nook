@@ -1,0 +1,8 @@
+{
+  "repetitions": 2,
+  "coldFirst": true,
+  "launchArgs": ["-macLayoutMode", "magazine", "-macLayoutIntroductionHandled", "YES", "-translateListTitles", "YES", "-appLanguage", "ko", "-titleTranslationProvider", "appleIntelligence", "-magazineUnreadRecommendationOrder", "NO", "-NookPerfHoldMedia", "YES", "-NookPerfFrameDetail", "YES"],
+  "steps": [
+    {"id":"M3","setup":[{"type":"selectSmart","target":"unread"},{"type":"scrollStart"}],"action":{"type":"realBrowse"}}
+  ]
+}

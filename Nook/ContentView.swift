@@ -1681,7 +1681,7 @@ enum PerfListScrollTarget {
 
 /// Attached as the article `List`'s background: a sibling of the table, so — unlike
 /// a row — it is never removed or reused as rows scroll out.
-private struct PerfDisplayLinkProbe: NSViewRepresentable {
+struct PerfDisplayLinkProbe: NSViewRepresentable {
     func makeNSView(context: Context) -> ProbeView { ProbeView() }
     func updateNSView(_ nsView: ProbeView, context: Context) {}
 
@@ -1711,6 +1711,10 @@ private struct PerfDisplayLinkProbe: NSViewRepresentable {
         func resolveScrollView() -> NSScrollView? {
             if let cached = cachedScrollView, cached.window === window { return cached }
             guard window != nil else { return nil }
+            if let enclosingScrollView {
+                cachedScrollView = enclosingScrollView
+                return enclosingScrollView
+            }
             let center = convert(NSPoint(x: bounds.midX, y: bounds.midY), to: nil)
             var ancestor = superview
             while let current = ancestor {

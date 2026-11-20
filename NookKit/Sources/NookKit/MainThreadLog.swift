@@ -163,6 +163,8 @@ public enum MainThreadLog {
             "rootBody=\(calls("root.body"))", "sidebarBody=\(calls("sidebar.body"))", "sidebarRow=\(calls("sidebar.row"))",
             "readerBody=\(calls("reader.body"))", "readerBlocks=\(calls("reader.blocks"))", "titleBox=\(calls("list.title.box"))",
             "titleBoxRelease=\(calls("list.title.box.release"))",
+            "magazineBody=\(calls("magazine.body"))", "magazineRows=\(calls("magazine.rows"))",
+            "magazineCard=\(calls("magazine.card"))",
             "frames=\(deltas.count)", "dropped=\(dropped)", "droppedPct=\(number(droppedPct))",
             "hitchMs=\(number(hitchMs))", "hitchRatio=\(number(activeMs > 0 ? hitchMs / (activeMs / 1000) : 0))",
             "p99Frame=\(number(deltas.isEmpty ? 0 : deltas[p99Index]))", "worstFrame=\(number(deltas.last ?? 0))",
@@ -189,7 +191,18 @@ public enum MainThreadLog {
             "rowAddOffscreen=\(calls("list.table.addOffscreen"))", "rowAdd=\(calls("list.table.add"))",
         ]
         fields += current.extras.map { "\($0.key)=\($0.value)" }
+        fields += ["thumbnailShow=\(calls("magazine.thumbnail.show"))", "thumbnailReveal=\(calls("magazine.thumbnail.reveal"))", "ripple=\(calls("magazine.ripple"))"]
         raw(fields.joined(separator: " "))
+        #if DEBUG
+        if PerfLaunch.isActive, PerfLaunch.value(for: "-NookPerfFrameDetail") == "YES" {
+            // One write after the active window, never I/O in a display callback.
+            let csv = "scenario,rep,at,ms,expected\n" + active.map {
+                "\(token(current.id)),\(current.rep),\($0.at),\($0.ms),\($0.expected)"
+            }.joined(separator: "\n")
+            let path = url.deletingLastPathComponent().appendingPathComponent("frames-\(token(current.id))-\(current.rep).csv")
+            try? csv.write(to: path, atomically: true, encoding: .utf8)
+        }
+        #endif
         flush()
     }
 

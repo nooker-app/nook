@@ -237,6 +237,19 @@ final class PerfDriver {
             for _ in 0..<(action.count ?? 20) { adapter.nextArticle(); try await Task.sleep(for: .milliseconds(100)) }
         case "refreshAndFling": adapter.refreshAll(); try await fling(count: action.count ?? 8)
         case "fling": try await fling(count: action.count ?? 8)
+        case "flicks": await flicks(count: action.count ?? 8)
+        case "realBrowse":
+            NotificationCenter.default.post(name: Notification.Name("NookPerfResumeMagazineMedia"), object: nil)
+            for round in 0..<3 {
+                MainThreadLog.note("real.dwell.begin", extra: "round=\(round)")
+                try await Task.sleep(for: .seconds(round == 0 ? 12 : 8))
+                MainThreadLog.note("real.scroll.begin", extra: "round=\(round)")
+                await flicks(count: 4)
+                MainThreadLog.note("real.scroll.end", extra: "round=\(round)")
+            }
+            try await Task.sleep(for: .seconds(10))
+        case "scrollStart":
+            if let scroll = listScrollView(for: action.type) { move(scroll, to: 0) }
         case "thumbDrag": try await thumbDrag(steps: action.count ?? 30, duration: action.duration ?? 1)
         case "constantScroll": try await constantScroll(rate: action.rate ?? 1500, duration: action.duration ?? 5)
         case "keyRepeat":
@@ -270,6 +283,44 @@ final class PerfDriver {
                 await PerfListScrollTarget.nextFrame()
             }
         }
+    }
+
+    /// Real NSScrollView gesture + momentum events, delivered only to this app.
+    /// Unlike changing the clip offset, this exercises SwiftUI scroll phases.
+    private func flicks(count: Int) async {
+        guard let scroll = listScrollView(for: "flicks"), let window = scroll.window else { return }
+        let start = scroll.contentView.bounds.origin.y
+        let location = scroll.convert(NSPoint(x: scroll.bounds.midX, y: scroll.bounds.midY), to: nil)
+        func send(_ delta: Double, phase: CGScrollPhase? = nil, momentum: CGMomentumScrollPhase = .none) {
+            guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+                                   wheelCount: 1, wheel1: Int32(delta), wheel2: 0, wheel3: 0) else { return }
+            cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+            cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase?.rawValue ?? 0))
+            cg.setIntegerValueField(.scrollWheelEventMomentumPhase, value: Int64(momentum.rawValue))
+            cg.setIntegerValueField(.eventTargetUnixProcessID, value: Int64(ProcessInfo.processInfo.processIdentifier))
+            cg.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(window.windowNumber))
+            let screen = window.convertPoint(toScreen: location)
+            cg.location = CGPoint(x: screen.x, y: (NSScreen.screens.first?.frame.height ?? 0) - screen.y)
+            if let event = NSEvent(cgEvent: cg) { scroll.scrollWheel(with: event) }
+        }
+        for flick in 0..<count {
+            let direction = flick < count * 3 / 4 ? -1.0 : 1.0
+            send(direction * 30, phase: .began)
+            for beat in 0..<10 {
+                send(direction * Double(50 + min(beat, 6) * 12), phase: .changed)
+                await PerfListScrollTarget.nextFrame()
+            }
+            send(0, phase: .ended)
+            var velocity = 112.0
+            for beat in 0..<36 {
+                send(direction * velocity, momentum: beat == 0 ? .begin : .continuous)
+                velocity *= 0.90
+                await PerfListScrollTarget.nextFrame()
+            }
+            send(0, momentum: .end)
+            for _ in 0..<8 { await PerfListScrollTarget.nextFrame() }
+        }
+        MainThreadLog.note("perf.flicks", extra: "count=\(count) startY=\(start) endY=\(scroll.contentView.bounds.origin.y) docH=\(scroll.documentView?.bounds.height ?? 0)")
     }
 
     private func thumbDrag(steps: Int, duration: Double) async throws {
@@ -368,6 +419,10 @@ final class PerfDriver {
         NSApp.activate(ignoringOtherApps: true)
         // Let the resize lay out before the dividers are placed against it.
         try await Task.sleep(for: .milliseconds(300))
+        if UserDefaults.standard.string(forKey: "macLayoutMode") == "magazine" {
+            MainThreadLog.note("perf.layout", extra: "layout=magazine window=1440x900")
+            return
+        }
         guard let splitView = Self.outerSplitView(in: window.contentView), splitView.arrangedSubviews.count >= 3 else {
             MainThreadLog.note("perf.driver.error", extra: "action=layout reason=no_split_view")
             return

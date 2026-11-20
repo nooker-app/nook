@@ -1,0 +1,622 @@
+{
+  "hardware": "Mac mini, macOS 26.5.1, 60 Hz",
+  "viewport": "1440 \u00d7 900 points",
+  "data": "165 actual RSS articles, 161 unread, five English feeds; isolated preview caches",
+  "provider": "Apple Intelligence / Foundation Models; target Korean; no fake translator",
+  "measurement": "Native display-link intervals; three passes per launch. Cold then partially warm. Events overlap and provider/network output is nondeterministic.",
+  "beforeRippleOptimization": [
+    {
+      "id": "M3",
+      "rep": 0,
+      "cold": true,
+      "events": {
+        "thumbnailFresh": 24,
+        "thumbnailCached": 1,
+        "titleRipple": 7,
+        "summaryRipple": 9,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 49.781,
+        "callbacks": 2894,
+        "missedPct": 2.56,
+        "p99Ms": 38.42,
+        "worstMs": 112.36,
+        "over50ms": 10,
+        "hitchMsPerSecond": 31.5
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 12.797,
+          "callbacks": 763,
+          "missedPct": 1.93,
+          "p99Ms": 37.94,
+          "worstMs": 48.77,
+          "over50ms": 0,
+          "hitchMsPerSecond": 24.75
+        },
+        "thumbnailCached": {
+          "seconds": 0.65,
+          "callbacks": 39,
+          "missedPct": 2.5,
+          "p99Ms": 35.57,
+          "worstMs": 35.57,
+          "over50ms": 0,
+          "hitchMsPerSecond": 29.08
+        },
+        "titleRipple": {
+          "seconds": 3.952,
+          "callbacks": 225,
+          "missedPct": 7.02,
+          "p99Ms": 66.09,
+          "worstMs": 67.43,
+          "over50ms": 4,
+          "hitchMsPerSecond": 80.44
+        },
+        "summaryRipple": {
+          "seconds": 5.85,
+          "callbacks": 310,
+          "missedPct": 11.93,
+          "p99Ms": 65.48,
+          "worstMs": 67.43,
+          "over50ms": 9,
+          "hitchMsPerSecond": 147.62
+        },
+        "scroll": {
+          "seconds": 11.611,
+          "callbacks": 665,
+          "missedPct": 4.04,
+          "p99Ms": 40.48,
+          "worstMs": 48.77,
+          "over50ms": 0,
+          "hitchMsPerSecond": 49.69
+        }
+      },
+      "translationStarted": 28,
+      "translationDone": 16,
+      "translationCancelled": 10
+    },
+    {
+      "id": "M3",
+      "rep": 1,
+      "cold": false,
+      "events": {
+        "thumbnailFresh": 1,
+        "thumbnailCached": 0,
+        "titleRipple": 9,
+        "summaryRipple": 10,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 49.833,
+        "callbacks": 2819,
+        "missedPct": 4.67,
+        "p99Ms": 46.86,
+        "worstMs": 71.18,
+        "over50ms": 21,
+        "hitchMsPerSecond": 55.89
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 0.65,
+          "callbacks": 38,
+          "missedPct": 5.0,
+          "p99Ms": 38.8,
+          "worstMs": 38.8,
+          "over50ms": 0,
+          "hitchMsPerSecond": 51.28
+        },
+        "thumbnailCached": {
+          "callbacks": 0
+        },
+        "titleRipple": {
+          "seconds": 4.393,
+          "callbacks": 263,
+          "missedPct": 1.87,
+          "p99Ms": 33.33,
+          "worstMs": 57.37,
+          "over50ms": 1,
+          "hitchMsPerSecond": 19.27
+        },
+        "summaryRipple": {
+          "seconds": 5.85,
+          "callbacks": 199,
+          "missedPct": 39.88,
+          "p99Ms": 64.02,
+          "worstMs": 71.18,
+          "over50ms": 21,
+          "hitchMsPerSecond": 456.21
+        },
+        "scroll": {
+          "seconds": 11.331,
+          "callbacks": 661,
+          "missedPct": 2.65,
+          "p99Ms": 40.71,
+          "worstMs": 55.0,
+          "over50ms": 3,
+          "hitchMsPerSecond": 32.23
+        }
+      },
+      "translationStarted": 23,
+      "translationDone": 19,
+      "translationCancelled": 4
+    },
+    {
+      "id": "M3",
+      "rep": 2,
+      "cold": false,
+      "events": {
+        "thumbnailFresh": 3,
+        "thumbnailCached": 0,
+        "titleRipple": 11,
+        "summaryRipple": 9,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 51.681,
+        "callbacks": 2779,
+        "missedPct": 8.97,
+        "p99Ms": 65.51,
+        "worstMs": 163.32,
+        "over50ms": 62,
+        "hitchMsPerSecond": 103.9
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 1.356,
+          "callbacks": 79,
+          "missedPct": 4.82,
+          "p99Ms": 44.38,
+          "worstMs": 44.38,
+          "over50ms": 0,
+          "hitchMsPerSecond": 57.92
+        },
+        "thumbnailCached": {
+          "callbacks": 0
+        },
+        "titleRipple": {
+          "seconds": 6.589,
+          "callbacks": 311,
+          "missedPct": 19.22,
+          "p99Ms": 57.58,
+          "worstMs": 71.9,
+          "over50ms": 12,
+          "hitchMsPerSecond": 225.68
+        },
+        "summaryRipple": {
+          "seconds": 5.721,
+          "callbacks": 139,
+          "missedPct": 57.75,
+          "p99Ms": 142.38,
+          "worstMs": 163.32,
+          "over50ms": 50,
+          "hitchMsPerSecond": 638.18
+        },
+        "scroll": {
+          "seconds": 11.631,
+          "callbacks": 654,
+          "missedPct": 5.49,
+          "p99Ms": 48.23,
+          "worstMs": 128.52,
+          "over50ms": 5,
+          "hitchMsPerSecond": 66.57
+        }
+      },
+      "translationStarted": 23,
+      "translationDone": 20,
+      "translationCancelled": 5
+    }
+  ],
+  "retainedOptimization": [
+    {
+      "id": "M3",
+      "rep": 0,
+      "cold": true,
+      "events": {
+        "thumbnailFresh": 24,
+        "thumbnailCached": 1,
+        "titleRipple": 13,
+        "summaryRipple": 14,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 49.981,
+        "callbacks": 2926,
+        "missedPct": 1.94,
+        "p99Ms": 37.33,
+        "worstMs": 109.03,
+        "over50ms": 9,
+        "hitchMsPerSecond": 23.77
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 13.547,
+          "callbacks": 813,
+          "missedPct": 1.81,
+          "p99Ms": 37.04,
+          "worstMs": 56.84,
+          "over50ms": 1,
+          "hitchMsPerSecond": 21.16
+        },
+        "thumbnailCached": {
+          "seconds": 0.65,
+          "callbacks": 40,
+          "missedPct": 0.0,
+          "p99Ms": 16.67,
+          "worstMs": 16.67,
+          "over50ms": 0,
+          "hitchMsPerSecond": 0.0
+        },
+        "titleRipple": {
+          "seconds": 8.235,
+          "callbacks": 494,
+          "missedPct": 1.79,
+          "p99Ms": 39.56,
+          "worstMs": 51.71,
+          "over50ms": 1,
+          "hitchMsPerSecond": 23.41
+        },
+        "summaryRipple": {
+          "seconds": 8.45,
+          "callbacks": 486,
+          "missedPct": 5.63,
+          "p99Ms": 54.62,
+          "worstMs": 67.26,
+          "over50ms": 6,
+          "hitchMsPerSecond": 73.84
+        },
+        "scroll": {
+          "seconds": 11.831,
+          "callbacks": 672,
+          "missedPct": 4.68,
+          "p99Ms": 45.47,
+          "worstMs": 65.03,
+          "over50ms": 3,
+          "hitchMsPerSecond": 59.28
+        }
+      },
+      "translationStarted": 43,
+      "translationDone": 27,
+      "translationCancelled": 14
+    },
+    {
+      "id": "M3",
+      "rep": 1,
+      "cold": false,
+      "events": {
+        "thumbnailFresh": 1,
+        "thumbnailCached": 0,
+        "titleRipple": 10,
+        "summaryRipple": 11,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 49.871,
+        "callbacks": 2842,
+        "missedPct": 4.02,
+        "p99Ms": 48.37,
+        "worstMs": 84.87,
+        "over50ms": 26,
+        "hitchMsPerSecond": 48.37
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 0.65,
+          "callbacks": 39,
+          "missedPct": 2.5,
+          "p99Ms": 33.83,
+          "worstMs": 33.83,
+          "over50ms": 0,
+          "hitchMsPerSecond": 26.4
+        },
+        "thumbnailCached": {
+          "callbacks": 0
+        },
+        "titleRipple": {
+          "seconds": 6.067,
+          "callbacks": 345,
+          "missedPct": 6.25,
+          "p99Ms": 47.23,
+          "worstMs": 57.26,
+          "over50ms": 3,
+          "hitchMsPerSecond": 74.11
+        },
+        "summaryRipple": {
+          "seconds": 6.373,
+          "callbacks": 270,
+          "missedPct": 26.23,
+          "p99Ms": 76.56,
+          "worstMs": 84.87,
+          "over50ms": 25,
+          "hitchMsPerSecond": 309.15
+        },
+        "scroll": {
+          "seconds": 11.039,
+          "callbacks": 652,
+          "missedPct": 1.81,
+          "p99Ms": 34.43,
+          "worstMs": 48.09,
+          "over50ms": 0,
+          "hitchMsPerSecond": 21.44
+        }
+      },
+      "translationStarted": 27,
+      "translationDone": 21,
+      "translationCancelled": 6
+    },
+    {
+      "id": "M3",
+      "rep": 2,
+      "cold": false,
+      "events": {
+        "thumbnailFresh": 2,
+        "thumbnailCached": 0,
+        "titleRipple": 5,
+        "summaryRipple": 5,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 50.079,
+        "callbacks": 2856,
+        "missedPct": 4.26,
+        "p99Ms": 44.83,
+        "worstMs": 257.78,
+        "over50ms": 20,
+        "hitchMsPerSecond": 48.58
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 0.928,
+          "callbacks": 45,
+          "missedPct": 18.18,
+          "p99Ms": 90.07,
+          "worstMs": 90.07,
+          "over50ms": 3,
+          "hitchMsPerSecond": 186.77
+        },
+        "thumbnailCached": {
+          "callbacks": 0
+        },
+        "titleRipple": {
+          "seconds": 3.141,
+          "callbacks": 164,
+          "missedPct": 12.77,
+          "p99Ms": 64.49,
+          "worstMs": 68.15,
+          "over50ms": 5,
+          "hitchMsPerSecond": 158.25
+        },
+        "summaryRipple": {
+          "seconds": 3.25,
+          "callbacks": 103,
+          "missedPct": 45.5,
+          "p99Ms": 248.31,
+          "worstMs": 257.78,
+          "over50ms": 10,
+          "hitchMsPerSecond": 502.09
+        },
+        "scroll": {
+          "seconds": 11.325,
+          "callbacks": 652,
+          "missedPct": 3.83,
+          "p99Ms": 38.15,
+          "worstMs": 115.42,
+          "over50ms": 5,
+          "hitchMsPerSecond": 42.66
+        }
+      },
+      "translationStarted": 15,
+      "translationDone": 10,
+      "translationCancelled": 5
+    }
+  ],
+  "discardedDrawingGroup": [
+    {
+      "id": "M3",
+      "rep": 0,
+      "cold": true,
+      "events": {
+        "thumbnailFresh": 25,
+        "thumbnailCached": 1,
+        "titleRipple": 14,
+        "summaryRipple": 13,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 49.833,
+        "callbacks": 2916,
+        "missedPct": 2.02,
+        "p99Ms": 36.34,
+        "worstMs": 99.99,
+        "over50ms": 7,
+        "hitchMsPerSecond": 23.88
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 13.949,
+          "callbacks": 822,
+          "missedPct": 2.84,
+          "p99Ms": 39.17,
+          "worstMs": 78.12,
+          "over50ms": 2,
+          "hitchMsPerSecond": 34.25
+        },
+        "thumbnailCached": {
+          "seconds": 0.65,
+          "callbacks": 40,
+          "missedPct": 0.0,
+          "p99Ms": 16.67,
+          "worstMs": 16.67,
+          "over50ms": 0,
+          "hitchMsPerSecond": 0.0
+        },
+        "titleRipple": {
+          "seconds": 7.97,
+          "callbacks": 478,
+          "missedPct": 2.05,
+          "p99Ms": 35.2,
+          "worstMs": 72.86,
+          "over50ms": 1,
+          "hitchMsPerSecond": 23.03
+        },
+        "summaryRipple": {
+          "seconds": 7.8,
+          "callbacks": 453,
+          "missedPct": 5.03,
+          "p99Ms": 48.75,
+          "worstMs": 72.86,
+          "over50ms": 4,
+          "hitchMsPerSecond": 61.03
+        },
+        "scroll": {
+          "seconds": 11.676,
+          "callbacks": 665,
+          "missedPct": 4.86,
+          "p99Ms": 41.51,
+          "worstMs": 78.12,
+          "over50ms": 1,
+          "hitchMsPerSecond": 55.92
+        }
+      },
+      "translationStarted": 43,
+      "translationDone": 27,
+      "translationCancelled": 14
+    },
+    {
+      "id": "M3",
+      "rep": 1,
+      "cold": false,
+      "events": {
+        "thumbnailFresh": 1,
+        "thumbnailCached": 0,
+        "titleRipple": 10,
+        "summaryRipple": 10,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 50.522,
+        "callbacks": 2856,
+        "missedPct": 4.77,
+        "p99Ms": 53.72,
+        "worstMs": 95.87,
+        "over50ms": 31,
+        "hitchMsPerSecond": 56.25
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 0.65,
+          "callbacks": 39,
+          "missedPct": 2.5,
+          "p99Ms": 34.88,
+          "worstMs": 34.88,
+          "over50ms": 0,
+          "hitchMsPerSecond": 28.03
+        },
+        "thumbnailCached": {
+          "callbacks": 0
+        },
+        "titleRipple": {
+          "seconds": 6.304,
+          "callbacks": 348,
+          "missedPct": 8.66,
+          "p99Ms": 60.86,
+          "worstMs": 69.24,
+          "over50ms": 8,
+          "hitchMsPerSecond": 105.97
+        },
+        "summaryRipple": {
+          "seconds": 6.5,
+          "callbacks": 266,
+          "missedPct": 29.44,
+          "p99Ms": 83.79,
+          "worstMs": 95.87,
+          "over50ms": 25,
+          "hitchMsPerSecond": 338.66
+        },
+        "scroll": {
+          "seconds": 11.029,
+          "callbacks": 652,
+          "missedPct": 1.51,
+          "p99Ms": 34.88,
+          "worstMs": 46.14,
+          "over50ms": 0,
+          "hitchMsPerSecond": 17.79
+        }
+      },
+      "translationStarted": 25,
+      "translationDone": 20,
+      "translationCancelled": 7
+    },
+    {
+      "id": "M3",
+      "rep": 2,
+      "cold": false,
+      "events": {
+        "thumbnailFresh": 2,
+        "thumbnailCached": 1,
+        "titleRipple": 6,
+        "summaryRipple": 8,
+        "scroll": 3
+      },
+      "all": {
+        "seconds": 50.245,
+        "callbacks": 2754,
+        "missedPct": 7.65,
+        "p99Ms": 61.4,
+        "worstMs": 403.87,
+        "over50ms": 36,
+        "hitchMsPerSecond": 84.57
+      },
+      "windows": {
+        "thumbnailFresh": {
+          "seconds": 0.664,
+          "callbacks": 38,
+          "missedPct": 7.32,
+          "p99Ms": 56.28,
+          "worstMs": 56.28,
+          "over50ms": 1,
+          "hitchMsPerSecond": 75.3
+        },
+        "thumbnailCached": {
+          "seconds": 0.65,
+          "callbacks": 37,
+          "missedPct": 9.76,
+          "p99Ms": 69.47,
+          "worstMs": 69.47,
+          "over50ms": 1,
+          "hitchMsPerSecond": 106.88
+        },
+        "titleRipple": {
+          "seconds": 3.9,
+          "callbacks": 186,
+          "missedPct": 18.06,
+          "p99Ms": 77.83,
+          "worstMs": 86.1,
+          "over50ms": 6,
+          "hitchMsPerSecond": 219.81
+        },
+        "summaryRipple": {
+          "seconds": 5.2,
+          "callbacks": 145,
+          "missedPct": 52.92,
+          "p99Ms": 283.66,
+          "worstMs": 403.87,
+          "over50ms": 24,
+          "hitchMsPerSecond": 574.24
+        },
+        "scroll": {
+          "seconds": 11.588,
+          "callbacks": 654,
+          "missedPct": 5.63,
+          "p99Ms": 55.71,
+          "worstMs": 91.98,
+          "over50ms": 8,
+          "hitchMsPerSecond": 62.63
+        }
+      },
+      "translationStarted": 22,
+      "translationDone": 14,
+      "translationCancelled": 8
+    }
+  ]
+}

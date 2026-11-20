@@ -148,11 +148,18 @@ public struct MagazineCardStyle: ButtonStyle {
     private struct CardBody: View {
         let configuration: ButtonStyleConfiguration
         @State private var hovering = false
+        @Environment(\.isEnabled) private var enabled
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         var body: some View {
             configuration.label
-                .magazinePointer(in: RoundedRectangle(cornerRadius: 18))
+                .contentShape(RoundedRectangle(cornerRadius: 18))
+                .pointerStyle(enabled ? .link : .default)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(NookTheme.accent.opacity(hovering ? 0.045 : 0))
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: 18)
                         .strokeBorder(hovering ? NookTheme.accent.opacity(0.3) : NookTheme.hairline.opacity(0.65), lineWidth: 1)
@@ -160,7 +167,7 @@ public struct MagazineCardStyle: ButtonStyle {
                 }
                 .shadow(color: .black.opacity(hovering ? 0.09 : 0), radius: 14, y: 5)
                 .opacity(configuration.isPressed ? 0.8 : 1)
-                .onHover { hovering = $0 }
+                .onHover { hovering = enabled && $0 }
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: hovering)
         }
     }

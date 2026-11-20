@@ -196,6 +196,11 @@ while [[ -e "$run_dir/$lib_name-$script_name-$variant-$n.log" ]]; do n=$((n + 1)
 destination="$run_dir/$lib_name-$script_name-$variant-$n.log"
 timeout_marker="$launch_tmp/timeout"
 launch_args+=(-NookPerfLog "$source_log")
+# A perf launch must never warm or clear the ordinary app's preview cache.
+# Explicit scenario paths remain useful for intentional cross-launch reuse.
+if [[ " ${launch_args[*]} " != *" -NookPerfPreviewCache "* ]]; then
+  launch_args+=(-NookPerfPreviewCache "$launch_tmp/preview-cache")
+fi
 
 TMPDIR="$launch_tmp/" "$executable" "${launch_args[@]}" >"$launch_tmp/stdout.log" 2>"$launch_tmp/stderr.log" &
 child_pid=$!

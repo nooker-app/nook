@@ -1,0 +1,202 @@
+{
+  "hardware": "Mac mini, macOS 26.5.1, 60 Hz",
+  "build": "Debug with -O, isolated 10,000-story fixture",
+  "viewport": "1440 \u00d7 900 points",
+  "scenario": "M1: Unread / Newest, 12 gesture + momentum flicks per repetition, 5 warm repetitions, Instruments detached",
+  "runs": {
+    "magazine-before-clean": {
+      "repetitions": [
+        {
+          "rep": 1.0,
+          "droppedPct": 3.84,
+          "hitchRatio": 39.82,
+          "p99Frame": 33.33,
+          "worstFrame": 61.34,
+          "magazineCard": 144.0
+        },
+        {
+          "rep": 2.0,
+          "droppedPct": 2.26,
+          "hitchRatio": 23.71,
+          "p99Frame": 33.33,
+          "worstFrame": 45.48,
+          "magazineCard": 81.0
+        },
+        {
+          "rep": 3.0,
+          "droppedPct": 2.85,
+          "hitchRatio": 29.63,
+          "p99Frame": 33.33,
+          "worstFrame": 46.3,
+          "magazineCard": 81.0
+        },
+        {
+          "rep": 4.0,
+          "droppedPct": 1.07,
+          "hitchRatio": 12.11,
+          "p99Frame": 33.33,
+          "worstFrame": 49.1,
+          "magazineCard": 81.0
+        },
+        {
+          "rep": 5.0,
+          "droppedPct": 1.37,
+          "hitchRatio": 15.11,
+          "p99Frame": 33.33,
+          "worstFrame": 48.91,
+          "magazineCard": 81.0
+        }
+      ],
+      "median": {
+        "droppedPct": 2.26,
+        "hitchRatio": 23.71,
+        "p99Frame": 33.33,
+        "worstFrame": 48.91,
+        "magazineCard": 81.0
+      }
+    },
+    "magazine-after-a": {
+      "repetitions": [
+        {
+          "rep": 1.0,
+          "droppedPct": 2.41,
+          "hitchRatio": 25.66,
+          "p99Frame": 33.33,
+          "worstFrame": 58.35,
+          "magazineCard": 111.0
+        },
+        {
+          "rep": 2.0,
+          "droppedPct": 0.92,
+          "hitchRatio": 9.18,
+          "p99Frame": 16.67,
+          "worstFrame": 33.42,
+          "magazineCard": 162.0
+        },
+        {
+          "rep": 3.0,
+          "droppedPct": 0.15,
+          "hitchRatio": 3.08,
+          "p99Frame": 16.67,
+          "worstFrame": 50.0,
+          "magazineCard": 81.0
+        },
+        {
+          "rep": 4.0,
+          "droppedPct": 0.15,
+          "hitchRatio": 2.53,
+          "p99Frame": 16.67,
+          "worstFrame": 44.01,
+          "magazineCard": 81.0
+        },
+        {
+          "rep": 5.0,
+          "droppedPct": 0.15,
+          "hitchRatio": 2.53,
+          "p99Frame": 16.67,
+          "worstFrame": 44.01,
+          "magazineCard": 81.0
+        }
+      ],
+      "median": {
+        "droppedPct": 0.15,
+        "hitchRatio": 3.08,
+        "p99Frame": 16.67,
+        "worstFrame": 44.01,
+        "magazineCard": 81.0
+      }
+    }
+  },
+  "recommendedOrder": {
+    "before": {
+      "repetitions": [
+        {
+          "rep": 1.0,
+          "droppedPct": 8.13,
+          "hitchRatio": 90.05,
+          "p99Frame": 43.44,
+          "worstFrame": 58.29
+        },
+        {
+          "rep": 2.0,
+          "droppedPct": 4.63,
+          "hitchRatio": 53.75,
+          "p99Frame": 42.53,
+          "worstFrame": 44.79
+        },
+        {
+          "rep": 3.0,
+          "droppedPct": 5.86,
+          "hitchRatio": 66.9,
+          "p99Frame": 41.82,
+          "worstFrame": 47.67
+        },
+        {
+          "rep": 4.0,
+          "droppedPct": 5.32,
+          "hitchRatio": 59.6,
+          "p99Frame": 42.37,
+          "worstFrame": 50.27
+        },
+        {
+          "rep": 5.0,
+          "droppedPct": 5.87,
+          "hitchRatio": 64.9,
+          "p99Frame": 42.25,
+          "worstFrame": 55.94
+        }
+      ],
+      "median": {
+        "droppedPct": 5.86,
+        "hitchRatio": 64.9,
+        "p99Frame": 42.37,
+        "worstFrame": 50.27
+      }
+    },
+    "after": {
+      "repetitions": [
+        {
+          "rep": 1.0,
+          "droppedPct": 3.99,
+          "hitchRatio": 46.48,
+          "p99Frame": 37.25,
+          "worstFrame": 49.85
+        },
+        {
+          "rep": 2.0,
+          "droppedPct": 2.41,
+          "hitchRatio": 25.56,
+          "p99Frame": 33.33,
+          "worstFrame": 48.01
+        },
+        {
+          "rep": 3.0,
+          "droppedPct": 2.26,
+          "hitchRatio": 24.1,
+          "p99Frame": 33.33,
+          "worstFrame": 43.02
+        },
+        {
+          "rep": 4.0,
+          "droppedPct": 2.7,
+          "hitchRatio": 27.26,
+          "p99Frame": 33.33,
+          "worstFrame": 52.85
+        },
+        {
+          "rep": 5.0,
+          "droppedPct": 2.85,
+          "hitchRatio": 29.94,
+          "p99Frame": 33.33,
+          "worstFrame": 43.35
+        }
+      ],
+      "median": {
+        "droppedPct": 2.7,
+        "hitchRatio": 27.26,
+        "p99Frame": 33.33,
+        "worstFrame": 48.01
+      }
+    }
+  }
+}

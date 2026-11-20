@@ -1,6 +1,50 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Switch between 2D and 3D": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2D와 3D 보기 전환"
+          }
+        }
+      }
+    },
+    "Drag to rotate · Scroll to pan · Pinch to zoom": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "드래그로 회전 · 스크롤로 이동 · 핀치로 확대"
+          }
+        }
+      }
+    },
+    "Story map. Drag to rotate in 3D, Shift-drag or scroll to pan, pinch to zoom. Select a story to preview it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 지도. 3D에서는 드래그로 회전하고 Shift-드래그나 스크롤로 이동하며 핀치로 확대합니다. 글을 선택하면 미리보기가 나타납니다."
+          }
+        }
+      }
+    },
+    "Select a point to preview, double-click to read. In 3D, drag to rotate and Shift-drag to pan. Scroll to pan, pinch or use the wheel to zoom. Switch to 2D to drag individual points. Search also finds stories you have read.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "점을 선택하면 미리보기가, 두 번 클릭하면 리더가 열립니다. 3D에서는 드래그로 회전하고 Shift-드래그로 이동합니다. 스크롤로 이동하고 핀치나 휠로 확대합니다. 개별 점을 옮기려면 2D로 전환하세요. 읽은 글도 검색할 수 있습니다."
+          }
+        }
+      }
+    },
     "Download models · %@": {
       "extractionState": "manual",
       "localizations": {

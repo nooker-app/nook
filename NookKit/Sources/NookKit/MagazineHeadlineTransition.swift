@@ -57,6 +57,10 @@ struct MagazineHeadlineTransition: View {
                 settle()
                 return
             }
+            #if DEBUG
+            MainThreadLog.add("magazine.ripple", ms: 0)
+            MainThreadLog.note("magazine.ripple", extra: "style=\(style)")
+            #endif
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
@@ -171,7 +175,15 @@ struct MagazineTitleRipple: TextRenderer {
         let front = -50 + progress * extent
         for line in layout {
             for run in line {
-                for slice in run {
+                var settledStart: Int?
+                func flushSettled(until end: Int) {
+                    if let start = settledStart {
+                        context.draw(run[start..<end])
+                        settledStart = nil
+                    }
+                }
+                for index in run.indices {
+                    let slice = run[index]
                     let rect = slice.typographicBounds.rect
                     let dx = rect.midX - origin.x
                     let dy = (rect.midY - origin.y) * 0.7
@@ -180,8 +192,22 @@ struct MagazineTitleRipple: TextRenderer {
                     let band = exp(-pow(delta / 34, 2))
                     let fraction = min(1, max(0, (front - distance + 23) / 46))
                     let blend = fraction * fraction * (3 - 2 * fraction)
+                    let opacity = incoming ? blend : 1 - blend
+                    // Invisible glyphs still produced blur/shadow display-list
+                    // layers. The fully visible tail is one native run; only
+                    // the moving wavefront needs per-glyph filters. At 100pt
+                    // the remaining Gaussian displacement is below 0.002pt.
+                    if opacity == 0 {
+                        flushSettled(until: index)
+                        continue
+                    }
+                    if opacity == 1, abs(delta) >= 100 {
+                        if settledStart == nil { settledStart = index }
+                        continue
+                    }
+                    flushSettled(until: index)
                     var copy = context
-                    copy.opacity *= incoming ? blend : 1 - blend
+                    copy.opacity *= opacity
                     let wave = sin(delta / 13) * band * 3.8 * strength
                     copy.translateBy(x: wave * dx / max(distance, 1), y: wave * dy / max(distance, 1))
                     copy.addFilter(.blur(radius: band * 1.1 * strength))
@@ -189,6 +215,7 @@ struct MagazineTitleRipple: TextRenderer {
                                           radius: band * 4.5 * strength))
                     copy.draw(slice)
                 }
+                flushSettled(until: run.endIndex)
             }
         }
     }

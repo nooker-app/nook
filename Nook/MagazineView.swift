@@ -49,6 +49,17 @@ struct MagazineView: View {
     @FocusState private var focusedArticle: String?
     @FocusState private var searchFocused: Bool
     @State private var searchSetup = false
+    #if DEBUG
+    @State private var perfMediaEnabled = PerfLaunch.value(for: "-NookPerfHoldMedia") != "YES"
+    #endif
+
+    private var magazineMediaEnabled: Bool {
+        #if DEBUG
+        return perfMediaEnabled && opened == nil && store.isForegroundActive
+        #else
+        return opened == nil && store.isForegroundActive
+        #endif
+    }
 
     enum MagazineTab: String, CaseIterable {
         case magazine = "Magazine", map = "Map", library = "Library", studio = "Studio"
@@ -183,6 +194,9 @@ struct MagazineView: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = MainThreadLog.add("magazine.body", ms: 0)
+        #endif
         presentedWorkspace
         .task {
             plus.syncFolder = { ReaderStore.shared.syncFolderURL }
@@ -191,9 +205,18 @@ struct MagazineView: View {
             store.showsUnreadBadge = showUnreadBadge
             await store.bootstrap()
             initialLoadFinished = true
+            #if DEBUG
+            await PerfDriver.shared.runIfRequested(store: store)
+            #endif
             if plus.isSignedIn { await plus.prepareToCompose() }
             if autoRefresh { store.refreshOnActivation(honorThrottle: true) }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NookPerfResumeMagazineMedia"))) { _ in
+            guard PerfLaunch.isActive else { return }
+            perfMediaEnabled = true
+        }
+        #endif
         .onAppear {
             configureTitleTranslator()
             LayoutSelectionCoordinator.shared.prepareToLeave = { draftSession?.flush() ?? true }
@@ -466,10 +489,16 @@ struct MagazineView: View {
                         let columns = min(3, max(1, Int((geometry.size.width - 96) / 300)))
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 22, alignment: .top), count: columns),
                                   alignment: .leading, spacing: 22) {
-                            ForEach(rows.filter { $0.id != leadRow?.id }) { row in card(row, lead: false) }
+                            let featuredID = leadRow?.id
+                            ForEach(rows.filter { $0.id != featuredID }) { row in
+                                MagazineCardBoundary { card(row, lead: false) }
+                            }
                         }
                     }
                 }
+                #if DEBUG
+                .background { PerfDisplayLinkProbe().frame(width: 0, height: 0).accessibilityHidden(true) }
+                #endif
                 .padding(.horizontal, 48).padding(.top, 34).padding(.bottom, 140)
                 .frame(maxWidth: 1280)
                 .frame(maxWidth: .infinity)
@@ -680,6 +709,9 @@ struct MagazineView: View {
     }
 
     private var rows: [ArticleRowModel] {
+        #if DEBUG
+        MainThreadLog.add("magazine.rows", ms: 0)
+        #endif
         if let frozenRows { return frozenRows }
         guard isRecommendationList else { return store.listWindow.rows }
         guard rankedScope == recommendationScope else { return [] }
@@ -713,6 +745,9 @@ struct MagazineView: View {
     }
 
     @ViewBuilder private func card(_ row: ArticleRowModel, lead: Bool) -> some View {
+        #if DEBUG
+        let _ = MainThreadLog.add("magazine.card", ms: 0)
+        #endif
         if let article = store.listedArticle(withID: row.id) {
             Button { openArticle(article.id, fromRecommendation: isRecommendationList || lead) } label: {
                 VStack(alignment: .leading, spacing: lead ? 20 : 18) {
@@ -729,10 +764,12 @@ struct MagazineView: View {
                     MagazineArticleHeading(article: article, feedTitle: row.feedDisplayTitle ?? "",
                                            namespace: hero, expanded: false, lead: lead, matched: opened != row.id,
                                            trailingControlSpace: isRecommendationList && !lead ? 38 : 0)
+                        .allowsHitTesting(false)
                     MagazineCategoryLabels(store.categories(forArticle: article))
                     MagazineTranslatedSummary(id: article.id, summary: article.summary, size: lead ? 15 : 13)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: lead ? 900 : .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
                     Spacer(minLength: lead ? 8 : 0)
                     HStack(spacing: 8) {
                         if !article.isRead { Circle().fill(NookTheme.accent).frame(width: 5, height: 5) }
@@ -751,6 +788,7 @@ struct MagazineView: View {
                         if article.isStarred { Image(systemName: "star.fill").foregroundStyle(.orange) }
                         Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .medium))
                     }.font(.system(size: 11)).foregroundStyle(.secondary)
+                        .allowsHitTesting(false)
                 }
                 .padding(lead ? 32 : 24)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -778,8 +816,7 @@ struct MagazineView: View {
                     .padding(24)
                 }
             }
-            .magazineReveal(paused: opened != nil)
-            .magazinePreviewDemand(active: opened == nil && store.isForegroundActive)
+            .magazinePreviewDemand(active: magazineMediaEnabled, paused: opened != nil)
             .focused($focusedArticle, equals: row.id)
             .id(row.id)
             .contextMenu {
@@ -1118,4 +1155,11 @@ struct MagazineArticleHeading: View {
 
         }
     }
+}
+
+/// A fixed, single child for each lazy-grid ID. Resolving a live article and its
+/// categories belongs to the realized card, not the parent grid's observation.
+private struct MagazineCardBoundary<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+    var body: some View { content() }
 }

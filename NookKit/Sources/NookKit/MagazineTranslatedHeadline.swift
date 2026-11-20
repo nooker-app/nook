@@ -26,7 +26,9 @@ public struct MagazineTranslatedHeadline: View {
     }
 
     public var body: some View {
-        let displayed = Self.displayTitle(original: title, state: box.state, enabled: enabled)
+        // This surface replaces completed titles. Provider token snapshots must
+        // not invalidate its layout while it still displays the original.
+        let displayed = Self.displayTitle(original: title, translation: box.completedText, enabled: enabled)
         MagazineHeadlineTransition(title: displayed, size: size, lines: lines,
                                    animated: visible && enabled && displayed != title)
             .help(title)
@@ -39,10 +41,10 @@ public struct MagazineTranslatedHeadline: View {
             .onDisappear { unregister() }
     }
 
-    static func displayTitle(original: String, state: ListTitleTranslator.TitleState?, enabled: Bool) -> String {
-        guard enabled, case .translated(let text, _) = state,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return original }
-        return text
+    static func displayTitle(original: String, translation: String?, enabled: Bool) -> String {
+        guard enabled, let translation,
+              !translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return original }
+        return translation
     }
 
     private func unregister() {
