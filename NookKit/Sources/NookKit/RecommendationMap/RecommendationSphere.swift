@@ -12,14 +12,14 @@ struct RecommendationSphereStyle {
     init(projection: RecommendationOrbit.Projection, sceneRadius: Double, zoom: Double) {
         let depth = min(1, max(0, 0.5 + projection.depth / max(1800, sceneRadius * 0.9)))
         proximity = depth * depth * (3 - 2 * depth)
-        radius = min(19, max(1.8, (4.5 + sqrt(zoom) * 7) * pow(projection.scale, 1.1) * (0.6 + proximity)))
+        radius = min(16, max(1.8, (4 + sqrt(zoom) * 6) * pow(projection.scale, 1.1) * (0.6 + proximity)))
         opacity = 0.18 + proximity * 0.82
         blurLevel = Int(((1 - proximity) * Double(RecommendationSphereAtlas.levels - 1)).rounded())
     }
 }
 
 /// Small premultiplied sprites, shared by color and focus level, not by story.
-/// Lighting and Gaussian convolution are baked once. Camera frames only blit
+/// Soft tonal depth and Gaussian convolution are baked once. Camera frames only blit
 /// images in depth order; they never create gradients, filters or blur layers.
 @MainActor
 final class RecommendationSphereAtlas {
@@ -28,10 +28,11 @@ final class RecommendationSphereAtlas {
     nonisolated static let sphereRadius = 24.0
     private var cache: [UInt32: [CGImage]] = [:]
 
-    func palette(_ colors: [NSColor]) -> [[CGImage]] {
+    func palette(_ colors: [NSColor], dark: Bool) -> [[CGImage]] {
         colors.map { color in
             let rgb = color.usingColorSpace(.sRGB) ?? .gray
-            let key = UInt32((rgb.redComponent * 255).rounded()) << 16
+            let key = UInt32(dark ? 1 : 0) << 24
+                | UInt32((rgb.redComponent * 255).rounded()) << 16
                 | UInt32((rgb.greenComponent * 255).rounded()) << 8
                 | UInt32((rgb.blueComponent * 255).rounded())
             if let images = cache[key] { return images }
@@ -43,7 +44,11 @@ final class RecommendationSphereAtlas {
                 var pixels = [UInt8](repeating: 0, count: Self.side * Self.side * 4)
                 for i in map.indices {
                     let sample = map[i], alpha = sample.x
-                    let color = tint * sample.y + SIMD3<Float>(repeating: sample.z)
+                    // Content markers use a quiet translucent tint. Broad light
+                    // and a fine rim replace the old point reflection and black
+                    // hemisphere; neither appearance should resemble a marble.
+                    let body = dark ? tint : tint * 0.86
+                    let color = body * sample.y + SIMD3<Float>(repeating: sample.z * (dark ? 1 : 0.65))
                     for channel in 0..<3 { pixels[i * 4 + channel] = UInt8(min(alpha, max(0, color[channel])) * 255) }
                     pixels[i * 4 + 3] = UInt8(min(1, max(0, alpha)) * 255)
                 }
@@ -58,7 +63,7 @@ final class RecommendationSphereAtlas {
         }
     }
 
-    // x = coverage, y = premultiplied diffuse light, z = premultiplied reflection.
+    // x = opacity, y = premultiplied tint, z = premultiplied soft illumination.
     // Blurring these three channels before tinting is equivalent to blurring
     // each colored sphere, so the expensive work is shared by the entire palette.
     nonisolated private static let lightMaps: [[SIMD3<Float>]] = {
@@ -71,10 +76,12 @@ final class RecommendationSphereAtlas {
                 guard squared < 1 else { continue }
                 let nz = sqrt(1 - squared)
                 let coverage = min(1, (1 - sqrt(squared)) * sphereRadius)
-                let diffuse = 0.13 + 0.78 * max(0, -0.45 * nx - 0.55 * ny + 0.70 * nz)
-                let highlight = 0.64 * pow(max(0, -0.25 * nx - 0.30 * ny + 0.92 * nz), 42)
-                let rim = 0.10 * pow(1 - nz, 3) * max(0, nx + ny)
-                sharp[y * side + x] = SIMD3(Float(coverage), Float(coverage * (diffuse + rim)), Float(coverage * highlight))
+                let opacity = coverage * (0.76 + 0.14 * nz)
+                let body = 0.78 + 0.12 * nz - 0.035 * nx - 0.055 * ny
+                let wash = 0.11 * exp(-((nx + 0.3) * (nx + 0.3) / 0.75 + (ny + 0.38) * (ny + 0.38) / 0.65))
+                let rim = 0.19 * pow(1 - nz, 5) * max(0, -0.45 * nx - 0.65 * ny + 0.15)
+                let bounce = 0.035 * pow(1 - nz, 3) * max(0, 0.4 * nx + 0.7 * ny)
+                sharp[y * side + x] = SIMD3(Float(opacity), Float(opacity * body), Float(opacity * (wash + rim + bounce)))
             }
         }
         return (0..<levels).map { level in

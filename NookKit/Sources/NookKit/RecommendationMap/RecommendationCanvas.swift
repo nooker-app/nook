@@ -455,7 +455,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         if zoom>=0.55 || over || active && !force {
             context.saveGState();context.setAlpha(opacity)
             let number=(nodes[i].article.isRead ? "✓" : "\(nodes[i].rank)") as NSString
-            let attrs:[NSAttributedString.Key:Any]=[.font:NSFont.monospacedDigitSystemFont(ofSize:9,weight:active ? .semibold:.regular),.foregroundColor:spatial ? NSColor.white.withAlphaComponent(0.9):colors[i]]
+            let attrs:[NSAttributedString.Key:Any]=[.font:NSFont.monospacedDigitSystemFont(ofSize:9,weight:active ? .semibold:.regular),.foregroundColor:spatial ? NSColor.labelColor.withAlphaComponent(0.9):colors[i]]
             let size=number.size(withAttributes:attrs);number.draw(at:CGPoint(x:p.x-size.width/2,y:p.y-size.height/2),withAttributes:attrs)
             let width=165.0
             let candidates=[CGRect(x:p.x-width/2,y:p.y+r+8,width:width,height:36),CGRect(x:p.x-width/2,y:p.y-r-44,width:width,height:36),CGRect(x:p.x+r+10,y:p.y-18,width:width,height:36),CGRect(x:p.x-r-width-10,y:p.y-18,width:width,height:36)]
@@ -700,7 +700,9 @@ extension RecommendationCanvasView {
 
     private func drawSpatialMap(_ context: CGContext) {
         updateProjection()
-        if sphereSprites.isEmpty { sphereSprites = sphereAtlas.palette(groupColors) }
+        if sphereSprites.isEmpty {
+            sphereSprites = sphereAtlas.palette(groupColors, dark: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+        }
         if let morph, !dissolvingEdges.isEmpty {
             context.saveGState()
             context.setAlpha(max(0,1-(CACurrentMediaTime()-morph.start)/0.65))

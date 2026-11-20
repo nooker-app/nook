@@ -172,16 +172,20 @@ was left running; the installed app and user's library were not replaced.
 ### Depth and spherical markers
 
 The 3D canvas uses camera-relative depth for marker size, opacity and Gaussian
-defocus. Markers have diffuse shading, a specular highlight and a dark curved rim.
+defocus. Markers use a translucent tint, broad soft illumination and a fine rim;
+there is no point reflection or dark hemisphere. Their size is capped at a
+16-point radius, and the palette adapts to light and dark appearance. This keeps
+the content quieter than the Glass navigation controls, consistent with Apple's
+[materials guidance](https://developer.apple.com/design/human-interface-guidelines/materials).
 The five topic colors share twelve baked focus levels per color; rotation only
 draws cached images, far to near. Selection rings and labels remain readable,
 and hit testing picks the visible front sphere at overlaps. The 2D renderer is
 unchanged. No per-story filters, shadows or retained layers are created.
 
 With the same 20k native-window benchmark, the flat markers took **6.87 ms median /
-7.48 ms p95**, and the final spherical markers took **7.14 ms / 7.72 ms** per draw.
+7.48 ms p95**, and the soft markers took **6.34 ms / 7.08 ms** per draw.
 Both runs had 240 measured display callbacks at **16.67 ms p99**, with none over
-25 ms. The final initial draw was **14.98 ms** (reported separately from warm
+25 ms. The final initial draw was **15.20 ms** (reported separately from warm
 camera motion). These are local native drawing/callback measurements, not GPU
 presentation timestamps. Actual-app visual checks used the same 165-story RSS
 snapshot and verified near/far focus, lighting, rotation and article selection.
