@@ -6,6 +6,15 @@
     <description>Nook software updates</description>
     <language>en</language>
     <item>
+      <title>Version 0.1.72</title>
+      <sparkle:version>76</sparkle:version>
+      <sparkle:shortVersionString>0.1.72</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/nooker-app/nook/releases/tag/v0.1.72</sparkle:releaseNotesLink>
+      <pubDate>Fri, 20 Nov 2026 03:59:31 +0000</pubDate>
+      <enclosure url="https://github.com/nooker-app/nook/releases/download/v0.1.72/Nook-0.1.72.dmg" sparkle:edSignature="Rz5WJC5ziD+5NgC+VegtKDMAV9zOOiWoh6WglIFeact4QWBoRzk5rOQ5n9krxFEoIGGaoaP12q2TxN7PiiqmDA==" length="30297415" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>Version 0.1.71</title>
       <sparkle:version>75</sparkle:version>
       <sparkle:shortVersionString>0.1.71</sparkle:shortVersionString>
