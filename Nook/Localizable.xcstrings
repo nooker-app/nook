@@ -1,6 +1,57 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Finish saving your writing before opening another story.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish saving your writing before opening another story."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 글을 열기 전에 작성 중인 글을 저장해 주세요."
+          }
+        }
+      }
+    },
+    "This story belongs to another library. Open its sync folder in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This story belongs to another library. Open its sync folder in Settings."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 라이브러리에 있는 글이에요. 설정에서 해당 동기화 폴더를 열어 주세요."
+          }
+        }
+      }
+    },
+    "This story is no longer in your library. The widget will update shortly.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This story is no longer in your library. The widget will update shortly."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "라이브러리에 더 이상 없는 글이에요. 위젯이 곧 갱신됩니다."
+          }
+        }
+      }
+    },
     "Search by keyword or meaning": {
       "extractionState": "manual",
       "localizations": {

@@ -43,6 +43,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     }
     func updateNSView(_ view:RecommendationCanvasView,context:Context){
         view.reduceMotion=reduceMotion;view.interactionEnabled=model.isInteractive
+        guard model.isInteractive else { return }
         let changedCollection = view.collection != model.collection
         view.collection = model.collection
         if view.revision != model.graphRevision {view.install(model.graph,revision:model.graphRevision,layoutRevision:model.layoutRevision,forming:model.formation.active)}
@@ -133,7 +134,8 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     override func resetCursorRects(){addCursorRect(bounds,cursor:.openHand)}
     override func layout(){super.layout();if !firstFit && !nodes.isEmpty && bounds.width>10 {firstFit=true;fit(animated:false)}}
     func install(_ graph:RecommendationGraph,revision:Int,layoutRevision:Int,forming:Bool=false){
-        let finishFormation = formationActive && !forming
+        let selectedID = selected.flatMap { nodes.indices.contains($0) ? nodes[$0].id : nil }
+        let finishFormation = formationActive && !forming && self.layoutRevision != layoutRevision
         let before = Dictionary(uniqueKeysWithValues: nodes.indices.map { (nodes[$0].id, displayPosition($0)) })
         formationRevision = -1;formationActive = false;formationEdgeCount = 0
         analyzed.removeAll();pulses.removeAll();lastActivated.removeAll();morph = nil;dissolvingEdges.removeAll()
@@ -156,7 +158,8 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         for i in nodes.indices {index.insert(i,positions[i])}
         for e in edges.indices {if let a=lookup[edges[e].a],let b=lookup[edges[e].b]{adjacency[a].append(e);adjacency[b].append(e)}}
         labelImages.removeAll();pendingLabels.removeAll();labelAccess.removeAll()
-        rebuildLOD();selected=nil;hovered=nil;activePhysics.removeAll();velocity.removeAll()
+        rebuildLOD();selected=selectedID.flatMap { lookup[$0] };hovered=nil;activePhysics.removeAll();velocity.removeAll()
+        updateNeighbors()
         if !firstFit && !nodes.isEmpty && bounds.width>10 {firstFit=true;fit(animated:false)}
         if finishFormation && !reduceMotion {
             morph = (nodes.map { before[$0.id] ?? $0.position }, CACurrentMediaTime())
@@ -327,13 +330,19 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         }
     }
     func updateSelection(_ id:String?){
-        let next=id.flatMap {lookup[$0]};guard next != selected else{return};let previous=selected;selected=next;updateNeighbors()
+        let next=id.flatMap {lookup[$0]};guard next != selected else{return};selected=next;updateNeighbors()
         if formationActive { needsDisplay = true;return }
         if !focusedInitialSelection && next != nil {
             focusedInitialSelection=true;focusSelection()
-        } else if previous != nil && dragIndex == nil {focusSelection()};needsDisplay=true
+        };needsDisplay=true
     }
     private func updateNeighbors(){neighbors=[];if let active=hovered ?? selected {neighbors.insert(active);for e in adjacency[active]{if let a=lookup[edges[e].a],let b=lookup[edges[e].b]{neighbors.insert(a);neighbors.insert(b)}}}}
+
+    #if DEBUG
+    var inspection: (positions: [String: CGPoint], pan: CGPoint, zoom: Double, forming: Bool) {
+        (Dictionary(uniqueKeysWithValues: nodes.indices.map { (nodes[$0].id, positions[$0]) }), pan, zoom, formationActive)
+    }
+    #endif
     private func world(_ point:CGPoint)->CGPoint{CGPoint(x:(point.x-pan.x)/zoom,y:(point.y-pan.y)/zoom)}
     private func screen(_ point:CGPoint)->CGPoint{CGPoint(x:point.x*zoom+pan.x,y:point.y*zoom+pan.y)}
     private var viewport:CGRect {let p=world(.zero);return CGRect(x:p.x,y:p.y,width:bounds.width/zoom,height:bounds.height/zoom).insetBy(dx:-200,dy:-140)}

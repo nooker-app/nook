@@ -11,6 +11,14 @@ final class LayoutSelectionCoordinator {
     var showsIntroduction: Bool
     let isExistingInstallation: Bool
     var applicationIssue: String?
+    struct ReaderRequest: Identifiable {
+        let id = UUID()
+        let articleID: String
+        let recommendation: Bool
+    }
+    var readerRequest: ReaderRequest?
+    var collectionRequest: SmartSource?
+    @ObservationIgnored var routeTask: Task<Void, Never>?
     @ObservationIgnored weak var readerWindow: NSWindow?
     @ObservationIgnored var prepareToLeave: (() -> Bool)?
     @ObservationIgnored var pendingURLs: [URL] = []
@@ -64,8 +72,42 @@ final class LayoutSelectionCoordinator {
 @MainActor
 func handleLayoutURL(_ url: URL) {
     if PlusInviteInbox.shared.accept(url) { return }
-    if let raw = WidgetShared.smartSourceRaw(from: url), let source = SmartSource(rawValue: raw) {
-        ReaderStore.shared.selectSmartSource(source)
+    let reader = NookReaderLink.destination(from: url)
+    let source = WidgetShared.smartSourceRaw(from: url).flatMap(SmartSource.init(rawValue:))
+    guard reader != nil || source != nil else { return }
+    let coordinator = LayoutSelectionCoordinator.shared
+    coordinator.routeTask?.cancel()
+    coordinator.routeTask = Task { @MainActor in
+        let store = ReaderStore.shared
+        await store.bootstrap()
+        guard !Task.isCancelled else { return }
+        guard coordinator.prepareToLeave?() != false else {
+            store.errorMessage = String(localized: "Finish saving your writing before opening another story.")
+            return
+        }
+        if let source {
+            store.isBrowserPresented = false
+            store.selectedArticleID = nil
+            store.selectSmartSource(source)
+            if coordinator.layout == .magazine { coordinator.collectionRequest = source }
+        }
+        if let reader {
+            guard let scope = store.syncFolderURL?.standardizedFileURL.path,
+                  NookReaderLink.token(scope) == reader.libraryID else {
+                store.errorMessage = String(localized: "This story belongs to another library. Open its sync folder in Settings.")
+                return
+            }
+            let ids = store.libraryArticles.map(\.id)
+            let articleID = await Task.detached(priority: .userInitiated) {
+                ids.first { NookReaderLink.token($0) == reader.articleToken }
+            }.value
+            guard !Task.isCancelled, store.syncFolderURL?.standardizedFileURL.path == scope else { return }
+            guard let articleID, store.article(withID: articleID) != nil else {
+                store.errorMessage = String(localized: "This story is no longer in your library. The widget will update shortly.")
+                return
+            }
+            coordinator.readerRequest = .init(articleID: articleID, recommendation: reader.recommendation)
+        }
     }
 }
 
@@ -76,7 +118,6 @@ struct LayoutRootView: View {
         Group {
             if selection.showsIntroduction {
                 LayoutChooserView(isIntroduction: true)
-                    .onOpenURL { selection.pendingURLs.append($0) }
             } else if selection.layout == .classic {
                 ContentView()
             } else {

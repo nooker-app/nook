@@ -1,8 +1,8 @@
 import Foundation
 
 /// Shared between the app and the widget extension (add this file to both
-/// targets' membership). This build shares no data — it only defines the
-/// `nook://` deep links the widget uses to open the app. No App Group needed.
+/// targets' membership). WidgetSnapshot.swift contains the lightweight shared
+/// reading data and article links; this file keeps legacy launcher links stable.
 enum WidgetShared {
     static let urlScheme = "nook"
     static let widgetKind = "NookWidget"
@@ -37,6 +37,7 @@ enum WidgetSource: String, CaseIterable, Identifiable {
     case unread
     case today
     case starred
+    case recent
     case all
 
     var id: String { rawValue }
@@ -46,6 +47,7 @@ enum WidgetSource: String, CaseIterable, Identifiable {
         case .unread: "Unread"
         case .today: "Today"
         case .starred: "Starred"
+        case .recent: "Recently Read"
         case .all: "All Articles"
         }
     }
@@ -55,6 +57,7 @@ enum WidgetSource: String, CaseIterable, Identifiable {
         case .unread: "largecircle.fill.circle"
         case .today: "calendar"
         case .starred: "star"
+        case .recent: "clock.arrow.circlepath"
         case .all: "tray.full"
         }
     }

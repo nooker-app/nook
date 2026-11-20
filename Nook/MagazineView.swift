@@ -203,7 +203,27 @@ struct MagazineView: View {
             titleTranslator.setScrolling(false)
         }
         .onChange(of: titleTranslationConfiguration) { _, _ in configureTitleTranslator() }
-        .onOpenURL { handleLayoutURL($0) }
+        .onChange(of: LayoutSelectionCoordinator.shared.collectionRequest, initial: true) { _, source in
+            guard source != nil else { return }
+            LayoutSelectionCoordinator.shared.collectionRequest = nil
+            tab = .magazine
+            libraryScope = nil
+            libraryFolder = nil
+            closeArticle()
+        }
+        .onChange(of: LayoutSelectionCoordinator.shared.readerRequest?.id, initial: true) { _, _ in
+            guard let request = LayoutSelectionCoordinator.shared.readerRequest else { return }
+            LayoutSelectionCoordinator.shared.readerRequest = nil
+            store.isBrowserPresented = false
+            if opened == request.articleID { return }
+            opened = nil
+            if tab == .studio || tab == .library {
+                tab = .magazine
+                libraryScope = nil
+                libraryFolder = nil
+            }
+            openArticle(request.articleID, fromRecommendation: request.recommendation)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.syncFromDisk()
             if autoRefresh { store.refreshOnActivation(honorThrottle: true) }

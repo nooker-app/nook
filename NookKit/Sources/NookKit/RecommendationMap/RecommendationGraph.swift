@@ -39,6 +39,44 @@ struct RecommendationGraph: Sendable {
     }
     var topics: [String] { Array(Set(nodes.map(\.topic))).sorted() }
 
+    /// Content updates may change links, never the reader's spatial memory.
+    /// Anchor new stories near an existing neighbor without moving that neighbor.
+    func preservingPresentation(from previous: Self) -> Self {
+        guard !previous.nodes.isEmpty else { return self }
+        let old = Dictionary(uniqueKeysWithValues: previous.nodes.map { ($0.id, $0) })
+        let current = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
+        var anchors: [String: String] = [:]
+        for edge in edges {
+            if old[edge.a] == nil, old[edge.b] != nil, anchors[edge.a] == nil { anchors[edge.a] = edge.b }
+            if old[edge.b] == nil, old[edge.a] != nil, anchors[edge.b] == nil { anchors[edge.b] = edge.a }
+        }
+        var result = self
+        for i in result.nodes.indices {
+            let id = result.nodes[i].id
+            if let prior = old[id] {
+                result.nodes[i].position = prior.position
+                result.nodes[i].clusterID = prior.clusterID
+                result.nodes[i].clusterLabel = prior.clusterLabel
+            } else if let anchor = anchors[id].flatMap({ old[$0] }) {
+                let seed = id.utf8.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1) }
+                let angle = Double(seed % 6283) / 1000
+                let radius = 100 + Double((seed / 6283) % 140)
+                result.nodes[i].position = CGPoint(x: anchor.position.x + cos(angle) * radius,
+                                                  y: anchor.position.y + sin(angle) * radius)
+                result.nodes[i].clusterID = anchor.clusterID
+                result.nodes[i].clusterLabel = anchor.clusterLabel
+            }
+        }
+        func unchanged(_ id: String) -> Bool {
+            guard let a = old[id]?.article, let b = current[id]?.article else { return false }
+            return a.title == b.title && a.summary == b.summary && a.bodyParagraphs == b.bodyParagraphs
+        }
+        result.overrides = previous.overrides.filter { id, links in
+            unchanged(id) && links.allSatisfy { unchanged($0.a) && unchanged($0.b) }
+        }
+        return result
+    }
+
     /// Project a cached library graph without rerunning embeddings or layout.
     /// Keeping positions makes switching collections spatially predictable.
     func collection(_ source: SmartSource, recentlyOpened: [String: Date]) -> Self {
@@ -74,7 +112,7 @@ struct RecommendationGraph: Sendable {
         result.edges = edges.filter { ids.contains($0.a) && ids.contains($0.b) }
         result.candidates = candidates.filter { ids.contains($0.key) }.mapValues { $0.filter { ids.contains($0.id) } }
         result.overrides = overrides.filter { ids.contains($0.key) }.mapValues { $0.filter { ids.contains($0.a) && ids.contains($0.b) } }
-        return result
+        return result.preservingPresentation(from: self)
     }
 }
 

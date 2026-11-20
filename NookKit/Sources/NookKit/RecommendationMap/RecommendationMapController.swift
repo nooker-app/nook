@@ -29,6 +29,7 @@ import os
     @ObservationIgnored private var refinementTask: Task<Void, Never>?
     @ObservationIgnored private var baseEdges: [RecommendationMapEdge] = []
     @ObservationIgnored private var canRefine = false
+    @ObservationIgnored private var hasPresentedFormation = false
     @ObservationIgnored var onOpen: ((String) -> Void)?
     private static let log = Logger(subsystem: "com.tim.nook", category: "recommendation-map")
 
@@ -59,7 +60,8 @@ import os
         refiningID = nil
         graph = libraryGraph.collection(collection, recentlyOpened: recentlyOpened)
         baseEdges = graph.edges
-        if !graph.nodes.contains(where: { $0.id == selectedID }) { selectedID = graph.nodes.first?.id }
+        graph.edges = Self.mergedEdges(baseEdges, overrides: graph.overrides)
+        if !graph.nodes.contains(where: { $0.id == selectedID }) { selectedID = nil }
         graphRevision &+= 1
     }
 
@@ -114,6 +116,7 @@ import os
             graphRevision &+= 1
             layoutRevision &+= 1
             canRefine = false
+            hasPresentedFormation = false
             selectedID = nil
             topic = nil
             engine = RecommendationGraphEngine.shared(scope: nextScope)
@@ -140,6 +143,12 @@ import os
             publishCollection()
         }
         do {
+            if libraryGraph.nodes.isEmpty, modelsReady,
+               let cached = await engine.cachedGraph(articles: articles, ranks: ranks, snapshot: snapshot, semantic: true),
+               !cached.nodes.isEmpty {
+                guard !Task.isCancelled, generation == expected else { return }
+                install(cached, refined: true)
+            }
             if libraryGraph.nodes.isEmpty || !modelsReady {
                 let quick = try await engine.graph(articles: articles, ranks: ranks, snapshot: snapshot,
                     semantic: false, progress: { _, _ in })
@@ -148,22 +157,20 @@ import os
                 install(quick, refined: false)
             }
             if modelsReady {
-                let enriched = try await engine.graph(articles: articles, ranks: ranks, snapshot: snapshot, semantic: true, progress: { [weak self] done, total in
-                    await MainActor.run {
-                        guard let self, self.generation == expected else { return }
-                        self.preparation.update(completed: done, total: total)
-                    }
-                }, formation: { [weak self] update in
-                    await MainActor.run {
-                        guard let self, self.generation == expected else { return }
-                        self.formation.receive(update)
-                        self.formationRevision &+= 1
-                    }
+                let enriched = try await engine.graph(articles: articles, ranks: ranks, snapshot: snapshot, semantic: true, progress: { @MainActor [weak self] done, total in
+                    guard let self, self.generation == expected else { return }
+                    self.preparation.update(completed: done, total: total)
+                }, animateFormation: !canRefine && !hasPresentedFormation, formation: { @MainActor [weak self] update in
+                    guard let self, self.generation == expected else { return }
+                    if update.beginsFormation { self.hasPresentedFormation = true }
+                    self.formation.receive(update)
+                    self.formationRevision &+= 1
                 })
                 guard !Task.isCancelled, generation == expected else { return }
+                let completedFormation = formation.active
                 formation.active = false
                 formationRevision &+= 1
-                install(enriched, refined: true)
+                install(enriched, refined: true, rearrange: completedFormation)
                 preparation.finish()
             }
             loading = false
@@ -177,20 +184,13 @@ import os
         }
     }
 
-    private func install(_ fresh: RecommendationGraph, refined: Bool) {
-        var next = fresh
+    private func install(_ fresh: RecommendationGraph, refined: Bool, rearrange: Bool = false) {
         // The first semantic graph replaces the provisional lexical layout.
         // Later read/rank updates keep the user's exploration in place.
-        let changesLayout = refined != canRefine
+        let changesLayout = rearrange || libraryGraph.nodes.isEmpty
         if changesLayout { layoutRevision &+= 1 }
-        let previous = Dictionary(uniqueKeysWithValues: (changesLayout ? [] : libraryGraph.nodes).map { ($0.id, $0) })
-        for index in next.nodes.indices {
-            if let old = previous[next.nodes[index].id] {
-                next.nodes[index].position = old.position
-                next.nodes[index].clusterID = old.clusterID
-                next.nodes[index].clusterLabel = old.clusterLabel
-            }
-        }
+        let next = changesLayout ? fresh : fresh.preservingPresentation(from: libraryGraph)
+        if libraryGraph.nodes.isEmpty { selectedID = next.nodes.first?.id }
         libraryGraph = next
         publishCollection()
         canRefine = refined
@@ -228,6 +228,7 @@ import os
                     return RecommendationMapEdge(a: id, b: candidate.id, strength: strength, terms: terms)
                 }
                 graph.overrides[id] = edges
+                libraryGraph.overrides[id] = edges
                 graph.edges = Self.mergedEdges(baseEdges, overrides: graph.overrides)
                 graphRevision &+= 1
                 refiningID = nil

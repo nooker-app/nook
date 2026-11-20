@@ -681,6 +681,10 @@ public final class ReaderStore {
     /// the main thread repeatedly and pinned the CPU near 100%. Deferring it to a
     /// one-time call from `.task` keeps those re-evaluations cheap.
     public func bootstrap() async {
+        if isBootstrapping {
+            await withCheckedContinuation { bootstrapWaiters.append($0) }
+            return
+        }
         guard !didBootstrap, !isPreparingLocalReset else { return }
         didBootstrap = true
         isBootstrapping = true
@@ -914,6 +918,10 @@ public final class ReaderStore {
     /// Read-only view of the full loaded library, for features that sample
     /// article content (Reading Fit draws its test paragraphs from here).
     public var libraryArticles: [Article] { articles }
+
+    /// Widget snapshots respect blocked/filter rules, independently of whichever
+    /// sidebar collection or search the main window currently displays.
+    public var widgetArticles: [Article] { articles.filter { !filteredArticleIDs.contains($0.id) } }
 
     /// Invalidates Magazine ranking without hashing/copying the library in a
     /// SwiftUI body. Includes in-place read/star patches and filter changes.
@@ -4393,7 +4401,7 @@ public final class ReaderStore {
 
     /// Opens an article by ID (used by the widget deep link): makes it visible
     /// and selects it so the reader displays it. The reader then marks it read.
-    func openArticle(id: Article.ID) {
+    public func openArticle(id: Article.ID) {
         guard articleIndexByID[id] != nil else { return }
         withSelectionChange {
             categorySelection = nil

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B37A00000000000000000072 /* WidgetPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000071 /* WidgetPublisher.swift */; };
+		B37A00000000000000000062 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000061 /* WidgetSnapshot.swift */; };
 		B37A00000000000000000042 /* BetaSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000041 /* BetaSettings.swift */; };
 		B37A00000000000000000032 /* MagazineImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000031 /* MagazineImport.swift */; };
 		B37A00000000000000000022 /* MagazineReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B37A00000000000000000021 /* MagazineReader.swift */; };
@@ -114,6 +116,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B37A00000000000000000071 /* WidgetPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetPublisher.swift; sourceTree = "<group>"; };
+		B37A00000000000000000061 /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NookKit/Sources/NookKit/WidgetSnapshot.swift; sourceTree = SOURCE_ROOT; };
 		B37A00000000000000000041 /* BetaSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BetaSettings.swift; sourceTree = "<group>"; };
 		B37A00000000000000000031 /* MagazineImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagazineImport.swift; sourceTree = "<group>"; };
 		B37A00000000000000000021 /* MagazineReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagazineReader.swift; sourceTree = "<group>"; };
@@ -302,6 +306,8 @@
 				2D0E3A3F2D8A4A4700A00001 /* PerfDriver.swift */,
 				2DAAAAAA000000000000D001 /* UpdateController.swift */,
 				2D0E3A392D8A4A4700A00001 /* WidgetShared.swift */,
+				B37A00000000000000000071 /* WidgetPublisher.swift */,
+				B37A00000000000000000061 /* WidgetSnapshot.swift */,
 				2D0E3A312D8A4A4700A00001 /* Localizable.xcstrings */,
 				2D0E3A1E2D8A4A4700A00001 /* Assets.xcassets */,
 				2DA1C0DE2D8A4A4700A00001 /* AppIcon.icon */,
@@ -590,6 +596,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				22E39C423000BE7500C3ECB6 /* WidgetShared.swift in Sources */,
+				B37A00000000000000000062 /* WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -608,6 +615,7 @@
 				2D0E3A402D8A4A4700A00001 /* PerfDriver.swift in Sources */,
 				2DAAAAAA000000000000D002 /* UpdateController.swift in Sources */,
 				2D0E3A3A2D8A4A4700A00001 /* WidgetShared.swift in Sources */,
+				B37A00000000000000000072 /* WidgetPublisher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -706,7 +714,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.2;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tim.nook.NookWidget;
@@ -746,7 +754,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tim.nook.NookWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";

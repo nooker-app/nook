@@ -271,15 +271,17 @@ struct ContentView: View {
         .onChange(of: columnVisibility) { _, newValue in
             sidebarVisible = (newValue == .all)
         }
-        .onOpenURL { url in
-            // An invitation link carries a code for Plus setup. Checked first
-            // because it is the only route that must not be mistaken for a
-            // widget deep link.
-            if PlusInviteInbox.shared.accept(url) { return }
-            if let raw = WidgetShared.smartSourceRaw(from: url), let source = SmartSource(rawValue: raw) {
-                store.selectSmartSource(source)
+        .onChange(of: LayoutSelectionCoordinator.shared.readerRequest?.id, initial: true) { _, _ in
+            guard let request = LayoutSelectionCoordinator.shared.readerRequest else { return }
+            LayoutSelectionCoordinator.shared.readerRequest = nil
+            store.isBrowserPresented = false
+            if request.recommendation,
+               UserDefaults.standard.object(forKey: MagazineRecommendationController.enabledKey) as? Bool ?? true {
+                let feedback = MagazineRecommendationController()
+                feedback.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
+                feedback.recordSelection(articleID: request.articleID)
             }
-            // nook://open simply brings the app forward.
+            store.openArticle(id: request.articleID)
         }
         .overlay { browserOverlay }
         .onChange(of: store.isBrowserPresented) { _, presented in

@@ -163,6 +163,7 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
     fileprivate static weak var shared: BackgroundRefreshController?
 
     private var loopTask: Task<Void, Never>?
+    private let widgetPublisher = NookWidgetPublisher()
     private var engagementTask: Task<Void, Never>?
     private var localEventMonitor: Any?
     private weak var readerWindow: NSWindow?
@@ -183,6 +184,7 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
         PerfDriver.prepareLaunchIfRequested()
         #endif
         UNUserNotificationCenter.current().delegate = self
+        widgetPublisher.start()
         // ⌘Q becomes a press-and-hold while a composer holds unsaved writing.
         QuitHoldController.shared.install()
         if NewArticleNotifier.isEnabled {
@@ -202,6 +204,17 @@ final class BackgroundRefreshController: NSObject, NSApplicationDelegate, UNUser
         // The user is now in the app; a lingering "new articles" banner is just
         // clutter, so dismiss any delivered one.
         NewArticleNotifier.clearDelivered()
+    }
+
+    // A singleton Window does not reliably receive SwiftUI's scene URL routing.
+    // Receive at app lifetime so widget links also work with every window closed.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        let coordinator = LayoutSelectionCoordinator.shared
+        for url in urls {
+            if coordinator.showsIntroduction { coordinator.pendingURLs.append(url) }
+            else { handleLayoutURL(url) }
+        }
+        WindowReopener.shared.reopen?()
     }
 
     func applicationDidResignActive(_ notification: Notification) {
