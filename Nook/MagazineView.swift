@@ -97,6 +97,9 @@ struct MagazineView: View {
         }
         .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.32, bounce: 0.04), value: store.isBrowserPresented)
         .background(NookTheme.canvas)
+        .containerBackground(NookTheme.canvas, for: .window)
+        .toolbarBackground(NookTheme.canvas, for: .windowToolbar)
+        .toolbarBackgroundVisibility(isRecommendationMap ? .visible : .automatic, for: .windowToolbar)
         .articleImageOverlay(imagePresenter)
         .toolbar {
             if store.isBrowserPresented {

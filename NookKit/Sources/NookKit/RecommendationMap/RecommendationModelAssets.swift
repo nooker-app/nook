@@ -13,6 +13,15 @@ struct RecommendationModelManifest: Decodable, Sendable {
     let revision: String
     let files: [File]
     var directoryName: String { id.replacingOccurrences(of: "/", with: "_") + "-" + revision }
+    var byteCount: Int64 { files.reduce(0) { $0 + $1.bytes } }
+    var sourceURL: URL { URL(string: "https://huggingface.co/\(id)/tree/\(revision)")! }
+
+    // Disclosure and installation read the same pinned manifest.
+    static let bundled: [Self] = Bundle.module.url(forResource: "Models", withExtension: "json")
+        .flatMap { try? Data(contentsOf: $0) }
+        .flatMap { try? JSONDecoder().decode([Self].self, from: $0) } ?? []
+
+    static var totalBytes: Int64 { bundled.reduce(0) { $0 + $1.byteCount } }
 }
 
 enum RecommendationModelError: Error {
@@ -28,9 +37,7 @@ actor RecommendationModelAssets {
     init(root: URL? = nil) {
         self.root = root ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Nook/RecommendationModels", isDirectory: true)
-        models = Bundle.module.url(forResource: "Models", withExtension: "json")
-            .flatMap { try? Data(contentsOf: $0) }
-            .flatMap { try? JSONDecoder().decode([RecommendationModelManifest].self, from: $0) } ?? []
+        models = RecommendationModelManifest.bundled
     }
 
     func directory(_ kind: String) throws -> URL {

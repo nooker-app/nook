@@ -30,6 +30,7 @@ public struct RecommendationMapView: View {
     @State private var showSetup = false
     @State private var showInfo = false
     @State private var showSearchSetup = false
+    @AppStorage("recommendationMapIntroductionVersion") private var introductionVersion = 0
 
     public init(model: RecommendationMapController, store: ReaderStore,
                 feedback: MagazineRecommendationController, personalized: Bool,
@@ -55,6 +56,16 @@ public struct RecommendationMapView: View {
                     VStack(spacing: 0) {
                         filters.zIndex(1)
                         RecommendationMapCanvas(model: model)
+                            .overlay(alignment: .topLeading) {
+                                if active && setup.checked && !setup.ready && !setup.downloading
+                                    && RecommendationModelSetup.supported && introductionVersion < 1 && !model.graph.nodes.isEmpty {
+                                    RecommendationMapIntroduction {
+                                        introductionVersion = 1
+                                        showSetup = true
+                                    } onLater: { introductionVersion = 1 }
+                                    .padding(20).frame(maxWidth: 400)
+                                }
+                            }
                     }
                     Rectangle().fill(NookTheme.hairline).frame(width: 1)
                     inspector.frame(width: min(326, max(245, geometry.size.width * 0.29)))
@@ -280,18 +291,35 @@ public struct RecommendationMapView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            if let progress = model.indexingProgress {
+            if model.preparation.isWorking {
                 ProgressView().controlSize(.mini)
-                Text("Connecting stories: \(progress.0) / \(progress.1)", bundle: .module)
+                if model.preparation.phase == .analyzing {
+                    Text("Understanding stories: \(model.preparation.completed) / \(model.preparation.total)", bundle: .module)
+                    Text(model.preparation.fraction, format: .percent.precision(.fractionLength(0))).monospacedDigit()
+                } else if model.preparation.phase == .connecting {
+                    Text("Arranging meaningful connections…", bundle: .module)
+                } else {
+                    Text("Preparing on-device analysis…", bundle: .module)
+                }
             } else {
-                Image(systemName: "externaldrive").foregroundStyle(NookTheme.accent)
+                Image(systemName: model.usesMeaning ? "point.3.connected.trianglepath.dotted" : "text.word.spacing")
+                    .foregroundStyle(NookTheme.accent)
+                Text(model.usesMeaning ? String(localized: "Meaning-based connections", bundle: .module)
+                     : String(localized: "Word-based connections", bundle: .module))
                 Text("\(model.graph.nodes.filter { !$0.article.isRead }.count) unread · \(model.graph.nodes.filter { $0.article.isRead }.count) read", bundle: .module)
             }
             Spacer(minLength: 8)
             if let error = model.error { Text(error).lineLimit(1).help(error) }
             if !setup.ready {
                 Button { showSetup.toggle() } label: {
-                    Label(String(localized: "Enable deeper connections", bundle: .module), systemImage: "arrow.down.circle")
+                    if setup.downloading {
+                        Label {
+                            Text("Downloading models", bundle: .module)
+                            Text(setup.progress, format: .percent.precision(.fractionLength(0)))
+                        } icon: { Image(systemName: "arrow.down.circle") }
+                    } else {
+                        Label(String(localized: "Enable deeper connections", bundle: .module), systemImage: "arrow.down.circle")
+                    }
                 }
                 .buttonStyle(MagazinePlainButtonStyle(capsule: true))
                 .popover(isPresented: $showSetup) { RecommendationModelSettings().buttonStyle(MagazineGlassButtonStyle()).padding(24).frame(width: 390) }
@@ -300,13 +328,15 @@ public struct RecommendationMapView: View {
     }
 
     private var mapInfo: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 14) {
             Text("About the map", bundle: .module).font(.headline)
             Text("Numbers show unread recommendation ranks. Dimmed points with a checkmark are stories you have read. Colors show categories; connections compare the actual titles and content, even across categories.", bundle: .module)
             Text("Cached original articles are included. Otherwise, Nook uses the content provided by the feed. Connections help you explore related ideas; they do not explain why a story was recommended.", bundle: .module)
             Text("Select a point to preview, double-click to read. Scroll to pan, pinch or use the wheel to zoom, and drag a point to explore its neighborhood. Search also finds stories you have read.", bundle: .module)
             RecommendationModelSettings()
-        }.font(.callout).lineSpacing(4).padding(24).frame(width: 390).buttonStyle(MagazineGlassButtonStyle())
+        }.font(.callout).lineSpacing(4).padding(24)
+        }.frame(width: 390, height: 620).buttonStyle(MagazineGlassButtonStyle())
     }
 }
 

@@ -45,7 +45,8 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         view.reduceMotion=reduceMotion;view.interactionEnabled=model.isInteractive
         let changedCollection = view.collection != model.collection
         view.collection = model.collection
-        if view.revision != model.graphRevision {view.install(model.graph,revision:model.graphRevision,layoutRevision:model.layoutRevision)}
+        if view.revision != model.graphRevision {view.install(model.graph,revision:model.graphRevision,layoutRevision:model.layoutRevision,forming:model.formation.active)}
+        view.updateFormation(model.formation, revision: model.formationRevision)
         view.updateSelection(model.selectedID)
         if changedCollection { view.fit(animated: true) }
         if view.topic != model.topic || view.focusOnly != model.focus {view.topic=model.topic;view.focusOnly=model.focus;view.needsDisplay=true}
@@ -111,6 +112,19 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     private var labelRects:[CGRect]=[]
     private var firstFit=false
     private var focusedInitialSelection=false
+    private var formationRevision = -1
+    private var formationActive = false
+    private var formationEdgeCount = 0
+    private var formationLayoutRevision = -1
+    private var analyzed = Set<Int>()
+    private var pulses: [(Int, Int, Double)] = []
+    private var lastActivated: [Int] = []
+    private var morph: (from: [CGPoint], start: Double)?
+    private var dissolvingEdges: [(Int, Int)] = []
+    private var restingEdges: [RecommendationMapEdge] = []
+    private var formationCameraAdjusted = false
+    private var colorGroups: [Int] = []
+    private var groupColors: [NSColor] = []
     override init(frame:NSRect){super.init(frame:frame);wantsLayer=true;layer?.masksToBounds=true;setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel(String(localized: "Recommendation map. Scroll to pan, pinch to zoom, and select a story to preview it.", bundle: .module))}
     required init?(coder:NSCoder){fatalError()}
     override func updateTrackingAreas(){super.updateTrackingAreas();if let tracking {removeTrackingArea(tracking)};let area=NSTrackingArea(rect:bounds,options:[.mouseMoved,.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self);addTrackingArea(area);tracking=area}
@@ -118,22 +132,184 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     override func viewWillMove(toWindow newWindow:NSWindow?){if newWindow == nil {timer?.invalidate();timer=nil;cameraAnimation=nil;momentum = .zero;activePhysics.removeAll()};super.viewWillMove(toWindow:newWindow)}
     override func resetCursorRects(){addCursorRect(bounds,cursor:.openHand)}
     override func layout(){super.layout();if !firstFit && !nodes.isEmpty && bounds.width>10 {firstFit=true;fit(animated:false)}}
-    func install(_ graph:RecommendationGraph,revision:Int,layoutRevision:Int){
+    func install(_ graph:RecommendationGraph,revision:Int,layoutRevision:Int,forming:Bool=false){
+        let finishFormation = formationActive && !forming
+        let before = Dictionary(uniqueKeysWithValues: nodes.indices.map { (nodes[$0].id, displayPosition($0)) })
+        formationRevision = -1;formationActive = false;formationEdgeCount = 0
+        analyzed.removeAll();pulses.removeAll();lastActivated.removeAll();morph = nil;dissolvingEdges.removeAll()
         self.revision=revision
         let changesLayout=self.layoutRevision != layoutRevision
         self.layoutRevision=layoutRevision
         if changesLayout {focusedInitialSelection=false}
         if graph.nodes.isEmpty {firstFit=false;focusedInitialSelection=false;timer?.invalidate();timer=nil;cameraAnimation=nil;momentum = .zero;lod.removeAll()}
-        let old=Dictionary(uniqueKeysWithValues:(changesLayout ? []:Array(zip(nodes,positions))).map {($0.0.id,$0.1)})
+        let old=Dictionary(uniqueKeysWithValues:(changesLayout || finishFormation ? []:Array(zip(nodes,positions))).map {($0.0.id,$0.1)})
         nodes=graph.nodes;edges=graph.edges;lookup=Dictionary(uniqueKeysWithValues:nodes.enumerated().map {($0.element.id,$0.offset)})
+        restingEdges = graph.edges
         positions=nodes.map {old[$0.id] ?? $0.position};colors=nodes.map {NSColor(recommendationTopicColor($0.topic))}
+        var topicGroups: [String: Int] = [:]
+        groupColors.removeAll();colorGroups.removeAll()
+        for i in nodes.indices {
+            if topicGroups[nodes[i].topic] == nil { topicGroups[nodes[i].topic] = groupColors.count;groupColors.append(colors[i]) }
+            colorGroups.append(topicGroups[nodes[i].topic]!)
+        }
         index=RecommendationSpatialGrid(cell:240);adjacency=Array(repeating:[],count:nodes.count)
         for i in nodes.indices {index.insert(i,positions[i])}
         for e in edges.indices {if let a=lookup[edges[e].a],let b=lookup[edges[e].b]{adjacency[a].append(e);adjacency[b].append(e)}}
         labelImages.removeAll();pendingLabels.removeAll();labelAccess.removeAll()
         rebuildLOD();selected=nil;hovered=nil;activePhysics.removeAll();velocity.removeAll()
         if !firstFit && !nodes.isEmpty && bounds.width>10 {firstFit=true;fit(animated:false)}
+        if finishFormation && !reduceMotion {
+            morph = (nodes.map { before[$0.id] ?? $0.position }, CACurrentMediaTime())
+            focusedInitialSelection = true
+            startTimer()
+        }
+        if finishFormation && !formationCameraAdjusted { fit(animated: !reduceMotion) }
         needsDisplay=true
+    }
+
+    func updateFormation(_ state: RecommendationMapFormation, revision: Int) {
+        guard formationRevision != revision else { return }
+        formationRevision = revision
+        guard state.active else {
+            if formationActive {
+                install(RecommendationGraph(nodes: nodes, edges: restingEdges), revision: self.revision, layoutRevision: layoutRevision)
+                formationRevision = revision
+            }
+            return
+        }
+        if !formationActive {
+            formationActive = true;formationEdgeCount = 0
+            formationLayoutRevision = state.layoutRevision
+            formationCameraAdjusted = false
+            dissolvingEdges = edges.prefix(350).compactMap { edge in
+                guard let a = lookup[edge.a], let b = lookup[edge.b] else { return nil }
+                return (a, b)
+            }
+            let before = positions
+            // Stable article identities determine a uniform open field, independent
+            // of categories. Existing filters, camera and hit testing stay native.
+            for i in nodes.indices { positions[i] = state.positions[nodes[i].id] ?? positions[i] }
+            edges.removeAll();adjacency = Array(repeating: [], count: nodes.count)
+            analyzed.removeAll();pulses.removeAll();lastActivated.removeAll()
+            activePhysics.removeAll();velocity.removeAll()
+            morph = reduceMotion ? nil : (before, CACurrentMediaTime())
+            rebuildPositionIndex()
+            focusedInitialSelection = true
+            fit(animated: !reduceMotion)
+        }
+        if formationLayoutRevision != state.layoutRevision {
+            let before = positions.indices.map { displayPosition($0) }
+            for i in nodes.indices where i != dragIndex {
+                if let point = state.positions[nodes[i].id] { positions[i] = point }
+            }
+            morph = reduceMotion ? nil : (before, CACurrentMediaTime())
+            dissolvingEdges.removeAll()
+            formationLayoutRevision = state.layoutRevision
+            rebuildPositionIndex()
+        }
+        let nextAnalyzed = Set(state.analyzed.compactMap { lookup[$0] })
+        let arrived = nextAnalyzed.subtracting(analyzed)
+        if !arrived.isEmpty { lastActivated = Array(arrived.sorted().prefix(32)) }
+        analyzed = nextAnalyzed
+        let now = CACurrentMediaTime()
+        for edge in state.edges.dropFirst(formationEdgeCount) {
+            guard let a = lookup[edge.a], let b = lookup[edge.b] else { continue }
+            adjacency[a].append(edges.count);adjacency[b].append(edges.count);edges.append(edge)
+            if !reduceMotion { pulses.append((a, b, now)) }
+        }
+        formationEdgeCount = state.edges.count
+        pulses = Array(pulses.filter { now - $0.2 < 2.4 }.suffix(72))
+        updateNeighbors()
+        if !reduceMotion { startTimer() }
+        needsDisplay = true
+    }
+
+    private func rebuildPositionIndex() {
+        index = RecommendationSpatialGrid(cell: 240)
+        for i in positions.indices { index.insert(i, positions[i]) }
+        rebuildLOD()
+    }
+
+    private func displayPosition(_ i: Int) -> CGPoint {
+        guard let morph, morph.from.indices.contains(i) else { return positions[i] }
+        let t = min(1, max(0, (CACurrentMediaTime() - morph.start) / 0.9))
+        let ease = t * t * (3 - 2 * t), p = morph.from[i], q = positions[i]
+        return CGPoint(x: p.x + (q.x - p.x) * ease, y: p.y + (q.y - p.y) * ease)
+    }
+
+    private func drawFormingMap(_ context: CGContext) {
+        let now = CACurrentMediaTime()
+        let visible = (morph == nil ? index.query(viewport) : Array(nodes.indices)).filter {
+            bounds.insetBy(dx: -30, dy: -30).contains(screen(displayPosition($0)))
+        }
+        visibleCount = visible.count
+        if let morph, !dissolvingEdges.isEmpty {
+            context.saveGState()
+            context.setAlpha(max(0, 1 - (now - morph.start) / 0.65))
+            for (a, b) in dissolvingEdges { strokeEdge(a, b, context: context, highlighted: false, overview: true) }
+            context.restoreGState()
+        }
+        var edgePaths: [Int: CGMutablePath] = [:]
+        for edge in edges {
+            if drawnEdges >= 600 { break }
+            guard let a = lookup[edge.a], let b = lookup[edge.b] else { continue }
+            let p = screen(displayPosition(a)), q = screen(displayPosition(b))
+            guard bounds.contains(p) || bounds.contains(q) else { continue }
+            if a == selected || b == selected { strokeEdge(a, b, context: context, highlighted: true, overview: zoom < 0.25) }
+            else {
+                let key = Int(min(alpha(a), alpha(b)) * 10)
+                let path = edgePaths[key] ?? CGMutablePath()
+                path.move(to: p);path.addQuadCurve(to: q, control: CGPoint(x: (p.x+q.x)/2-(q.y-p.y)*0.035, y: (p.y+q.y)/2+(q.x-p.x)*0.035))
+                edgePaths[key] = path
+            }
+            drawnEdges += 1
+        }
+        context.setLineWidth(0.6)
+        for (alpha, path) in edgePaths {
+            context.setStrokeColor(NSColor.labelColor.withAlphaComponent(Double(alpha) * (zoom < 0.25 ? 0.008 : 0.018)).cgColor)
+            context.addPath(path);context.strokePath()
+        }
+        var nodePaths: [Int: CGMutablePath] = [:]
+        for i in visible {
+            let p = screen(displayPosition(i))
+            let ready = !formationActive || analyzed.contains(i)
+            let radius = min(5, max(1.5, 9 * sqrt(zoom)))
+            let key = colorGroups[i] * 32 + Int((ready ? 0.8 : 0.23) * alpha(i) * 20)
+            let path = nodePaths[key] ?? CGMutablePath()
+            path.addEllipse(in: CGRect(x: p.x-radius, y: p.y-radius, width: radius*2, height: radius*2))
+            nodePaths[key] = path
+        }
+        for (key, path) in nodePaths {
+            context.setFillColor(groupColors[key / 32].withAlphaComponent(Double(key % 32) / 20).cgColor)
+            context.addPath(path);context.fillPath()
+        }
+        guard formationActive, !reduceMotion else { return }
+        let accent = NSColor(NookTheme.accent)
+        // Bounded light signals follow actual new semantic edges. No timers
+        // invent connections; a quiet breath keeps the last analyzed batch alive.
+        for (a, b, began) in pulses {
+            let age = now - began
+            guard age < 2.4 else { continue }
+            let p = screen(displayPosition(a)), q = screen(displayPosition(b))
+            guard bounds.contains(p) || bounds.contains(q) else { continue }
+            let t = min(1, age / 0.4), fade = min(1, max(0, (2.4-age)/1.8))
+            let c = CGPoint(x: (p.x+q.x)/2-(q.y-p.y)*0.035, y: (p.y+q.y)/2+(q.x-p.x)*0.035)
+            let point = CGPoint(x:(1-t)*(1-t)*p.x+2*(1-t)*t*c.x+t*t*q.x,
+                                y:(1-t)*(1-t)*p.y+2*(1-t)*t*c.y+t*t*q.y)
+            let control = CGPoint(x:p.x+(c.x-p.x)*t,y:p.y+(c.y-p.y)*t)
+            for (width, opacity) in [(6.0,0.035),(2.8,0.10),(0.9,0.75)] {
+                context.setStrokeColor(accent.withAlphaComponent(opacity*fade).cgColor)
+                context.setLineWidth(width);context.beginPath();context.move(to:p);context.addQuadCurve(to:point,control:control);context.strokePath()
+            }
+        }
+        let breath = 0.5 + 0.5 * sin(now * 2.6)
+        for i in lastActivated {
+            let p = screen(displayPosition(i))
+            guard bounds.contains(p) else { continue }
+            let r = 5 + breath * 5
+            context.setStrokeColor(accent.withAlphaComponent(0.15 + breath*0.25).cgColor)
+            context.setLineWidth(0.8);context.strokeEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:r*2,height:r*2))
+        }
     }
     private func rebuildLOD(){
         guard !positions.isEmpty else{return}
@@ -152,6 +328,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     }
     func updateSelection(_ id:String?){
         let next=id.flatMap {lookup[$0]};guard next != selected else{return};let previous=selected;selected=next;updateNeighbors()
+        if formationActive { needsDisplay = true;return }
         if !focusedInitialSelection && next != nil {
             focusedInitialSelection=true;focusSelection()
         } else if previous != nil && dragIndex == nil {focusSelection()};needsDisplay=true
@@ -177,7 +354,9 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         context.setFillColor(NSColor.labelColor.withAlphaComponent(0.07).cgColor)
         for x in stride(from:dx,through:bounds.width,by:spacing){for y in stride(from:dy,through:bounds.height,by:spacing){context.fillEllipse(in:CGRect(x:x,y:y,width:1,height:1))}}
         drawnEdges=0;bucketCount=0;labelRects.removeAll(keepingCapacity:true)
-        if lodCell != nil {
+        if formationActive || morph != nil {
+            drawFormingMap(context)
+        } else if lodCell != nil {
             let groups=buckets();visibleCount=groups.reduce(0){$0+$1.count};bucketCount=groups.count
             // Level of detail: article groups, never thousands of tiny labels.
             for b in groups {let p=screen(b.center),r=min(9,2.6+sqrt(Double(b.count))*0.65);context.setFillColor(colors[b.first].withAlphaComponent(0.65*alpha(b.first)).cgColor);context.fillEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:r*2,height:r*2))}
@@ -213,14 +392,14 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         let elapsed=(CACurrentMediaTime()-began)*1000;drawSamples.append(elapsed);if drawSamples.count>600{drawSamples.removeFirst(drawSamples.count-600)}
     }
     private func strokeEdge(_ a:Int,_ b:Int,context:CGContext,highlighted:Bool,overview:Bool){
-        let p=screen(positions[a]),q=screen(positions[b])
+        let p=screen(displayPosition(a)),q=screen(displayPosition(b))
         let opacity=(highlighted ? 0.62 : overview ? 0.10:0.18)*min(alpha(a),alpha(b))
         let color=highlighted ? NSColor(NookTheme.accent):NSColor.labelColor
         context.setStrokeColor(color.withAlphaComponent(opacity).cgColor);context.setLineWidth(highlighted ? 1.2:0.6)
         context.beginPath();context.move(to:p);context.addQuadCurve(to:q,control:CGPoint(x:(p.x+q.x)/2-(q.y-p.y)*0.035,y:(p.y+q.y)/2+(q.x-p.x)*0.035));context.strokePath()
     }
     private func drawNode(_ i:Int,context:CGContext,force:Bool=false){
-        let p=screen(positions[i]);guard bounds.insetBy(dx:-100,dy:-100).contains(p) else{return}
+        let p=screen(displayPosition(i));guard bounds.insetBy(dx:-100,dy:-100).contains(p) else{return}
         let active=i==selected,over=i==hovered
         let r=force ? 8:max(4,min(24,(16+Double(max(0,24-nodes[i].rank))*0.3)*sqrt(zoom)))
         let opacity=alpha(i);context.setFillColor(colors[i].withAlphaComponent((active ? 0.30:0.15)*opacity).cgColor);context.fillEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
@@ -294,6 +473,10 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         }
     }
     private func hit(_ p:CGPoint)->Int? {
+        if morph != nil || formationActive && lodCell != nil {
+            return nodes.indices.filter { i in let q = screen(displayPosition(i));return hypot(q.x-p.x,q.y-p.y)<12 }
+                .min { a,b in let x=screen(displayPosition(a)),y=screen(displayPosition(b));return hypot(x.x-p.x,x.y-p.y)<hypot(y.x-p.x,y.y-p.y) }
+        }
         if lodCell != nil{return nil}
         let w=world(p);let radius=100/zoom
         return index.query(CGRect(x:w.x-radius,y:w.y-radius,width:radius*2,height:radius*2)).filter {i in
@@ -302,7 +485,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     }
     override func mouseMoved(with event:NSEvent){guard interactionEnabled else{return};let p=convert(event.locationInWindow,from:nil);let next=hit(p);if next != hovered {hovered=next;updateNeighbors();needsDisplay=true};(next == nil ? NSCursor.openHand:NSCursor.pointingHand).set()}
     override func mouseExited(with event:NSEvent){hovered=nil;updateNeighbors();needsDisplay=true}
-    override func mouseDown(with event:NSEvent){guard interactionEnabled else{return};window?.makeFirstResponder(self);cameraAnimation=nil;momentum = .zero;lastMouse=convert(event.locationInWindow,from:nil);dragIndex=hit(lastMouse);mouseMovedDistance=0;dragHistory=[(CACurrentMediaTime(),lastMouse)];if let i=dragIndex {beginPhysics(i)};NSCursor.closedHand.set()}
+    override func mouseDown(with event:NSEvent){guard interactionEnabled else{return};if formationActive {formationCameraAdjusted=true};window?.makeFirstResponder(self);cameraAnimation=nil;momentum = .zero;lastMouse=convert(event.locationInWindow,from:nil);dragIndex=hit(lastMouse);mouseMovedDistance=0;dragHistory=[(CACurrentMediaTime(),lastMouse)];if let i=dragIndex {beginPhysics(i)};NSCursor.closedHand.set()}
     override func mouseDragged(with event:NSEvent){guard interactionEnabled else{return};let p=convert(event.locationInWindow,from:nil);let dx=p.x-lastMouse.x,dy=p.y-lastMouse.y;mouseMovedDistance+=hypot(dx,dy)
         if let i=dragIndex {move(i,to:CGPoint(x:positions[i].x+dx/zoom,y:positions[i].y+dy/zoom));velocity[i] = .zero;startTimer()}
         else {pan.x+=dx;pan.y+=dy}
@@ -320,6 +503,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         dragIndex=nil;NSCursor.openHand.set();needsDisplay=true
     }
     override func scrollWheel(with event:NSEvent){guard interactionEnabled else{super.scrollWheel(with:event);return};cameraAnimation=nil;momentum = .zero
+        if formationActive {formationCameraAdjusted=true}
         let p=convert(event.locationInWindow,from:nil)
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || !event.hasPreciseScrollingDeltas {zoomBy(exp(event.scrollingDeltaY*(event.hasPreciseScrollingDeltas ? 0.008:0.07)),anchor:p,animated:false)}
         else {pan.x+=event.scrollingDeltaX;pan.y+=event.scrollingDeltaY;needsDisplay=true}
@@ -327,7 +511,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     override func magnify(with event:NSEvent){guard interactionEnabled else{return};zoomBy(1+event.magnification,anchor:convert(event.locationInWindow,from:nil),animated:false)}
     override func smartMagnify(with event:NSEvent){guard interactionEnabled else{return};if zoom>0.4 {fit(animated:true)} else {zoomBy(4,anchor:convert(event.locationInWindow,from:nil),animated:true)}}
     override func keyDown(with event:NSEvent){guard interactionEnabled else{super.keyDown(with:event);return};switch event.keyCode {case 123:pan.x+=70;case 124:pan.x-=70;case 125:pan.y-=70;case 126:pan.y+=70;case 36:onOpen?();case 53:fit(animated:true);default:super.keyDown(with:event)};needsDisplay=true}
-    func zoomBy(_ factor:Double,anchor:CGPoint,animated:Bool){let target=min(2.5,max(0.018,zoom*factor));let w=world(anchor);let next=CGPoint(x:anchor.x-w.x*target,y:anchor.y-w.y*target);setCamera(zoom:target,pan:next,animated:animated)}
+    func zoomBy(_ factor:Double,anchor:CGPoint,animated:Bool){if formationActive {formationCameraAdjusted=true};let target=min(2.5,max(0.018,zoom*factor));let w=world(anchor);let next=CGPoint(x:anchor.x-w.x*target,y:anchor.y-w.y*target);setCamera(zoom:target,pan:next,animated:animated)}
     func fit(animated:Bool){guard !nodes.isEmpty else{return};let scale=min((bounds.width-100)/contentBounds.width,(bounds.height-150)/contentBounds.height);animateCamera(to:max(0.018,min(1.1,scale)),center:CGPoint(x:contentBounds.midX,y:contentBounds.midY),animated:animated)}
     func focusSelection(){guard let selected else{return};animateCamera(to:max(0.85,zoom),center:positions[selected])}
     private func animateCamera(to scale:Double,center:CGPoint,animated:Bool=true){setCamera(zoom:scale,pan:CGPoint(x:bounds.midX-center.x*scale,y:bounds.midY-center.y*scale),animated:animated)}
@@ -342,9 +526,14 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         let p=positions[i];for j in index.query(CGRect(x:p.x-450,y:p.y-450,width:900,height:900)).prefix(50){activePhysics.insert(j)}
         resting=Dictionary(uniqueKeysWithValues:activePhysics.map {($0,positions[$0])});velocity=Dictionary(uniqueKeysWithValues:activePhysics.map {($0,CGPoint.zero)});simulationTicks=0
     }
-    private func startTimer(){guard timer==nil else{return};timer=Timer(timeInterval:1/60,repeats:true){[weak self] _ in MainActor.assumeIsolated {self?.tick()}};RunLoop.main.add(timer!,forMode:.common)}
+    private func startTimer(){guard timer==nil,interactionEnabled else{return};timer=Timer(timeInterval:1/60,repeats:true){[weak self] _ in MainActor.assumeIsolated {self?.tick()}};RunLoop.main.add(timer!,forMode:.common)}
     private func tick(){
         var live=false
+        if let morph {
+            if CACurrentMediaTime() - morph.start >= 0.9 { self.morph = nil;dissolvingEdges.removeAll() }
+            else { live = true }
+        }
+        if formationActive && !reduceMotion && interactionEnabled { live = true }
         if let (startZ,startP,endZ,endP,start)=cameraAnimation {
             let t=min(1,(CACurrentMediaTime()-start)/0.42),ease=1-pow(1-t,3)
             zoom=startZ+(endZ-startZ)*ease;pan=CGPoint(x:startP.x+(endP.x-startP.x)*ease,y:startP.y+(endP.y-startP.y)*ease)

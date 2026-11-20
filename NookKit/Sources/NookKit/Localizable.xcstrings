@@ -1,6 +1,215 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Download models · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 다운로드 · %@"
+          }
+        }
+      }
+    },
+    "Optional download · %@ · runs on this Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택 다운로드 · %@ · 이 Mac에서 실행"
+          }
+        }
+      }
+    },
+    "Find related ideas, even when the words or languages differ.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "표현이나 언어가 달라도, 내용이 이어지는 글을 찾아보세요."
+          }
+        }
+      }
+    },
+    "Understand article meaning": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글의 의미 분석"
+          }
+        }
+      }
+    },
+    "Refine related stories": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연관 글 정밀 비교"
+          }
+        }
+      }
+    },
+    "Community conversions hosted on Hugging Face. Nook downloads a pinned version and verifies each file before use.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face에 공개된 커뮤니티 변환 모델입니다. Nook은 지정된 버전을 내려받고 각 파일을 검증합니다."
+          }
+        }
+      }
+    },
+    "Article text stays on this Mac. Model downloads connect to Hugging Face; analysis runs locally.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 다운로드 시 Hugging Face에 연결합니다. 글 내용은 전송하지 않고 이 Mac에서 분석합니다."
+          }
+        }
+      }
+    },
+    "After downloading, Nook analyzes your library once. Larger libraries take longer. You can keep exploring, and completed analysis is saved on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다운로드 후 보관함의 글을 처음 한 번 분석합니다. 글이 많으면 시간이 더 걸리며, 분석 중에도 탐색할 수 있어요. 완료된 분석은 이 Mac에 저장됩니다."
+          }
+        }
+      }
+    },
+    "Downloading models": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 다운로드 중"
+          }
+        }
+      }
+    },
+    "Understanding stories: %lld / %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글 의미 분석 중: %1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "Arranging meaningful connections…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "의미가 이어지는 글을 배치하고 있어요…"
+          }
+        }
+      }
+    },
+    "Preparing on-device analysis…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 Mac에서 글 분석을 준비하고 있어요…"
+          }
+        }
+      }
+    },
+    "Meaning-based connections": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "의미 기반 연결"
+          }
+        }
+      }
+    },
+    "Word-based connections": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "단어 기반 연결"
+          }
+        }
+      }
+    },
+    "Your map can go a little deeper": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글의 의미까지 연결해 보세요"
+          }
+        }
+      }
+    },
+    "These connections use the words in your articles. Add local models to discover related ideas across different expressions and languages.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 글에 쓰인 단어로 연결했어요. 모델을 추가하면 표현이나 언어가 다른 글도 내용으로 연결할 수 있어요."
+          }
+        }
+      }
+    },
+    "Optional download · about 2.9 GB · runs on this Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택 다운로드 · 약 2.9 GB · 이 Mac에서 실행"
+          }
+        }
+      }
+    },
+    "Review models": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모델 살펴보기"
+          }
+        }
+      }
+    },
+    "Later": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "나중에"
+          }
+        }
+      }
+    },
     "Search by keyword or meaning": {
       "extractionState": "manual",
       "localizations": {

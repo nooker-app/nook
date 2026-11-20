@@ -16,7 +16,10 @@ import os
     var focusRequest = 0
     var isInteractive = true
     var loading = true
-    var indexingProgress: (Int, Int)?
+    var preparation = RecommendationMapPreparation()
+    var formationRevision = 0
+    @ObservationIgnored var formation = RecommendationMapFormation()
+    var usesMeaning: Bool { canRefine }
     var refiningID: String?
     var error: String?
     var scope = ""
@@ -31,7 +34,14 @@ import os
 
     public init() {}
     var selected: RecommendationMapNode? { graph.nodes.first { $0.id == selectedID } }
-    var related: [(RecommendationMapNode, RecommendationMapEdge)] { selectedID.map { graph.related(to: $0, limit: 3) } ?? [] }
+    var related: [(RecommendationMapNode, RecommendationMapEdge)] {
+        _ = formationRevision
+        guard let selectedID else { return [] }
+        if formation.active {
+            return RecommendationGraph(nodes: graph.nodes, edges: formation.edges).related(to: selectedID, limit: 3)
+        }
+        return graph.related(to: selectedID, limit: 3)
+    }
     public var readerArticleIDs: [String] { graph.nodes.map(\.id) }
 
     func setCollection(_ source: SmartSource, recentlyOpened: [String: Date]) {
@@ -80,7 +90,9 @@ import os
         refinementGeneration &+= 1
         refinementTask?.cancel()
         refiningID = nil
-        indexingProgress = nil
+        preparation.reset()
+        formation = RecommendationMapFormation()
+        formationRevision &+= 1
     }
 
     func refresh(store: ReaderStore, feedback: MagazineRecommendationController,
@@ -91,6 +103,9 @@ import os
         refinementTask?.cancel()
         refiningID = nil
         error = nil
+        formation = RecommendationMapFormation()
+        formationRevision &+= 1
+        if modelsReady { preparation.begin() } else { preparation.reset() }
         let nextScope = store.syncFolderURL?.standardizedFileURL.path ?? "local"
         if scope != nextScope {
             scope = nextScope
@@ -133,21 +148,31 @@ import os
                 install(quick, refined: false)
             }
             if modelsReady {
-                let enriched = try await engine.graph(articles: articles, ranks: ranks, snapshot: snapshot, semantic: true) { [weak self] done, total in
-                    Task { @MainActor in
+                let enriched = try await engine.graph(articles: articles, ranks: ranks, snapshot: snapshot, semantic: true, progress: { [weak self] done, total in
+                    await MainActor.run {
                         guard let self, self.generation == expected else { return }
-                        self.indexingProgress = (done, total)
+                        self.preparation.update(completed: done, total: total)
                     }
-                }
+                }, formation: { [weak self] update in
+                    await MainActor.run {
+                        guard let self, self.generation == expected else { return }
+                        self.formation.receive(update)
+                        self.formationRevision &+= 1
+                    }
+                })
                 guard !Task.isCancelled, generation == expected else { return }
+                formation.active = false
+                formationRevision &+= 1
                 install(enriched, refined: true)
+                preparation.finish()
             }
             loading = false
-            indexingProgress = nil
         } catch {
             guard !Task.isCancelled, generation == expected else { return }
             loading = false
-            indexingProgress = nil
+            preparation.reset()
+            formation = RecommendationMapFormation()
+            formationRevision &+= 1
             self.error = String(localized: "The map is available. Detailed connections could not be updated.", bundle: .module)
         }
     }
@@ -177,7 +202,7 @@ import os
         refinementTask?.cancel()
         refinementGeneration &+= 1
         refiningID = nil
-        guard canRefine, let selected, graph.overrides[selected.id] == nil, let engine else { return }
+        guard canRefine, !formation.active, let selected, graph.overrides[selected.id] == nil, let engine else { return }
         let id = selected.id, revision = refinementGeneration, expected = generation
         let lookup = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) })
         let candidates = (graph.candidates[id] ?? []).filter { $0.score >= 0.28 && lookup[$0.id] != nil }

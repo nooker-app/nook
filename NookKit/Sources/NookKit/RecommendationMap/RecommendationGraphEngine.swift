@@ -48,7 +48,8 @@ actor RecommendationGraphEngine {
     }
 
     func graph(articles: [Article], ranks: [String: Int], snapshot: RecommendationLibrarySnapshot,
-               semantic: Bool, progress: @Sendable @escaping (Int, Int) -> Void) async throws -> RecommendationGraph {
+               semantic: Bool, progress: @Sendable @escaping (Int, Int) async -> Void,
+               formation: @Sendable @escaping (RecommendationMapIndexUpdate) async -> Void = { _ in }) async throws -> RecommendationGraph {
         // Reading, ranking, and undo do not change content similarity. Reuse
         // geometry and edges when the corpus is unchanged or only loses rows.
         let fingerprints = Dictionary(uniqueKeysWithValues: articles.map { article in
@@ -75,7 +76,19 @@ actor RecommendationGraphEngine {
                 return vector.model != RecommendationNativeModels.embeddingID || vector.fingerprint != fingerprint
                     || vector.values.count != 1024 || !vector.values.allSatisfy(\.isFinite)
             }
-            progress(articles.count - missing.count, articles.count)
+            await progress(articles.count - missing.count, articles.count)
+            var live = RecommendationLiveConnections()
+            let spread = RecommendationMapFormation.spreadPositions(for: articles.map(\.id))
+            var liveLayout = RecommendationFormationLayout(positions: spread)
+            var lastLayout = ContinuousClock.now
+            if !missing.isEmpty {
+                let missingIDs = Set(missing.map(\.id))
+                let cached = articles.filter { !missingIDs.contains($0.id) }
+                _ = live.append(cached, vectors: cached.compactMap { vectors[$0.id] }, connect: false)
+                await formation(RecommendationMapIndexUpdate(completed: cached.count, total: articles.count,
+                    analyzedIDs: cached.map(\.id), beginsFormation: true,
+                    positions: spread))
+            }
             for start in stride(from: 0, to: missing.count, by: 8) {
                 try Task.checkCancellation()
                 let batch = Array(missing[start..<min(start + 8, missing.count)])
@@ -90,7 +103,23 @@ actor RecommendationGraphEngine {
                         values: value, fingerprint: Self.hash(texts[index]))
                 }
                 if start % 128 == 0 { save(vectors, name: "vectors.plist") }
-                progress(articles.count - missing.count + start + batch.count, articles.count)
+                await progress(articles.count - missing.count + start + batch.count, articles.count)
+                let connections = live.append(batch, vectors: batch.compactMap { vectors[$0.id] })
+                liveLayout.add(connections, activated: batch.map(\.id))
+                var positions: [String: CGPoint] = [:]
+                if lastLayout.duration(to: .now) >= .milliseconds(1500) || start + batch.count == missing.count {
+                    let snapshot = liveLayout
+                    let layoutTask = Task.detached(priority: .utility) {
+                        var next = snapshot
+                        let changed = next.relax()
+                        return (next, changed)
+                    }
+                    let result = await withTaskCancellationHandler { await layoutTask.value } onCancel: { layoutTask.cancel() }
+                    try Task.checkCancellation()
+                    liveLayout = result.0;positions = result.1;lastLayout = .now
+                }
+                await formation(RecommendationMapIndexUpdate(completed: articles.count - missing.count + start + batch.count,
+                    total: articles.count, analyzedIDs: batch.map(\.id), connections: connections, positions: positions))
             }
             save(vectors, name: "vectors.plist")
         }
