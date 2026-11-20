@@ -168,3 +168,20 @@ and verified the drag interaction, initial whole-map framing, 2D/3D switching,
 search result selection using Down/Return, opening the selected article, and
 returning from the reader to an interactive map. The optimized isolated preview
 was left running; the installed app and user's library were not replaced.
+
+### Depth and spherical markers
+
+The 3D canvas uses camera-relative depth for marker size, opacity and Gaussian
+defocus. Markers have diffuse shading, a specular highlight and a dark curved rim.
+The five topic colors share twelve baked focus levels per color; rotation only
+draws cached images, far to near. Selection rings and labels remain readable,
+and hit testing picks the visible front sphere at overlaps. The 2D renderer is
+unchanged. No per-story filters, shadows or retained layers are created.
+
+With the same 20k native-window benchmark, the flat markers took **6.87 ms median /
+7.48 ms p95**, and the final spherical markers took **7.14 ms / 7.72 ms** per draw.
+Both runs had 240 measured display callbacks at **16.67 ms p99**, with none over
+25 ms. The final initial draw was **14.98 ms** (reported separately from warm
+camera motion). These are local native drawing/callback measurements, not GPU
+presentation timestamps. Actual-app visual checks used the same 165-story RSS
+snapshot and verified near/far focus, lighting, rotation and article selection.

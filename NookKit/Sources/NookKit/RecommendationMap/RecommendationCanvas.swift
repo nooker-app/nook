@@ -140,10 +140,12 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     private var formationCameraAdjusted = false
     private var colorGroups: [Int] = []
     private var groupColors: [NSColor] = []
+    private let sphereAtlas = RecommendationSphereAtlas()
+    private var sphereSprites: [[CGImage]] = []
     override init(frame:NSRect){super.init(frame:frame);wantsLayer=true;layer?.masksToBounds=true;setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel(String(localized: "Recommendation map. Scroll to pan, pinch to zoom, and select a story to preview it.", bundle: .module))}
     required init?(coder:NSCoder){fatalError()}
     override func updateTrackingAreas(){super.updateTrackingAreas();if let tracking {removeTrackingArea(tracking)};let area=NSTrackingArea(rect:bounds,options:[.mouseMoved,.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self);addTrackingArea(area);tracking=area}
-    override func viewDidChangeEffectiveAppearance(){super.viewDidChangeEffectiveAppearance();labelImages.removeAll();pendingLabels.removeAll();needsDisplay=true}
+    override func viewDidChangeEffectiveAppearance(){super.viewDidChangeEffectiveAppearance();labelImages.removeAll();pendingLabels.removeAll();sphereSprites.removeAll();needsDisplay=true}
     override func viewWillMove(toWindow newWindow:NSWindow?){if newWindow == nil {timer?.invalidate();timer=nil;cameraAnimation=nil;momentum = .zero;activePhysics.removeAll()};super.viewWillMove(toWindow:newWindow)}
     override func resetCursorRects(){addCursorRect(bounds,cursor:.openHand)}
     override func layout(){super.layout();if !firstFit && !nodes.isEmpty && bounds.width>10 {firstFit=true;fit(animated:false)}}
@@ -164,7 +166,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         restingEdges = graph.edges
         positions=nodes.map {old[$0.id] ?? $0.position};colors=nodes.map {NSColor(recommendationTopicColor($0.topic))}
         var topicGroups: [String: Int] = [:]
-        groupColors.removeAll();colorGroups.removeAll()
+        groupColors.removeAll();colorGroups.removeAll();sphereSprites.removeAll()
         for i in nodes.indices {
             if topicGroups[nodes[i].topic] == nil { topicGroups[nodes[i].topic] = groupColors.count;groupColors.append(colors[i]) }
             colorGroups.append(topicGroups[nodes[i].topic]!)
@@ -441,15 +443,19 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     private func drawNode(_ i:Int,context:CGContext,force:Bool=false){
         let p=screenPosition(i);guard bounds.insetBy(dx:-100,dy:-100).contains(p) else{return}
         let active=i==selected,over=i==hovered
-        let depthScale = spatial ? projected[i].scale : 1
-        let r=(force ? 8:max(4,min(24,(16+Double(max(0,24-nodes[i].rank))*0.3)*sqrt(zoom)))) * min(1.5, max(0.6, depthScale))
-        let opacity=alpha(i);context.setFillColor(colors[i].withAlphaComponent((active ? 0.30:0.15)*opacity).cgColor);context.fillEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
-        context.setStrokeColor(colors[i].withAlphaComponent((active || over ? 0.95:0.65)*opacity).cgColor);context.setLineWidth(active ? 1.7:0.9);context.strokeEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
+        let r = spatial ? sphereStyle(i).radius : (force ? 8:max(4,min(24,(16+Double(max(0,24-nodes[i].rank))*0.3)*sqrt(zoom))))
+        let opacity = alpha(i) * (spatial && !active && !over ? sphereStyle(i).opacity : 1)
+        if !spatial {
+            context.setFillColor(colors[i].withAlphaComponent((active ? 0.30:0.15)*opacity).cgColor);context.fillEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
+        }
+        if !spatial || active || over {
+            context.setStrokeColor(colors[i].withAlphaComponent((active || over ? 0.95:0.65)*opacity).cgColor);context.setLineWidth(active ? 1.7:0.9);context.strokeEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
+        }
         if active {context.setStrokeColor(NSColor(NookTheme.accent).withAlphaComponent(0.25).cgColor);context.strokeEllipse(in:CGRect(x:p.x-r-5,y:p.y-r-5,width:2*r+10,height:2*r+10))}
         if zoom>=0.55 || over || active && !force {
             context.saveGState();context.setAlpha(opacity)
             let number=(nodes[i].article.isRead ? "✓" : "\(nodes[i].rank)") as NSString
-            let attrs:[NSAttributedString.Key:Any]=[.font:NSFont.monospacedDigitSystemFont(ofSize:9,weight:active ? .semibold:.regular),.foregroundColor:colors[i]]
+            let attrs:[NSAttributedString.Key:Any]=[.font:NSFont.monospacedDigitSystemFont(ofSize:9,weight:active ? .semibold:.regular),.foregroundColor:spatial ? NSColor.white.withAlphaComponent(0.9):colors[i]]
             let size=number.size(withAttributes:attrs);number.draw(at:CGPoint(x:p.x-size.width/2,y:p.y-size.height/2),withAttributes:attrs)
             let width=165.0
             let candidates=[CGRect(x:p.x-width/2,y:p.y+r+8,width:width,height:36),CGRect(x:p.x-width/2,y:p.y-r-44,width:width,height:36),CGRect(x:p.x+r+10,y:p.y-18,width:width,height:36),CGRect(x:p.x-r-width-10,y:p.y-18,width:width,height:36)]
@@ -518,8 +524,12 @@ struct RecommendationCanvasHost:NSViewRepresentable {
             updateProjection()
             let w = world(p), radius = 26 / zoom
             let candidates = projectedIndex.query(CGRect(x: w.x-radius, y: w.y-radius, width: radius*2, height: radius*2))
-                .filter { alpha($0) > 0.2 && hypot(screenPosition($0).x-p.x, screenPosition($0).y-p.y) < max(10, 24*sqrt(zoom)*projected[$0].scale) }
+                .filter { alpha($0) > 0.2 && hypot(screenPosition($0).x-p.x, screenPosition($0).y-p.y) < max(9, sphereStyle($0).radius + 4) }
                 .map { i in (index: i, distance: hypot(screenPosition(i).x-p.x, screenPosition(i).y-p.y)) }
+            // A nearby sphere can cover the center of a distant one. Match the
+            // painter's depth order before considering the larger click target.
+            if let front = candidates.filter({ $0.distance <= sphereStyle($0.index).radius })
+                .max(by: { projected[$0.index].depth < projected[$1.index].depth }) { return front.index }
             guard let nearest = candidates.map(\.distance).min() else { return nil }
             return candidates.filter { $0.distance < nearest + 3 }
                 .max { a, b in projected[a.index].depth < projected[b.index].depth }?.index
@@ -684,8 +694,13 @@ extension RecommendationCanvasView {
         screen(spatial && projected.indices.contains(i) ? projected[i].point : displayPosition(i))
     }
 
+    private func sphereStyle(_ i: Int) -> RecommendationSphereStyle {
+        RecommendationSphereStyle(projection: projected[i], sceneRadius: projectionRadius, zoom: zoom)
+    }
+
     private func drawSpatialMap(_ context: CGContext) {
         updateProjection()
+        if sphereSprites.isEmpty { sphereSprites = sphereAtlas.palette(groupColors) }
         if let morph, !dissolvingEdges.isEmpty {
             context.saveGState()
             context.setAlpha(max(0,1-(CACurrentMediaTime()-morph.start)/0.65))
@@ -727,34 +742,40 @@ extension RecommendationCanvasView {
             let p=screenPosition(a), q=screenPosition(b)
             let box=CGRect(x:min(p.x,q.x)-1,y:min(p.y,q.y)-1,width:abs(p.x-q.x)+2,height:abs(p.y-q.y)+2)
             guard box.intersects(bounds) else { continue }
-            let key = highlighted ? 100 : Int(min(alpha(a),alpha(b))*8)
+            let fog = min(sphereStyle(a).opacity, sphereStyle(b).opacity)
+            let key = (highlighted ? 64 : 0) + Int(min(alpha(a),alpha(b)) * fog * 32)
             let path=paths[key] ?? CGMutablePath();path.move(to:p);path.addLine(to:q);paths[key]=path
             drawnEdges += 1
         }
         for (key,path) in paths {
-            context.setStrokeColor((key == 100 ? NSColor(NookTheme.accent).withAlphaComponent(0.65)
-                : NSColor.labelColor.withAlphaComponent(Double(key)/8*0.12)).cgColor)
-            context.setLineWidth(key == 100 ? 1.1 : 0.65);context.addPath(path);context.strokePath()
+            let highlighted = key >= 64, depth = Double(key % 64) / 32
+            context.setStrokeColor((highlighted ? NSColor(NookTheme.accent).withAlphaComponent(0.25 + depth * 0.4)
+                : NSColor.labelColor.withAlphaComponent(depth * 0.18)).cgColor)
+            context.setLineWidth(highlighted ? 1.1 : 0.45 + depth * 0.4);context.addPath(path);context.strokePath()
         }
-        var dots: [Int: CGMutablePath] = [:]
         let sorted = drawn.sorted { projected[$0].depth < projected[$1].depth }
+        context.saveGState()
+        context.interpolationQuality = .medium
+        // AppKit's canvas is flipped. Flip this entire image pass once so the
+        // baked light stays at the upper left instead of lighting from below.
+        context.translateBy(x: 0, y: bounds.height)
+        context.scaleBy(x: 1, y: -1)
         for i in sorted {
-            let p=screenPosition(i), scale=projected[i].scale
-            guard bounds.insetBy(dx:-25,dy:-25).contains(p) else { continue }
-            let radius=max(1.8,min(9,(4+sqrt(zoom)*5)*scale))
+            let p = screenPosition(i), style = sphereStyle(i)
+            guard bounds.insetBy(dx:-40,dy:-40).contains(p) else { continue }
             let ready = !formationActive || analyzed.contains(i)
-            let opacity = alpha(i) * (ready ? min(0.95,max(0.3,scale*0.7)) : 0.18)
-            let key = colorGroups[i]*32+Int(opacity*20)
-            let path=dots[key] ?? CGMutablePath()
-            path.addEllipse(in:CGRect(x:p.x-radius,y:p.y-radius,width:radius*2,height:radius*2));dots[key]=path
+            let images = sphereSprites[colorGroups[i]]
+            guard images.indices.contains(style.blurLevel) else { continue }
+            // Sprite padding includes the complete Gaussian halo. Draw far to
+            // near so close spheres naturally cover distant ones at crossings.
+            let half = style.radius * Double(RecommendationSphereAtlas.side) / (2 * RecommendationSphereAtlas.sphereRadius)
+            context.setAlpha(alpha(i) * style.opacity * (ready ? 1 : 0.18))
+            context.draw(images[style.blurLevel], in: CGRect(x:p.x-half,y:bounds.height-p.y-half,width:half*2,height:half*2))
         }
-        for (key,path) in dots {
-            context.setFillColor(groupColors[key/32].withAlphaComponent(Double(key%32)/20).cgColor)
-            context.addPath(path);context.fillPath()
-        }
+        context.restoreGState()
         // Text work is bounded separately from geometry. Rasterized labels are
         // reused as the camera moves, and only the selected neighborhood is named.
-        var labels = zoom >= 0.45 ? Array(sorted.reversed().prefix(36)) : []
+        var labels = zoom >= 0.45 ? Array(sorted.reversed().filter { sphereStyle($0).proximity > 0.5 }.prefix(36)) : []
         if let selected { labels.removeAll { $0 == selected };labels.insert(selected,at:0) }
         if let hovered, hovered != selected { labels.removeAll { $0 == hovered };labels.insert(hovered,at:0) }
         requestLabels(labels)

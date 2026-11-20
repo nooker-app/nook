@@ -31,6 +31,7 @@ import QuartzCore
         if tick==260 {
             link.invalidate()
             let frames=intervals.sorted(), draws=Array(view.renderTimes.suffix(240)).sorted()
+            print("startupDraw=\(view.renderTimes.first ?? 0)ms")
             print("frames=\(frames.count) p99=\(frames[Int(Double(frames.count)*0.99)])ms worst=\(frames.last!)ms over25ms=\(frames.filter{$0>25}.count)")
             print("draws=\(draws.count) median=\(draws[draws.count/2])ms p95=\(draws[Int(Double(draws.count)*0.95)])ms \(view.spatialDrawInspection)")
             NSApp.terminate(nil)
