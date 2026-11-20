@@ -3,7 +3,7 @@
   Nook
 </h1>
 
-<p align="center">A small, native RSS reader for macOS and iOS — offline-first, free, and stored in a plain folder on whatever cloud you already use.</p>
+<p align="center">A native RSS reader for Mac, iPhone, and iPad. Follow your feeds, explore related ideas, and keep your library in a folder you control.</p>
 
 <p align="center">
   <a href="https://github.com/nooker-app/nook/releases/latest">
@@ -20,22 +20,86 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4c71f2" alt="MIT License" /></a>
 </p>
 
-<div align="center">
-  <table>
-    <tr>
-      <td valign="middle"><img src="docs/screenshots/main.png" width="660" alt="Nook on macOS — sidebar, article list, and reader"></td>
-      <td valign="middle"><img src="docs/screenshots/ios-splash.png" width="180" alt="Nook launch screen on iPhone"></td>
-    </tr>
-  </table>
-</div>
+<p align="center">
+  <a href="docs/screenshots/main.png"><img src="docs/screenshots/main.png" width="900" alt="Nook's Beta Magazine showing unread recommendations from real English-language feeds"></a>
+</p>
 
-> **New to RSS?** RSS lets you follow sites, blogs, and newsletters in one place — no algorithm, no ads, and nothing deciding what you should read. [Why use RSS feeds →](https://openrss.org/guides/what-are-rss-feeds#why-use-rss-feeds)
+**Your feeds, with room to read.** Browse articles as a magazine, follow connections on a map, or use a traditional inbox. Reading is free and needs no Nook account.
 
-## Why Nook
+> **New to RSS?** Follow sites, blogs, and newsletters in one place, with new posts delivered directly from the sources you choose. [Why use RSS feeds →](https://openrss.org/guides/what-are-rss-feeds#why-use-rss-feeds)
+
+## Take a quick look
+
+**Start in Magazine.** Move between Unread, Today, Starred, Recently Read, and All Articles. Open a card to read it; return to the collection when you are done. Unread can also show recommendations based on your reading interests.
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/map.png"><img src="docs/screenshots/map.png" width="440" alt="Nook's Map connecting related English-language articles, with a selected story and its connections"></a></td>
+    <td width="50%"><a href="docs/screenshots/reader.png"><img src="docs/screenshots/reader.png" width="440" alt="A real English-language article in Nook's native reader, with reading controls kept around the content"></a></td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Follow an idea.</strong> Pan and zoom the Map, select a story, and explore related writing across your feeds. Search by keyword, or use natural language with the optional local models.</td>
+    <td valign="top"><strong>Settle in and read.</strong> Read articles, formatted code, and links in a native surface. Star, share, translate, or open the source without losing your place in the collection.</td>
+  </tr>
+</table>
+
+The main Mac screenshots show the **Beta** layout with real English-language feeds. Click a screenshot to inspect it at full size. Switch between Beta and Classic in Settings.
+
+<details>
+<summary>Watch a short walkthrough: open a story and return to Magazine</summary>
+
+<p align="center"><img src="docs/screenshots/reading-flow.gif" width="900" alt="A recording of opening an article from Magazine, reading it, and returning to the collection"></p>
+
+Recorded in the actual macOS app. The images and article text come from the selected feed.
+
+</details>
+
+<details>
+<summary>Prefer an inbox? See the Classic layout</summary>
+
+<p align="center"><a href="docs/screenshots/classic.png"><img src="docs/screenshots/classic.png" width="900" alt="Nook's Classic layout with feed folders, an article list, and the native reader side by side"></a></p>
+
+Classic keeps folders, the article list, and the reader together. Both layouts use the same library, read state, and stars.
+
+</details>
+
+## Make it your reading space
+
+1. **Choose a folder.** Keep the library locally, or choose a folder in iCloud Drive, Dropbox, Syncthing, or another sync service you already use.
+2. **Add your sources.** Paste a website or RSS URL, or import an OPML file from another reader. Organize feeds into folders when useful.
+3. **Read your way.** Catch up, star something for later, search for a half-remembered article, or explore its connections on the Map.
+
+Want to try the sources in these screenshots? [Import this small English feed collection](docs/screenshots/feeds.opml), or [see the source list](docs/screenshots/README.md).
+
+<details>
+<summary>See feeds and folders in the Library</summary>
+
+<p align="center"><a href="docs/screenshots/library.png"><img src="docs/screenshots/library.png" width="900" alt="Nook's Library with real English feeds organized into Design, Science, and Technology folders"></a></p>
+
+</details>
+
+- **Native reading tools.** Images, code, tables, quotes, comments, and links render in the native reader. Choose typography, export Markdown, and switch between [legibility](https://github.com/nooker-app/legibility) and Readability when a page needs a different parser.
+- **Find things again.** Recently Read records articles you actually opened. Search and the Map connect writing across feeds; recommendations can learn from deliberate reading choices and “Not my taste” feedback.
+- **Optional translation and summaries.** Translate titles, previews, and articles, or ask for a summary. Streaming translation preserves the structure of the writing.
+- **Your own organization.** Use stars, folders, manual categories, keyword rules, filters, and optional AI classification.
+- **Reading widgets on Mac.** See latest, recommended, or recently read stories in small, medium, and large widgets. Select a story to open its reader directly.
+- **A writing space, too.** With a Nook+ account, Studio keeps your drafts and published posts together and lets you write and publish through ATProto. RSS reading remains independent of Nook+.
+- **A library you own.** Feed content stays available offline. Download full articles when needed, import or export subscriptions with OPML, and sync through your chosen folder service.
+
+See [all features and their defaults](docs/features.md) for platform differences and individual controls.
+
+## Local by default, AI when useful
+
+RSS reading, keyword search, folders, and rules work without an AI provider. Translation, summaries, and AI categorization are optional. Apple Intelligence runs on supported devices; Gemini is an opt-in alternative using your own API key, with requested content sent to Google.
+
+On Apple silicon Macs, optional models add meaning-based connections and natural-language search. They download separately and analyze articles on your Mac. Models are not bundled into the app, and Nook does not send your library to a recommendation server.
+
+Your folder-sync service carries the library between devices. Nook merges each device's changes so reading and starring on two devices do not overwrite one another. [How storage and sync work →](docs/data-and-sync.md)
+
+<details>
+<summary>Why I built Nook</summary>
 
 I have read RSS every day for more than ten years. In that time I paid for readers, tried most of the free ones, and kept meeting the same small frictions. The feature I wanted was behind a subscription. The app that had it was missing something else. There were bugs. Sometimes there were ads, in an app I had opened specifically to get away from ads.
-
-None of that is a catastrophe. They are papercuts. But you feel papercuts every day for ten years, and eventually you want to fix them yourself.
 
 What I wanted was for reading to be more than reading. I wanted to find the piece I half-remembered without going hunting for it. I wanted a foreign-language post to be legible without leaving the app. And I wanted the collection to be mine — a place I built, not a feed handed to me.
 
@@ -43,56 +107,9 @@ A bird builds its nest one twig at a time, and the result is entirely its own. T
 
 So Nook tries to do three things. Make good writing easy to read. Make it easy to find again later, without having to be organized about it up front. And leave every piece of it under your control.
 
-There is no Nook account and no Nook sync server. Pick a folder in iCloud Drive, Dropbox, Google Drive, OneDrive, Syncthing, or any other folder-sync service. That service carries Nook's files between devices; Nook then merges the per-device files with CRDTs so concurrent reads, stars, categories, and feed changes do not overwrite each other.
+</details>
 
-## What AI is for here
-
-I did not add AI to Nook to borrow someone else's moment. It earns its place or it does not ship.
-
-In practice that is four things: translating an article without wrecking the shape of the original, summarizing one when you only need the gist, sorting what arrives into your own categories, and condensing a batch of new items into one notification instead of a wall of them. Small jobs that save you effort. It does not write for you, rank your reading, or decide what deserves your attention.
-
-If you want none of it, you can have none of it. Full-article translation runs only when you press Translate. Summaries, automatic list-title translation, and AI categorization are each off until you turn them on — and summaries stay manual after that unless you also ask for them automatically. Keyword rules, manual categories, and search all work with every AI feature disabled.
-
-A few things run without a switch of their own — the new-article notification digest, for one — and only where I judged the behavior to disappear into ordinary use. Those always use Apple Intelligence on-device, and they degrade quietly instead of failing: if the model is unavailable or slow, you get a plain list of titles.
-
-Keeping this on your device instead of on my server is a tradeoff, and it is worth stating plainly rather than hiding it. On-device models are smaller than hosted ones, so some results are weaker. A long translation is real work, and your machine can get warm doing it. Apple Intelligence needs recent hardware to run at all. I took that deal anyway, because privacy and data ownership matter more to me here than the last increment of quality. Gemini is the escape hatch if you would rather use a hosted model: you select it yourself and supply your own API key, and only then does article text leave for Google. Someday there may be a Nook server to hand this work off to. There is none today, and none is required.
-
-## What's here today
-
-- **Native Mac, iPhone, and iPad apps.** SwiftUI and AppKit surfaces, native navigation, menus, gestures, widgets, sharing, and accessibility.
-- **A folder is the sync service.** Your library remains portable, inspectable JSON in storage you choose, with OPML import and export for subscriptions.
-- **A real native reader.** Images, links, code, quotes, nested lists, and tables render without making the default reader a web view. Full-page and original-site modes remain available.
-- **Two article parsers, switchable mid-article.** [legibility](https://github.com/nooker-app/legibility) is the default: it reads short posts and link posts that Readability rejects, and never invents a title or a date. Mozilla's Readability is one tap away for the pages it reads better — the ones with a video in them — and the reader tells you when an embed was left out rather than showing you a blank space.
-- **The conversation, not just the article.** When a page has a comment thread, the reader draws it underneath — authors, times, replies indented — out of the same page it already fetched. No comment service, no account, and it stays out of your exports and summaries.
-- **Typography you can set, or measure.** Choose font, size, line height, and letter spacing, with a live specimen so you can see the change before you commit to it. On iOS, Reading Fit times how fast you actually read short standardized passages and recommends a size and spacing from that, rather than asking you to guess.
-- **Translation that keeps its shape.** Use Apple Intelligence on-device or opt into Gemini. Gemini translates the native reader as coherent Markdown, preserving the context of headings, lists, tables, links, and code while it streams.
-- **Summaries when you want the gist.** Opt in, then summarize an article on demand in the native reader — concise, detailed, or expert — with Apple Intelligence on-device by default. Automatic summarizing is a second, separate switch.
-- **Markdown in and out.** Copy the article body as Markdown or save it as a `.md` file. When a Gemini-translated Markdown article is visible, that translated version is exported.
-- **Rules you control.** Create categories, keyword filters, hidden sources, and optional AI classification. Automatic list-title translation and new-article notifications are opt-in.
-- **Offline-first reading.** Feed content is local, selected full articles can be downloaded, and automatic expiry is configurable.
-- **Quiet cross-device alerts.** Seen state suppresses duplicate alerts. A Mac left open but hidden, minimized, locked, asleep, or idle yields notification ownership to iOS.
-
-See [all features and their defaults](docs/features.md), including which options are opt-in, opt-out, device-local, or network-backed.
-
-## Where this is going
-
-**None of this is implemented yet.** It is the direction, not a feature list — if you are deciding whether to install Nook today, decide on the section above.
-
-Reading and writing are the same habit split across too many apps. You read something, the thought it gave you goes into a notes app, and the post it turns into goes somewhere else again. I want reading, marking up, keeping a note, finding it later, and publishing to be one continuous motion in one app.
-
-The part I want most: writing that starts on your own disk. No deciding where to publish before you have written anything. Write the file, and if you decide it should be public, Nook publishes it. If you change your mind, you unpublish it. The file was always yours and stays yours either way.
-
-I plan to build this on [ATProto](https://atproto.com), so what you publish lives in a protocol anyone can read and move rather than in my database. Its spec does require an account for publishing — so publishing will be opt-in, and reading Nook will never require signing in to anything.
-
-Concretely: highlights, notes, and publishing do not exist yet. Subscribing, the native reader, and article search work today.
-
-## Is Nook the right reader for you?
-
-Nook is strongest when you want a native Apple-platform reader, no service account, control of the sync folder, and optional translation without making AI mandatory. A hosted reader may fit better if you need a web or Android client, server-side feed collection while all your devices are offline, team features, or a large annotation and knowledge-management system.
-
-See the neutral [RSS reader comparison](docs/reader-comparison.md) for Nook, NetNewsWire, Reeder, Feedly, and Readwise Reader, with official sources and tradeoffs rather than a checklist score.
-
-Whether to use a server, who owns what you write, whether AI is involved at all — those are your calls, not mine. Nook's job is to keep them yours.
+Nook is for people who want a native Apple-platform reader and control of their library. If you need a web or Android client, server-side collection while all your devices are offline, or extensive annotation tools, see the [RSS reader comparison](docs/reader-comparison.md).
 
 ## Install
 
@@ -115,6 +132,13 @@ Requires **macOS 26 (Tahoe)** or later. The universal build supports Apple Silic
 ### iOS / iPadOS
 
 [Nook on the App Store](https://apps.apple.com/us/app/nook-read-write-own/id6797773158). On first launch, pick the same synced folder your Mac uses through the Files picker.
+
+<details>
+<summary>See Nook on iPhone</summary>
+
+<p align="center"><img src="docs/screenshots/ios-splash.png" width="180" alt="Nook launch screen on iPhone"></p>
+
+</details>
 
 To run your own build on a device instead:
 
