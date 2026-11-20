@@ -7,6 +7,7 @@ These instructions apply to the entire repository.
 ## User And Workflow
 
 - The user prefers Korean communication. Reply in Korean unless the user explicitly asks for another language.
+- Always write release notes in English.
 - The user is a web developer with little macOS native app background. When explaining native concepts, map them briefly to familiar web concepts when useful.
 - Unless the user says otherwise, work directly on `main`, commit completed work, and push to `origin/main`.
 - Do not create feature branches, pull requests, or extra release flows by default.
