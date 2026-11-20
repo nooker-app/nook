@@ -11,7 +11,6 @@ struct MagazineView: View {
     @State private var frozenRows: [ArticleRowModel]?
     @State private var recommendations = MagazineRecommendationController()
     @State private var recommendationMap = RecommendationMapController()
-    @AppStorage("magazineRecommendationMap") private var prefersRecommendationMap = false
     @State private var recommendation: MagazineRecommendation?
     @State private var recommendationLoaded = false
     @State private var rankedRecommendations: [MagazineRecommendation] = []
@@ -49,12 +48,14 @@ struct MagazineView: View {
     @Namespace private var hero
     @FocusState private var focusedArticle: String?
     @FocusState private var searchFocused: Bool
+    @State private var searchSetup = false
 
     enum MagazineTab: String, CaseIterable {
-        case magazine = "Magazine", library = "Library", studio = "Studio"
+        case magazine = "Magazine", map = "Map", library = "Library", studio = "Studio"
         var icon: String {
             switch self {
             case .magazine: "newspaper"
+            case .map: "point.3.connected.trianglepath.dotted"
             case .library: "books.vertical"
             case .studio: "square.and.pencil"
             }
@@ -116,11 +117,12 @@ struct MagazineView: View {
                             if opened != nil { closeArticle() }
                             pendingRecommendation = nil
                             if item == .library { libraryScope = nil }
-                            if item == .magazine && (tab == .library || libraryScope != nil) {
+                            if (item == .magazine || item == .map) && (tab == .library || libraryScope != nil) {
                                 libraryScope = nil
                                 store.selectSmartSource(.all)
                                 store.searchText = ""
                             }
+                            if item == .map { store.searchText = "" }
                             tab = item
                         } label: {
                             Label(LocalizedStringKey(item.rawValue), systemImage: item.icon)
@@ -236,7 +238,7 @@ struct MagazineView: View {
             self.dismissedArticle = nil
         }
         .task(id: recommendationTaskID) {
-            guard opened == nil, initialLoadFinished, isBrowsingMagazine, !libraryFolderIsEmpty, !isRecommendationMap else { return }
+            guard opened == nil, initialLoadFinished, isBrowsingMagazine, !libraryFolderIsEmpty, !isRecommendationMap, store.activeSearchQuery.isEmpty else { return }
             recommendations.selectLibrary(store.syncFolderURL?.standardizedFileURL.path ?? "local")
             let pending = pendingRecommendation
             let scope = recommendationScope
@@ -298,7 +300,7 @@ struct MagazineView: View {
     }
 
     private var recommendationTaskID: String {
-        "\(recommendationScope)|\(prefersRecommendationOrder)|\(prefersRecommendationMap)|\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
+        "\(recommendationScope)|\(prefersRecommendationOrder)|\(isRecommendationMap)|\(store.magazineContentRevision)|\(initialLoadFinished)|\(isBrowsingMagazine)|\(libraryScope ?? "")|\(opened == nil)|\(recommendationsEnabled)|\(recommendationReset)|\(recommendations.revision)|\(store.syncFolderURL?.path ?? "local")"
     }
 
     private var recommendationScope: String {
@@ -309,8 +311,8 @@ struct MagazineView: View {
         store.smartSelection == .unread && store.feedSelection.isEmpty && store.categorySelection == nil
     }
 
-    private var isRecommendationList: Bool { isUnreadCollection && prefersRecommendationOrder }
-    private var isRecommendationMap: Bool { isUnreadCollection && prefersRecommendationMap && libraryScope == nil }
+    private var isRecommendationList: Bool { isUnreadCollection && prefersRecommendationOrder && store.activeSearchQuery.isEmpty }
+    private var isRecommendationMap: Bool { tab == .map }
     private var showsFeaturedStory: Bool { !isUnreadCollection && store.smartSelection != .recent }
     private var collectionIsEmpty: Bool {
         if libraryFolderIsEmpty { return true }
@@ -346,7 +348,7 @@ struct MagazineView: View {
 
     @ViewBuilder private var workspace: some View {
         switch tab {
-        case .magazine: magazine
+        case .magazine, .map: magazine
         case .library:
             if libraryScope != nil {
                 magazine.safeAreaInset(edge: .top, spacing: 0) { libraryBreadcrumb }
@@ -362,7 +364,6 @@ struct MagazineView: View {
                 HStack {
                     collectionTabs
                     Spacer(minLength: 12)
-                    readingOrderPicker
                 }.padding(.horizontal, 30).padding(.top, 18)
                 RecommendationMapView(model: recommendationMap, store: store, feedback: recommendations,
                     personalized: recommendationsEnabled, active: opened == nil && !store.isBrowserPresented,
@@ -396,7 +397,8 @@ struct MagazineView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 320)
                     } else if collectionIsEmpty {
-                        emptyCollection
+                        if store.isSearching { magazineLoading }
+                        else { emptyCollection }
                     } else {
                         if isRecommendationList && rankedScope != recommendationScope {
                             magazineLoading
@@ -418,7 +420,15 @@ struct MagazineView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(.secondary)
                             Rectangle().fill(.primary.opacity(0.09)).frame(height: 1)
-                            if isUnreadCollection { readingOrderPicker }
+                            if store.activeSearchQuery.isEmpty {
+                                if isUnreadCollection { readingOrderPicker }
+                            } else if !store.isSearching && !store.searchUsesMeaning {
+                                Button("Enable natural-language search") { searchSetup = true }
+                                    .buttonStyle(MagazinePlainButtonStyle())
+                                    .popover(isPresented: $searchSetup) { RecommendationModelSettings(onReady: store.refreshArticleSearch).padding(24).frame(width: 390) }
+                            } else {
+                                Text("Results by relevance").font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                         if isRecommendationList {
                             Text(recommendationsEnabled
@@ -473,6 +483,12 @@ struct MagazineView: View {
         } actions: {
             switch state {
             case .search:
+                if !store.searchUsesMeaning {
+                    Button("Enable natural-language search") { searchSetup = true }
+                        .popover(isPresented: $searchSetup) {
+                            RecommendationModelSettings(onReady: store.refreshArticleSearch).padding(24).frame(width: 390)
+                        }
+                }
                 Button("Clear Search") { store.searchText = ""; searchFocused = true }
             case .subscriptions:
                 Button("Add Feed") { addingFeed = true }
@@ -571,8 +587,9 @@ struct MagazineView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(searchFocused ? NookTheme.accent : .secondary)
-            TextField("Search Articles", text: $store.searchText).textFieldStyle(.plain)
+            TextField("Search by keyword or meaning", text: $store.searchText).textFieldStyle(.plain)
                 .focused($searchFocused)
+            if store.isSearching { ProgressView().controlSize(.mini) }
             if !store.searchText.isEmpty {
                 Button {
                     store.searchText = ""
@@ -602,20 +619,7 @@ struct MagazineView: View {
         HStack(spacing: 2) {
             readingOrderButton("Recommended", recommended: true)
             readingOrderButton("Newest", recommended: false)
-            if libraryScope == nil {
-                Button {
-                    prefersRecommendationMap = true
-                    store.searchText = ""
-                } label: {
-                    Label("Map", systemImage: "point.3.connected.trianglepath.dotted")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(prefersRecommendationMap ? NookTheme.accent : .secondary)
-                        .padding(.horizontal, 12).frame(height: 28)
-                        .background(prefersRecommendationMap ? NookTheme.accent.opacity(0.14) : .clear, in: Capsule())
-                }
-                .buttonStyle(MagazinePlainButtonStyle(capsule: true))
-                .accessibilityAddTraits(prefersRecommendationMap ? .isSelected : [])
-            }
+
         }
         .padding(3)
         .glassEffect(.regular.tint(NookTheme.accent.opacity(0.07)), in: Capsule())
@@ -623,17 +627,16 @@ struct MagazineView: View {
 
     private func readingOrderButton(_ title: LocalizedStringKey, recommended: Bool) -> some View {
         Button {
-            prefersRecommendationMap = false
             prefersRecommendationOrder = recommended
             if !recommended && store.sortOrder(for: .unread) != .newest { store.toggleSortOrder(for: .unread) }
         } label: {
             Text(title).font(.system(size: 11, weight: .medium))
-                .foregroundStyle(!prefersRecommendationMap && prefersRecommendationOrder == recommended ? NookTheme.accent : .secondary)
+                .foregroundStyle(prefersRecommendationOrder == recommended ? NookTheme.accent : .secondary)
                 .padding(.horizontal, 12).frame(height: 28)
-                .background(!prefersRecommendationMap && prefersRecommendationOrder == recommended ? NookTheme.accent.opacity(0.14) : .clear, in: Capsule())
+                .background(prefersRecommendationOrder == recommended ? NookTheme.accent.opacity(0.14) : .clear, in: Capsule())
         }
         .buttonStyle(MagazinePlainButtonStyle(capsule: true))
-        .accessibilityAddTraits(!prefersRecommendationMap && prefersRecommendationOrder == recommended ? .isSelected : [])
+        .accessibilityAddTraits(prefersRecommendationOrder == recommended ? .isSelected : [])
     }
 
     private var collectionTabs: some View {

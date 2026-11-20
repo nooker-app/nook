@@ -5,6 +5,9 @@ import os
 
 @MainActor @Observable public final class RecommendationMapController {
     var graph = RecommendationGraph()
+    @ObservationIgnored private var libraryGraph = RecommendationGraph()
+    var collection: SmartSource = .all
+    @ObservationIgnored private var recentlyOpened: [String: Date] = [:]
     var graphRevision = 0
     var layoutRevision = 0
     var selectedID: String?
@@ -29,7 +32,26 @@ import os
     public init() {}
     var selected: RecommendationMapNode? { graph.nodes.first { $0.id == selectedID } }
     var related: [(RecommendationMapNode, RecommendationMapEdge)] { selectedID.map { graph.related(to: $0, limit: 3) } ?? [] }
-    public var readerArticleIDs: [String] { graph.nodes.filter { !$0.article.isRead }.map(\.id) }
+    public var readerArticleIDs: [String] { graph.nodes.map(\.id) }
+
+    func setCollection(_ source: SmartSource, recentlyOpened: [String: Date]) {
+        guard collection != source || self.recentlyOpened != recentlyOpened else { return }
+        collection = source
+        self.recentlyOpened = recentlyOpened
+        topic = nil
+        publishCollection()
+        refineSelection()
+    }
+
+    private func publishCollection() {
+        refinementTask?.cancel()
+        refinementGeneration &+= 1
+        refiningID = nil
+        graph = libraryGraph.collection(collection, recentlyOpened: recentlyOpened)
+        baseEdges = graph.edges
+        if !graph.nodes.contains(where: { $0.id == selectedID }) { selectedID = graph.nodes.first?.id }
+        graphRevision &+= 1
+    }
 
     func select(_ id: String) {
         guard graph.nodes.contains(where: { $0.id == id }) else { return }
@@ -44,6 +66,8 @@ import os
         refinementTask?.cancel()
         refinementGeneration &+= 1
         refiningID = nil
+        libraryGraph.nodes.removeAll { $0.id == id }
+        libraryGraph.edges.removeAll { $0.a == id || $0.b == id }
         graph.nodes.removeAll { $0.id == id }
         graph.edges.removeAll { $0.a == id || $0.b == id }
         graph.overrides.removeAll()
@@ -70,15 +94,16 @@ import os
         let nextScope = store.syncFolderURL?.standardizedFileURL.path ?? "local"
         if scope != nextScope {
             scope = nextScope
+            libraryGraph = RecommendationGraph()
             graph = RecommendationGraph()
             graphRevision &+= 1
             layoutRevision &+= 1
             canRefine = false
             selectedID = nil
             topic = nil
-            engine = RecommendationGraphEngine(scope: nextScope)
+            engine = RecommendationGraphEngine.shared(scope: nextScope)
         }
-        loading = graph.nodes.isEmpty
+        loading = libraryGraph.nodes.isEmpty
         let snapshot = await store.recommendationMapSnapshot()
         Self.log.debug("snapshot generation=\(expected) current=\(self.generation) cancelled=\(Task.isCancelled) matchingScope=\(snapshot.scope == self.scope) engine=\(self.engine != nil) articles=\(snapshot.library.articles.count)")
         guard !Task.isCancelled, generation == expected, snapshot.scope == scope, let engine else { return }
@@ -93,17 +118,14 @@ import os
             .sorted { $0.publishedAt == $1.publishedAt ? $0.id < $1.id : $0.publishedAt > $1.publishedAt }
         let articles = unread + read
         let ranks = Dictionary(uniqueKeysWithValues: ranked.enumerated().map { ($0.element.articleID, $0.offset + 1) })
-        if !graph.nodes.isEmpty {
+        if !libraryGraph.nodes.isEmpty {
             // Read flags and feedback must be visible on return even while
             // first-time semantic indexing is still running in the background.
-            graph = graph.refreshed(articles: articles, ranks: ranks, library: snapshot.library)
-            let ids = Set(graph.nodes.map(\.id))
-            baseEdges = baseEdges.filter { ids.contains($0.a) && ids.contains($0.b) }
-            if !ids.contains(selectedID ?? "") { selectedID = graph.nodes.first?.id }
-            graphRevision &+= 1
+            libraryGraph = libraryGraph.refreshed(articles: articles, ranks: ranks, library: snapshot.library)
+            publishCollection()
         }
         do {
-            if graph.nodes.isEmpty || !modelsReady {
+            if libraryGraph.nodes.isEmpty || !modelsReady {
                 let quick = try await engine.graph(articles: articles, ranks: ranks, snapshot: snapshot,
                     semantic: false, progress: { _, _ in })
                 Self.log.debug("graph generation=\(expected) current=\(self.generation) cancelled=\(Task.isCancelled) nodes=\(quick.nodes.count)")
@@ -136,7 +158,7 @@ import os
         // Later read/rank updates keep the user's exploration in place.
         let changesLayout = refined != canRefine
         if changesLayout { layoutRevision &+= 1 }
-        let previous = Dictionary(uniqueKeysWithValues: (changesLayout ? [] : graph.nodes).map { ($0.id, $0) })
+        let previous = Dictionary(uniqueKeysWithValues: (changesLayout ? [] : libraryGraph.nodes).map { ($0.id, $0) })
         for index in next.nodes.indices {
             if let old = previous[next.nodes[index].id] {
                 next.nodes[index].position = old.position
@@ -144,10 +166,8 @@ import os
                 next.nodes[index].clusterLabel = old.clusterLabel
             }
         }
-        if !next.nodes.contains(where: { $0.id == selectedID }) { selectedID = next.nodes.first?.id }
-        baseEdges = next.edges
-        graph = next
-        graphRevision &+= 1
+        libraryGraph = next
+        publishCollection()
         canRefine = refined
         loading = false
         refineSelection()

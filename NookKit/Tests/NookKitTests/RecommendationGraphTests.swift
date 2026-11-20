@@ -34,6 +34,29 @@ struct RecommendationGraphTests {
         #expect(graph.nodes.allSatisfy { $0.position.x.isFinite && $0.position.y.isFinite })
     }
 
+    @Test("Collections keep original positions and include only their stories and links")
+    func collectionProjection() {
+        var rows = stories
+        rows[0].isStarred = true
+        rows[0].publishedAt = .now
+        rows[1].publishedAt = .distantPast
+        rows[2].publishedAt = .distantPast
+        let library = Fixture.library(feeds: [Fixture.feed("feed")], articles: rows)
+        let graph = RecommendationGraphBuilder.build(articles: rows, ranks: ["one": 1, "three": 2], library: library)
+        let unread = graph.collection(.unread, recentlyOpened: [:])
+        #expect(Set(unread.nodes.map(\.id)) == ["one", "three"])
+        #expect(unread.edges.allSatisfy { $0.a != "two" && $0.b != "two" })
+        #expect(graph.collection(.today, recentlyOpened: [:]).nodes.map(\.id) == ["one"])
+        #expect(graph.collection(.starred, recentlyOpened: [:]).nodes.map(\.id) == ["one"])
+        let recent = graph.collection(.recent, recentlyOpened: ["one": Date(timeIntervalSince1970: 10), "two": Date(timeIntervalSince1970: 20)])
+        #expect(recent.nodes.map(\.id) == ["two", "one"])
+        #expect(graph.collection(.recent, recentlyOpened: [:]).nodes.isEmpty)
+        #expect(graph.collection(.all, recentlyOpened: [:]).nodes.count == 3)
+        for node in unread.nodes { #expect(node.position == graph.nodes.first { $0.id == node.id }?.position) }
+        // Filtering is a projection: read neighbors are still available on All.
+        #expect(graph.related(to: "one").contains { $0.0.id == "two" })
+    }
+
     @Test("Exact blocked cosine matches an exhaustive oracle without mixing models or invalid vectors")
     func exactNeighbors() {
         var vectors: [RecommendationVector?] = (0..<130).map { i in

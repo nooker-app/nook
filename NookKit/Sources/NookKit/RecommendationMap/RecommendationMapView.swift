@@ -22,8 +22,14 @@ public struct RecommendationMapView: View {
     @State private var setup = RecommendationModelSetup.shared
     @State private var search = ""
     @State private var showSearch = false
+    @State private var searchIDs: [String] = []
+    @State private var searchSelection = ArticleSearchSelection()
+    @State private var resultsQuery = ""
+    @State private var searching = false
+    @State private var searchUsesMeaning = false
     @State private var showSetup = false
     @State private var showInfo = false
+    @State private var showSearchSetup = false
 
     public init(model: RecommendationMapController, store: ReaderStore,
                 feedback: MagazineRecommendationController, personalized: Bool,
@@ -44,22 +50,10 @@ public struct RecommendationMapView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 7) {
-                    MagazineHeadline(String(localized: "Follow your curiosity.", bundle: .module), size: 29)
-                    Text("Start with a story. Discover the ideas around it.", bundle: .module)
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button { showInfo.toggle() } label: { Image(systemName: "info.circle") }
-                    .accessibilityLabel(Text("About the map", bundle: .module))
-                    .buttonStyle(MagazineGlassButtonStyle())
-                    .popover(isPresented: $showInfo) { mapInfo }
-            }.padding(.horizontal, 30).padding(.top, 22).padding(.bottom, 22)
             GeometryReader { geometry in
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
-                        filters
+                        filters.zIndex(1)
                         RecommendationMapCanvas(model: model)
                     }
                     Rectangle().fill(NookTheme.hairline).frame(width: 1)
@@ -70,6 +64,27 @@ public struct RecommendationMapView: View {
         }
         .background(NookTheme.canvas)
         .task { await setup.check() }
+        .onChange(of: store.smartSelection, initial: true) { _, source in
+            model.setCollection(source ?? .all, recentlyOpened: store.recentlyRead.opened)
+        }
+        .onChange(of: store.recentlyRead.opened) { _, opened in
+            model.setCollection(store.smartSelection ?? .all, recentlyOpened: opened)
+        }
+        .task(id: "\(search)|\(model.graphRevision)|\(setup.ready)|\(active)") {
+            let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard active, !query.isEmpty else { searching = false; searchIDs = []; return }
+            if resultsQuery != query { searchIDs = []; searchSelection.id = nil }
+            resultsQuery = query
+            searching = true
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            await store.searchArticles(query: query, candidates: model.graph.nodes.map(\.article)) { update in
+                guard !Task.isCancelled, search.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
+                searchIDs = Array(update.ids.prefix(20))
+                searchSelection.reconcile(searchIDs)
+                searching = update.isSearching
+                searchUsesMeaning = update.usesMeaning
+            }
+        }
         .task(id: refreshID) {
             model.isInteractive = active
             model.onOpen = onOpen
@@ -91,38 +106,97 @@ public struct RecommendationMapView: View {
             }.scrollIndicators(.never)
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField(String(localized: "Find a story", bundle: .module), text: $search)
-                    .textFieldStyle(.plain)
-                    .onChange(of: search) { _, value in showSearch = !value.trimmingCharacters(in: .whitespaces).isEmpty }
-            }
-            .font(.system(size: 11)).padding(.horizontal, 12).frame(width: 180, height: 32)
-            .glassEffect(.regular, in: .capsule)
-            .popover(isPresented: $showSearch, arrowEdge: .bottom) {
-                let matches = model.graph.nodes.filter { $0.article.title.localizedCaseInsensitiveContains(search) }.prefix(8)
-                VStack(alignment: .leading, spacing: 4) {
-                    if matches.isEmpty { Text("No matching stories", bundle: .module).padding(12).foregroundStyle(.secondary) }
-                    ForEach(Array(matches)) { node in
-                        Button {
-                            model.select(node.id)
-                            model.focusRequest += 1
-                            showSearch = false
-                            search = ""
-                        } label: {
-                            HStack(alignment: .top) {
-                                Image(systemName: node.article.isRead ? "checkmark.circle" : "circle.fill")
-                                    .foregroundStyle(recommendationTopicColor(node.topic)).font(.system(size: 10))
-                                Text(node.article.title).lineLimit(2).multilineTextAlignment(.leading)
-                                Spacer(minLength: 0)
-                            }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                        }.buttonStyle(MagazinePlainButtonStyle())
+                ArticleSearchField(text: $search, move: moveSearchSelection, submit: selectSearchResult, escape: dismissSearch)
+                    .frame(height: 20)
+                    .onChange(of: search) { _, value in
+                        showSearch = !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        if value.trimmingCharacters(in: .whitespacesAndNewlines) != resultsQuery {
+                            searchIDs = []; searchSelection.id = nil
+                        }
                     }
-                }.font(.system(size: 12)).padding(8).frame(width: 340)
+                if searching { ProgressView().controlSize(.mini) }
             }
-        }.padding(.horizontal, 24).padding(.bottom, 12)
+            .font(.system(size: 11)).padding(.horizontal, 12).frame(width: 230, height: 32)
+            .glassEffect(.regular, in: .capsule)
+            .overlay(alignment: .topTrailing) {
+                if showSearch {
+                    searchResults
+                        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+                        .shadow(color: .black.opacity(0.14), radius: 14, y: 5)
+                        .offset(y: 40)
+                }
+            }
+            Button { showInfo.toggle() } label: { Image(systemName: "info.circle") }
+                .accessibilityLabel(Text("About the map", bundle: .module))
+                .buttonStyle(MagazineGlassButtonStyle())
+                .popover(isPresented: $showInfo) { mapInfo }
+        }.padding(.horizontal, 24).padding(.top, 18).padding(.bottom, 12)
+    }
+
+    private var searchResults: some View {
+        let lookup = Dictionary(uniqueKeysWithValues: model.graph.nodes.map { ($0.id, $0) })
+        let matches = searchIDs.compactMap { lookup[$0] }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(searching ? "Searching your articles…" : searchUsesMeaning ? "Results by relevance" : "Keyword results", bundle: .module)
+                Spacer()
+                Text(verbatim: "↑ ↓  ·  ↩")
+            }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 10)
+            if matches.isEmpty && !searching { Text("No matching stories", bundle: .module).padding(12).foregroundStyle(.secondary) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(matches) { node in
+                            Button { searchSelection.id = node.id; _ = selectSearchResult() } label: {
+                                HStack(alignment: .top, spacing: 9) {
+                                    Image(systemName: node.article.isRead ? "checkmark.circle" : "circle.fill")
+                                        .foregroundStyle(recommendationTopicColor(node.topic)).font(.system(size: 10))
+                                    Text(node.article.title).lineLimit(2).multilineTextAlignment(.leading)
+                                    Spacer(minLength: 0)
+                                }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(searchSelection.id == node.id ? NookTheme.accent.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 9))
+                            }
+                            .buttonStyle(MagazinePlainButtonStyle()).id(node.id)
+                            .accessibilityAddTraits(searchSelection.id == node.id ? .isSelected : [])
+                        }
+                    }
+                }.frame(height: min(370, CGFloat(max(1, matches.count)) * 56))
+                    .onChange(of: searchSelection.id) { _, id in if let id { proxy.scrollTo(id) } }
+            }
+            if !searching && !searchUsesMeaning {
+                Button(String(localized: "Enable natural-language search", bundle: .module)) { showSearchSetup = true }
+                    .buttonStyle(MagazinePlainButtonStyle()).padding(.horizontal, 10)
+                    .popover(isPresented: $showSearchSetup) { RecommendationModelSettings().padding(24).frame(width: 390) }
+            }
+        }.font(.system(size: 12)).padding(10).frame(width: 380)
+    }
+
+    private func moveSearchSelection(_ delta: Int) -> Bool {
+        guard !search.isEmpty else { return false }
+        showSearch = true
+        searchSelection.move(delta, in: searchIDs)
+        return true
+    }
+
+    @discardableResult private func selectSearchResult() -> Bool {
+        guard resultsQuery == search.trimmingCharacters(in: .whitespacesAndNewlines),
+              let id = searchSelection.id, searchIDs.contains(id), model.graph.nodes.contains(where: { $0.id == id }) else { return false }
+        model.select(id)
+        model.focusRequest += 1
+        showSearch = false
+        search = ""
+        return true
+    }
+
+    private func dismissSearch() -> Bool {
+        if showSearch { showSearch = false; return true }
+        guard !search.isEmpty else { return false }
+        search = ""
+        return true
     }
 
     private func topicButton(_ topic: String?) -> some View {
-        Button { model.topic = model.topic == topic ? nil : topic } label: {
+        Button { showSearch = false; model.topic = model.topic == topic ? nil : topic } label: {
             HStack(spacing: 5) {
                 if let topic { Circle().fill(recommendationTopicColor(topic)).frame(width: 5, height: 5) }
                 Text(topic ?? String(localized: "All", bundle: .module))
@@ -245,10 +319,6 @@ private struct RecommendationMapCanvas: View {
         RecommendationCanvasHost(model: model, control: control, reduceMotion: reduceMotion)
             .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
             .onChange(of: model.focusRequest) { _, _ in control.view?.updateSelection(model.selectedID); control.focus() }
-            .overlay(alignment: .topLeading) {
-                Text("Scroll to pan · Pinch to zoom · Drag to explore", bundle: .module)
-                    .font(.system(size: 10)).foregroundStyle(.secondary).padding(20).allowsHitTesting(false)
-            }
             .overlay(alignment: .bottom) {
                 HStack(spacing: 12) {
                     Button { control.fit() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
@@ -273,8 +343,9 @@ private struct RecommendationMapCanvas: View {
                 if model.loading && model.graph.nodes.isEmpty {
                     ProgressView(String(localized: "Building your map…", bundle: .module)).padding(25).glassEffect(.regular, in: .rect(cornerRadius: 20))
                 } else if model.graph.nodes.isEmpty {
-                    ContentUnavailableView(String(localized: "No stories to connect", bundle: .module), systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text("Your articles will appear here as your library grows.", bundle: .module))
+                    let empty = ArticleEmptyState.resolve(query: "", feedIDs: [], categoryID: nil,
+                        smart: model.collection, hasSubscriptions: true)
+                    ContentUnavailableView(empty.title, systemImage: empty.symbol, description: Text(empty.message))
                 }
             }
     }

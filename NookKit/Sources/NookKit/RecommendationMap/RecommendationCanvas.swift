@@ -43,8 +43,11 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     }
     func updateNSView(_ view:RecommendationCanvasView,context:Context){
         view.reduceMotion=reduceMotion;view.interactionEnabled=model.isInteractive
+        let changedCollection = view.collection != model.collection
+        view.collection = model.collection
         if view.revision != model.graphRevision {view.install(model.graph,revision:model.graphRevision,layoutRevision:model.layoutRevision)}
         view.updateSelection(model.selectedID)
+        if changedCollection { view.fit(animated: true) }
         if view.topic != model.topic || view.focusOnly != model.focus {view.topic=model.topic;view.focusOnly=model.focus;view.needsDisplay=true}
     }
 }
@@ -68,6 +71,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     }
     var revision = -1
     private var layoutRevision = -1
+    var collection:SmartSource?
     var topic:String?
     var focusOnly=false
     private var nodes:[RecommendationMapNode]=[]

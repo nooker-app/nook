@@ -75,7 +75,9 @@ struct RecentlyReadHistoryTests {
         #expect(store.visibleArticles.map(\.id) == ["fresh", "old"])
         store.searchText = "does not exist"
         store.debounceSearch()
-        try await Task.sleep(for: .milliseconds(450))
+        for _ in 0..<100 where store.activeSearchQuery.isEmpty || store.isSearching || !store.visibleArticles.isEmpty {
+            try await Task.sleep(for: .milliseconds(20))
+        }
         #expect(store.visibleArticles.isEmpty)
         store.searchText = ""
         store.debounceSearch()

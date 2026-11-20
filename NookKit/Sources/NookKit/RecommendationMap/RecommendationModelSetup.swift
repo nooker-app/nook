@@ -58,7 +58,8 @@ import SwiftUI
 /// Shared by the map and Reading settings; a single installation survives view navigation.
 public struct RecommendationModelSettings: View {
     @State private var setup = RecommendationModelSetup.shared
-    public init() {}
+    private let onReady: () -> Void
+    public init(onReady: @escaping () -> Void = {}) { self.onReady = onReady }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -89,6 +90,7 @@ public struct RecommendationModelSettings: View {
             }
         }
         .task { await setup.check() }
+        .onChange(of: setup.ready) { _, ready in if ready { onReady() } }
     }
 }
 #endif

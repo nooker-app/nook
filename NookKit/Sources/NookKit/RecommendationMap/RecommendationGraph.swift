@@ -39,6 +39,23 @@ struct RecommendationGraph: Sendable {
     }
     var topics: [String] { Array(Set(nodes.map(\.topic))).sorted() }
 
+    /// Project a cached library graph without rerunning embeddings or layout.
+    /// Keeping positions makes switching collections spatially predictable.
+    func collection(_ source: SmartSource, recentlyOpened: [String: Date]) -> Self {
+        var result = self
+        result.nodes = nodes.filter { node in
+            source == .recent ? recentlyOpened[node.id] != nil : node.article.matches(.smart(source))
+        }
+        if source == .recent {
+            result.nodes.sort { (recentlyOpened[$0.id] ?? .distantPast) > (recentlyOpened[$1.id] ?? .distantPast) }
+        }
+        let ids = Set(result.nodes.map(\.id))
+        result.edges = edges.filter { ids.contains($0.a) && ids.contains($0.b) }
+        result.candidates = candidates.filter { ids.contains($0.key) }.mapValues { $0.filter { ids.contains($0.id) } }
+        result.overrides = overrides.filter { ids.contains($0.key) }.mapValues { $0.filter { ids.contains($0.a) && ids.contains($0.b) } }
+        return result
+    }
+
     func refreshed(articles: [Article], ranks: [String: Int], library: ReaderLibrary) -> Self {
         let lookup = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
         let names = Dictionary(uniqueKeysWithValues: library.categories.map { ($0.id, $0.name) })

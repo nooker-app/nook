@@ -214,6 +214,8 @@ public final class ReaderStore {
         }
     }
     private var searchDebounceTask: Task<Void, Never>?
+    public private(set) var isSearching = false
+    public private(set) var searchUsesMeaning = false
 
     /// Per-category sort order (SmartSource rawValue → order), persisted locally
     /// as a device UI preference. Feed drill-downs share the "feed" bucket.
@@ -936,6 +938,27 @@ public final class ReaderStore {
             RecommendationLibrarySnapshot(scope: scope, library: library, readerHTML: html)
         }.value
     }
+
+    public func refreshArticleSearch() {
+        guard !activeSearchQuery.isEmpty else { return }
+        scheduleArticleFilter(animated: false)
+    }
+
+    func searchArticles(query: String, candidates: [Article],
+                        update: @MainActor @Sendable (ArticleSearchUpdate) async -> Void) async {
+        let scope = syncFolderURL?.standardizedFileURL.path ?? "local"
+        var hydrated = candidates
+        for index in hydrated.indices {
+            if let body = bodyCache[hydrated[index].id] { hydrated[index].bodyParagraphs = body.bodyParagraphs }
+        }
+        let titles = Dictionary(feeds.map { ($0.id, $0.title + " " + $0.displayTitle) }, uniquingKeysWith: { first, _ in first })
+        var html = await readerContentStore?.recommendationHTML(for: candidates) ?? [:]
+        guard !Task.isCancelled, scope == (syncFolderURL?.standardizedFileURL.path ?? "local") else { return }
+        for article in candidates {
+            if case .ready(let content) = readerContentStates[article.id] { html[article.id] = content }
+        }
+        await RecommendationGraphEngine.shared(scope: scope).search(query: query, articles: hydrated, feedTitles: titles, html: html, update: update)
+    }
     #endif
 
     /// Recomputes `displayedArticles` from the current inputs.
@@ -993,6 +1016,10 @@ public final class ReaderStore {
         let retained = retainedArticleIDs
         let filteredIDs = filteredArticleIDs
         let query = activeSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if os(macOS)
+        isSearching = !query.isEmpty
+        #endif
+        searchUsesMeaning = false
         let order = currentSortOrder
         let source = currentListSource
         let replacesList = displayedSource != source
@@ -1010,6 +1037,41 @@ public final class ReaderStore {
                 replacesList: replacesList, previousLength: previousLength, selectedID: selectedID,
                 animated: animated, bulk: bulk, batch: batch)
         }
+
+        #if os(macOS)
+        if !query.isEmpty {
+            let offline = feedSelection.isEmpty && smartSelection == .offline
+                ? offlineDisplayArticles(query: "", filteredIDs: filteredIDs) : nil
+            filterTask = Task { [weak self] in
+                let candidates = await Task.detached(priority: .userInitiated) {
+                    offline ?? Self.computeVisibleArticles(snapshot, feedTitles: feedTitles, feedSelection: feedSelection,
+                        smartSelection: smartSelection, categorySelection: categorySelection, retained: retained,
+                        filteredIDs: filteredIDs, query: "", order: order, recentlyOpened: recentlyOpened)
+                }.value
+                guard !Task.isCancelled, let self, self.filterGeneration == generation else { return }
+                let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
+                var expectedRevision = revision
+                await self.searchArticles(query: query, candidates: candidates) { [weak self] update in
+                    guard !Task.isCancelled, let self, self.filterGeneration == generation else { return }
+                    let ordered = update.ids.compactMap { byID[$0] }
+                    let result = await Task.detached(priority: .userInitiated) { computeDisplay(ordered) }.value
+                    guard !Task.isCancelled, self.filterGeneration == generation else { return }
+                    guard self.displayRevision == expectedRevision else {
+                        self.scheduleArticleFilter(animated: false)
+                        return
+                    }
+                    self.isSearching = update.isSearching
+                    self.searchUsesMeaning = update.usesMeaning
+                    self.applyDisplayed(result, source: source)
+                    expectedRevision = self.displayRevision
+                }
+                guard !Task.isCancelled, self.filterGeneration == generation else { return }
+                self.isSearching = false
+                self.filterTask = nil
+            }
+            return
+        }
+        #endif
 
         // The Downloaded source is driven by the offline store itself, not the
         // in-memory library, so a saved article that was deleted from a feed or

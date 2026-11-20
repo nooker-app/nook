@@ -1,6 +1,61 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Search by keyword or meaning": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "키워드나 문장으로 검색"
+          }
+        }
+      }
+    },
+    "Searching your articles…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "글을 찾고 있어요…"
+          }
+        }
+      }
+    },
+    "Results by relevance": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "관련도순 검색 결과"
+          }
+        }
+      }
+    },
+    "Keyword results": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "키워드 검색 결과"
+          }
+        }
+      }
+    },
+    "Enable natural-language search": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자연어 검색 활성화"
+          }
+        }
+      }
+    },
     "Not interested": {
       "extractionState": "manual",
       "localizations": {

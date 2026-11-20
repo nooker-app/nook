@@ -3,8 +3,18 @@ import CryptoKit
 import Foundation
 
 actor RecommendationGraphEngine {
+    @MainActor private static var sharedEngines: [String: RecommendationGraphEngine] = [:]
+    @MainActor static func shared(scope: String) -> RecommendationGraphEngine {
+        if let engine = sharedEngines[scope] { return engine }
+        let engine = RecommendationGraphEngine(scope: scope)
+        if sharedEngines.count >= 3 { sharedEngines.removeAll() }
+        sharedEngines[scope] = engine
+        return engine
+    }
     let folder: URL
-    private var vectors: [String: RecommendationVector] = [:]
+    var vectors: [String: RecommendationVector] = [:]
+    var searchQueries: [String: [Float]] = [:]
+    var searchBodies: [String: (html: String, paragraphs: [String])] = [:]
     private var pairs: [String: Double] = [:]
     private var loaded = false
     private var checkedDiskGraphs = Set<Bool>()
@@ -20,7 +30,7 @@ actor RecommendationGraphEngine {
         SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func load() {
+    func load() {
         guard !loaded else { return }
         loaded = true
         let decoder = PropertyListDecoder()
@@ -30,7 +40,7 @@ actor RecommendationGraphEngine {
             .flatMap { try? decoder.decode([String: Double].self, from: $0) } ?? [:]
     }
 
-    private func save<T: Encodable>(_ value: T, name: String) {
+    func save<T: Encodable>(_ value: T, name: String) {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
@@ -85,9 +95,18 @@ actor RecommendationGraphEngine {
             save(vectors, name: "vectors.plist")
         }
         try Task.checkCancellation()
-        let index = semantic ? RecommendationSemanticIndex(vectors: articles.map { vectors[$0.id] }) : nil
-        let result = RecommendationGraphBuilder.build(articles: articles, ranks: ranks, library: snapshot.library,
-                                                       semantic: index, originalIDs: snapshot.originalIDs)
+        // Layout/content analysis must not occupy the shared cache actor: a
+        // foreground search should be able to retrieve vectors while it runs.
+        let encoded = semantic ? articles.map { vectors[$0.id] } : nil
+        let build = Task.detached(priority: .utility) {
+            RecommendationGraphBuilder.build(articles: articles, ranks: ranks, library: snapshot.library,
+                semantic: encoded.map { RecommendationSemanticIndex(vectors: $0) }, originalIDs: snapshot.originalIDs)
+        }
+        let result = await withTaskCancellationHandler {
+            await build.value
+        } onCancel: {
+            build.cancel()
+        }
         try Task.checkCancellation()
         graphCache[semantic] = (result, fingerprints)
         save(StoredRecommendationGraph(result, fingerprints: fingerprints), name: graphFile(semantic))
