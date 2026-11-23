@@ -344,10 +344,12 @@ public final class ReplicaStore: @unchecked Sendable {
 
     /// The stored discussion for an article, or nil when this device has none.
     public func comments(for articleID: Article.ID) throws -> Data? {
-        try lock.withLock {
-            try withDatabase { db in
-                try scalar(db, "SELECT payload FROM article_comments WHERE article_id=?", articleID)
-            }
+        // Reconciliation holds `lock` and a write transaction while consulting
+        // iCloud. WAL readers can use the last committed snapshot independently;
+        // opening a cached article must not wait for that provider or observe a
+        // partially committed comment update. Never create a database on a read.
+        try withDatabase(readOnly: true) { db in
+            try scalar(db, "SELECT payload FROM article_comments WHERE article_id=?", articleID)
         }
     }
 
@@ -408,10 +410,14 @@ public final class ReplicaStore: @unchecked Sendable {
         return ReplicaSnapshot(revision: revision, library: document.materialize(bodies: bodies), bodies: bodies)
     }
 
-    private func withDatabase<T>(_ body: (OpaquePointer) throws -> T) throws -> T {
+    private func withDatabase<T>(readOnly: Bool = false, _ body: (OpaquePointer) throws -> T) throws -> T {
         var db: OpaquePointer?
-        guard sqlite3_open_v2(databaseURL.path(percentEncoded: false), &db, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK,
-              let db else { throw ReplicaStoreError.sqlite("Unable to open replica database") }
+        let flags = (readOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE) | SQLITE_OPEN_FULLMUTEX
+        guard sqlite3_open_v2(databaseURL.path(percentEncoded: false), &db, flags, nil) == SQLITE_OK,
+              let db else {
+            if let db { sqlite3_close(db) }
+            throw ReplicaStoreError.sqlite("Unable to open replica database")
+        }
         defer { sqlite3_close(db) }
         return try body(db)
     }

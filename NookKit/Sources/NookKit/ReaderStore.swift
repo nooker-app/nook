@@ -756,6 +756,7 @@ public final class ReaderStore {
         await batchMergeFlushTask?.value
         for task in offlineSaveTasks { await task.value }
         for task in readerContentTasks { await task.value }
+        await readerContentStore?.stop()
         // A drain may already be inside an atomic coordinated write. Waiting for
         // it before releasing the security scope prevents an in-flight writer
         // from racing the reset boundary.
@@ -1653,7 +1654,9 @@ public final class ReaderStore {
 
         // Pull any peer's reader-mode extractions (CRDT-merged) so content a
         // sibling device already extracted shows here without re-fetching.
-        await readerContentStore?.reload()
+        if let readerContentStore {
+            Task { await readerContentStore.reload() }
+        }
 
         guard let replicaStore else { return }
         // Snapshot the in-memory shard for the off-main merge; the generation is
@@ -3826,6 +3829,11 @@ public final class ReaderStore {
             readerContentStore = ReaderContentStore(storage: storage, deviceID: deviceID)
         }
 
+        let contentStore = readerContentStore
+        func isCurrentLoad() -> Bool {
+            !Task.isCancelled && readerContentStore === contentStore
+        }
+
         // Let the reader's open/push transition finish before doing any heavy
         // main-thread work — the styled-text import (cache path) and the
         // extractor's offscreen WKWebView (miss path) both stall the slide-in if
@@ -3837,7 +3845,7 @@ public final class ReaderStore {
         // a deliberate tap reads as lag.
         if !immediate {
             try? await Task.sleep(for: .milliseconds(350))
-            if Task.isCancelled { return }
+            guard isCurrentLoad() else { return }
         }
 
         readerParsersTried[article.id, default: []].insert(engine)
@@ -3852,9 +3860,11 @@ public final class ReaderStore {
         // A Nook post the author edited is the one case where a cached body is the
         // wrong body. Its fingerprint no longer matches what the feed serves, so the
         // extraction is redone; every other source keeps exactly what it fetched.
-        if Task.isCancelled { return }
+        guard isCurrentLoad() else { return }
 
-        if let cached = await readerContentStore?.value(for: article.id),
+        let cached = await contentStore?.value(for: article.id)
+        guard isCurrentLoad() else { return }
+        if let cached,
             !forceRefresh
                 || (cached.status == .success && cached.recordedEngine == acceptCacheFrom),
             cached.isCurrent(for: engine) || alreadyTriedBothParsers(article.id),
@@ -3862,9 +3872,10 @@ public final class ReaderStore {
         {
             if cached.status == .success, let html = cached.html, !html.isEmpty {
                 let body = await repairReaderAnchors(html, engine: cached.recordedEngine, for: article) ?? html
-                guard !Task.isCancelled else { return }
+                guard isCurrentLoad() else { return }
                 await warmReaderContent(html: body, baseURL: article.url)
                 await loadCommentsIfNeeded(for: article)
+                guard isCurrentLoad() else { return }
                 note(html: body, engine: cached.recordedEngine, for: article)
                 // Cached content can outlive the source page. Check the original's
                 // status in the background (non-blocking) and offer deletion if it
@@ -3881,14 +3892,14 @@ public final class ReaderStore {
         if readerModeExtractor == nil { readerModeExtractor = ReaderModeExtractor() }
         if forceRefresh { await ArticlePreviewCache.shared.invalidate(article.url) }
         let prepared = forceRefresh ? nil : await readerModeExtractor?.extractCachedPage(for: article, engine: engine)
-        if Task.isCancelled { return }
+        guard isCurrentLoad() else { return }
 
         // Check the original's status up front. WKWebView can be served a cached
         // 200 for a page that's really gone (so extraction "succeeds" on the error
         // page and Try Again would show it as content) — an explicit HEAD 404/410
         // is authoritative, so treat it as gone without extracting.
         if prepared == nil, await originalIsGone(url: article.url, ignoringCache: reloadFromOrigin) {
-            if Task.isCancelled { return }
+            guard isCurrentLoad() else { return }
             reparsingArticles[article.id] = nil
             readerContentStates[article.id] = .gone
             readerContentEngines[article.id] = engine
@@ -3907,7 +3918,7 @@ public final class ReaderStore {
         // Cancellation does not stop an extraction that is already in flight, so a
         // superseded load returns here with a real answer. Publishing it would let the
         // parser the reader switched away from overwrite the one they switched to.
-        if Task.isCancelled { return }
+        guard isCurrentLoad() else { return }
         let fingerprint = NookPostOrigin.fingerprint(of: article)
         switch outcome {
         case .success(let extracted) where !extracted.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
@@ -3916,6 +3927,7 @@ public final class ReaderStore {
             // warm cache on the first frame — no parse or importer burst on the
             // transition frame, and no placeholder→styled reflow.
             await warmReaderContent(html: extracted.html, baseURL: article.url)
+            guard isCurrentLoad() else { return }
             // Written only for the parser that drops them. Readability keeps embeds and
             // always reports zero, and letting that zero overwrite the count meant the
             // notice never came back when the reader switched to legibility again.
@@ -3926,13 +3938,14 @@ public final class ReaderStore {
             if let thread = extracted.comments {
                 await warmComments(thread, baseURL: article.url)
             }
+            guard isCurrentLoad() else { return }
             note(html: extracted.html, engine: extracted.engine, for: article)
             // A fallback body is not written to the synced cache. The parser the
             // reader chose could not run *this time*; recording Readability's answer
             // as a success would pin the article to it on every device for good,
             // because a cached success is never reconsidered.
             guard !extracted.fellBack else { return }
-            await readerContentStore?.record(
+            await contentStore?.record(
                 ReaderContentValue(
                     status: .success, html: extracted.html,
                     sourceFingerprint: fingerprint,
@@ -3961,6 +3974,7 @@ public final class ReaderStore {
             // so the next attempt does not download it again to learn the same thing.
             await recordReaderFailureUnlessBodyCached(
                 engine: engine, fingerprint: fingerprint, for: article.id)
+            guard isCurrentLoad() else { return }
             if abandonReparse(for: article) { return }
             readerContentStates[article.id] = .failed
             readerContentEngines[article.id] = engine
@@ -3973,12 +3987,14 @@ public final class ReaderStore {
     private func recordReaderFailureUnlessBodyCached(
         engine: ReaderParserEngine, fingerprint: String?, for id: Article.ID
     ) async {
-        let previous = await readerContentStore?.value(for: id)
+        let contentStore = readerContentStore
+        let previous = await contentStore?.value(for: id)
+        guard !Task.isCancelled, readerContentStore === contentStore else { return }
         // A body already extracted is worth more than a verdict about the parser that
         // just came up empty — most of all when the page has gone, where the cached
         // copy is the only one left anywhere.
         guard previous?.status != .success || previous?.html?.isEmpty != false else { return }
-        await readerContentStore?.record(
+        await contentStore?.record(
             ReaderContentValue.failure(
                 engine: engine, previous: previous, sourceFingerprint: fingerprint),
             for: id)
@@ -3990,11 +4006,12 @@ public final class ReaderStore {
     private func repairReaderAnchors(
         _ html: String, engine: ReaderParserEngine, for article: Article
     ) async -> String? {
+        let contentStore = readerContentStore
         let extractor = ReaderModeExtractor()
         guard let repaired = await NookPostAnchorRepair.repair(html, for: article, extract: { source in
             await extractor.extractCachedDocument(source, url: article.url, engine: engine)
-        }), !Task.isCancelled else { return nil }
-        await readerContentStore?.record(
+        }), !Task.isCancelled, readerContentStore === contentStore else { return nil }
+        await contentStore?.record(
             ReaderContentValue(
                 status: .success, html: repaired,
                 sourceFingerprint: NookPostOrigin.fingerprint(of: article), engine: engine),
@@ -4055,14 +4072,20 @@ public final class ReaderStore {
         // make an open during launch — before storage has been restored — the one open
         // that permanently has no comments.
         guard let replicaStore else { return }
-        readerCommentsLoaded.insert(id)
+        let generation = readerContentGenerations[id]
         let thread = await Task.detached(priority: .userInitiated) { () -> ReaderCommentThread? in
             guard let payload = try? replicaStore.comments(for: id) else { return nil }
             return try? JSONDecoder().decode(ReaderCommentThread.self, from: payload)
         }.value
-        guard let thread, !thread.isEmpty else { return }
-        readerCommentThreads[id] = thread
-        await warmComments(thread, baseURL: article.url)
+        guard !Task.isCancelled, self.replicaStore === replicaStore,
+              readerContentGenerations[id] == generation else { return }
+        if let thread, !thread.isEmpty {
+            await warmComments(thread, baseURL: article.url)
+            guard !Task.isCancelled, self.replicaStore === replicaStore,
+                  readerContentGenerations[id] == generation else { return }
+            readerCommentThreads[id] = thread
+        }
+        readerCommentsLoaded.insert(id)
     }
 
     /// Warms the styled text of the comment bodies the reader is about to draw.
@@ -5301,9 +5324,13 @@ public final class ReaderStore {
 
     /// Test-only factory (the app uses `shared`): lets regression tests drive
     /// store flows on an isolated instance without touching global state.
-    static func _makeForTesting(storage: ReaderStorage? = nil, historyDefaults: UserDefaults = .standard) -> ReaderStore {
+    static func _makeForTesting(
+        storage: ReaderStorage? = nil, historyDefaults: UserDefaults = .standard,
+        readerContentStore: ReaderContentStore? = nil
+    ) -> ReaderStore {
         let store = ReaderStore(historyDefaults: historyDefaults)
         store.storage = storage
+        store.readerContentStore = readerContentStore
         if storage != nil {
             store.deviceID = "test"
             store.ownShard = DeviceStateDocument(deviceID: "test")

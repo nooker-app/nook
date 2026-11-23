@@ -390,24 +390,37 @@ public struct ReaderStorage: Sendable {
         try saveDocument(shard, at: bodyShardURL(deviceID: shard.deviceID), directory: bodiesDirectoryURL)
     }
 
-    public func loadReaderShards() -> [ReaderContentShardDocument] {
-        loadDocuments(in: readerDirectoryURL, as: ReaderContentShardDocument.self)
+    public func loadReaderShards(excluding deviceID: String? = nil) -> [ReaderContentShardDocument] {
+        loadDocuments(
+            in: readerDirectoryURL, as: ReaderContentShardDocument.self,
+            excludingFileNamed: deviceID.map { "\($0).\(Self.shardFileExtension)" })
     }
 
     public func loadOwnReaderShard(deviceID: String) -> ReaderContentShardDocument? {
         loadDocument(at: readerShardURL(deviceID: deviceID), as: ReaderContentShardDocument.self)
     }
 
+    /// Unlike a best-effort peer read, failure here must prevent replacing our
+    /// shard with an empty one. Used by the reader cache's background writer.
+    func readOwnReaderShard(deviceID: String) throws -> ReaderContentShardDocument? {
+        let url = readerShardURL(deviceID: deviceID)
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return nil }
+        guard let data = try coordinatedRead(url) else { return nil }
+        return try JSONDecoder.nook.decode(ReaderContentShardDocument.self, from: data)
+    }
+
     public func saveReaderShard(_ shard: ReaderContentShardDocument) throws {
         try saveDocument(shard, at: readerShardURL(deviceID: shard.deviceID), directory: readerDirectoryURL)
     }
 
-    private func loadDocuments<T: Decodable>(in directory: URL, as type: T.Type) -> [T] {
+    private func loadDocuments<T: Decodable>(
+        in directory: URL, as type: T.Type, excludingFileNamed excluded: String? = nil
+    ) -> [T] {
         guard let entries = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
             return []
         }
         return entries.compactMap { url in
-            guard url.pathExtension == Self.shardFileExtension else { return nil }
+            guard url.pathExtension == Self.shardFileExtension, url.lastPathComponent != excluded else { return nil }
             return loadDocument(at: url, as: type)
         }
     }
