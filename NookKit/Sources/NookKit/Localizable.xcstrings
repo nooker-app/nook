@@ -1,6 +1,83 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "Map overview": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "현재 위치"
+        }
+      }
+    }
+  },
+  "Map overview. Click or drag to navigate.": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "지도 전체 개요. 클릭하거나 드래그하여 이동합니다."
+        }
+      }
+    }
+  },
+  "Previous position · Delete": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "이전 위치 · Delete"
+        }
+      }
+    }
+  },
+  "Previous map position": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "이전 위치"
+        }
+      }
+    }
+  },
+  "Fit map · 0": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "전체 지도 · 0"
+        }
+      }
+    }
+  },
+  "Focus selected story · F": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "선택한 글과 연결 보기 · F"
+        }
+      }
+    }
+  },
+  "Reset map orientation": {
+    "extractionState": "manual",
+    "localizations": {
+      "ko": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "방향 초기화"
+        }
+      }
+    }
+  },
     "Switch between 2D and 3D": {
       "extractionState": "manual",
       "localizations": {

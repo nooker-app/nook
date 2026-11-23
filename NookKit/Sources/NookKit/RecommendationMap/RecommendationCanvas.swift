@@ -23,12 +23,28 @@ struct RecommendationSpatialGrid {
     }
 }
 struct RecommendationMapBucket {var center:CGPoint;var count:Int;var first:Int;var bounds:CGRect}
+struct RecommendationMapOverview: Equatable {
+    var points: [CGPoint] = []
+    var viewport = CGRect(x: 0, y: 0, width: 1, height: 1)
+    var selected: CGPoint?
+    var canGoBack = false
+    var percent = 100
+}
+private struct RecommendationCameraPosition {
+    var zoom: Double
+    var pan: CGPoint
+    var orbit: RecommendationOrbit
+    var center: CGPoint
+    var centerDepth: Double
+}
 @MainActor @Observable final class RecommendationCanvasControl {
     weak var view: RecommendationCanvasView?
-    var zoomText="100%"
-    func zoom(_ factor:Double){view?.zoomBy(factor,anchor:CGPoint(x:(view?.bounds.width ?? 0)/2,y:(view?.bounds.height ?? 0)/2),animated:true)}
-    func fit(){view?.fit(animated:true)}
+    var overview = RecommendationMapOverview()
+    func zoom(_ factor:Double){view?.navigateZoom(factor)}
+    func fit(){view?.navigateToFit()}
     func focus(){view?.focusSelection()}
+    func back(){view?.navigateBack()}
+    func resetDirection(){view?.resetDirection()}
 }
 struct RecommendationCanvasHost:NSViewRepresentable {
     var model:RecommendationMapController
@@ -39,19 +55,19 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         let view=RecommendationCanvasView();control.view=view
         view.onSelect={id in model.select(id)}
         view.onOpen={model.openSelected()}
-        view.onZoom={text in if control.zoomText != text {control.zoomText=text}}
+        view.onOverview={snapshot in if control.overview != snapshot {control.overview=snapshot}}
         return view
     }
     func updateNSView(_ view:RecommendationCanvasView,context:Context){
         view.reduceMotion=reduceMotion;view.interactionEnabled=model.isInteractive
-        view.setSpatial(spatial)
         guard model.isInteractive else { return }
+        view.setSpatial(spatial)
         let changedCollection = view.collection != model.collection
         view.collection = model.collection
         if view.revision != model.graphRevision {view.install(model.graph,revision:model.graphRevision,layoutRevision:model.layoutRevision,forming:model.formation.active)}
         view.updateFormation(model.formation, revision: model.formationRevision)
         view.updateSelection(model.selectedID)
-        if changedCollection { view.fit(animated: true) }
+        if changedCollection { view.clearCameraHistory(); view.fit(animated: true) }
         if view.topic != model.topic || view.focusOnly != model.focus {view.topic=model.topic;view.focusOnly=model.focus;view.needsDisplay=true}
     }
 }
@@ -63,8 +79,10 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     override var acceptsFirstResponder:Bool {true}
     var onSelect:((String)->Void)?
     var onOpen:(()->Void)?
-    var onZoom:((String)->Void)?
-    var reduceMotion=false
+    var onOverview:((RecommendationMapOverview)->Void)?
+    var reduceMotion=false {
+        didSet { if reduceMotion { momentum = .zero; orbitVelocity = .zero } }
+    }
     var interactionEnabled=true {
         didSet {
             if !interactionEnabled {
@@ -142,13 +160,25 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     private var groupColors: [NSColor] = []
     private let sphereAtlas = RecommendationSphereAtlas()
     private var sphereSprites: [[CGImage]] = []
+    private var navigationBounds = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+    private var overviewPoints: [CGPoint] = []
+    private var overviewQueued = false
+    private var overviewPublished = 0.0
+    private var lastWheel = 0.0
+    private var cameraHistory: [RecommendationCameraPosition] = []
+    private var lastCanvasSize = CGSize.zero
     override init(frame:NSRect){super.init(frame:frame);wantsLayer=true;layer?.masksToBounds=true;setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel(String(localized: "Recommendation map. Scroll to pan, pinch to zoom, and select a story to preview it.", bundle: .module))}
     required init?(coder:NSCoder){fatalError()}
     override func updateTrackingAreas(){super.updateTrackingAreas();if let tracking {removeTrackingArea(tracking)};let area=NSTrackingArea(rect:bounds,options:[.mouseMoved,.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self);addTrackingArea(area);tracking=area}
     override func viewDidChangeEffectiveAppearance(){super.viewDidChangeEffectiveAppearance();labelImages.removeAll();pendingLabels.removeAll();sphereSprites.removeAll();needsDisplay=true}
     override func viewWillMove(toWindow newWindow:NSWindow?){if newWindow == nil {timer?.invalidate();timer=nil;cameraAnimation=nil;momentum = .zero;activePhysics.removeAll()};super.viewWillMove(toWindow:newWindow)}
     override func resetCursorRects(){addCursorRect(bounds,cursor:.openHand)}
-    override func layout(){super.layout();if !firstFit && !nodes.isEmpty && bounds.width>10 {firstFit=true;fit(animated:false)}}
+    override func layout(){
+        super.layout()
+        if !firstFit && !nodes.isEmpty && bounds.width>10 {firstFit=true;fit(animated:false)}
+        else if lastCanvasSize != bounds.size, interactionEnabled {constrainNavigation()}
+        lastCanvasSize=bounds.size;publishOverview()
+    }
     func install(_ graph:RecommendationGraph,revision:Int,layoutRevision:Int,forming:Bool=false){
         let selectedID = selected.flatMap { nodes.indices.contains($0) ? nodes[$0].id : nil }
         let finishFormation = formationActive && !forming && self.layoutRevision != layoutRevision
@@ -158,15 +188,15 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         self.revision=revision
         let changesLayout=self.layoutRevision != layoutRevision
         self.layoutRevision=layoutRevision
-        if changesLayout {focusedInitialSelection=false}
-        if graph.nodes.isEmpty {firstFit=false;focusedInitialSelection=false;timer?.invalidate();timer=nil;cameraAnimation=nil;momentum = .zero;lod.removeAll()}
+        if changesLayout {focusedInitialSelection=false;clearCameraHistory()}
+        if graph.nodes.isEmpty {firstFit=false;focusedInitialSelection=false;timer?.invalidate();timer=nil;cameraAnimation=nil;momentum = .zero;lod.removeAll();clearCameraHistory()}
         let old=Dictionary(uniqueKeysWithValues:(changesLayout || finishFormation ? []:Array(zip(nodes,positions))).map {($0.0.id,$0.1)})
         nodes=graph.nodes;depthSeeds=nodes.map { RecommendationOrbit.depthSeed(id: $0.id, community: $0.clusterID) };projectionDirty=true
         edges=graph.edges;lookup=Dictionary(uniqueKeysWithValues:nodes.enumerated().map {($0.element.id,$0.offset)})
         restingEdges = graph.edges
         positions=nodes.map {old[$0.id] ?? $0.position};colors=nodes.map {NSColor(recommendationTopicColor($0.topic))}
         var topicGroups: [String: Int] = [:]
-        groupColors.removeAll();colorGroups.removeAll();sphereSprites.removeAll()
+        groupColors.removeAll();colorGroups.removeAll()
         for i in nodes.indices {
             if topicGroups[nodes[i].topic] == nil { topicGroups[nodes[i].topic] = groupColors.count;groupColors.append(colors[i]) }
             colorGroups.append(topicGroups[nodes[i].topic]!)
@@ -387,6 +417,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         return readOpacity
     }
     override func draw(_ dirtyRect:NSRect){
+        defer { publishOverview() }
         let began=CACurrentMediaTime();drawTick+=1
         guard let context=NSGraphicsContext.current?.cgContext else{return}
         context.setFillColor(NSColor(NookTheme.canvas).cgColor);context.fill(bounds)
@@ -443,16 +474,17 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     private func drawNode(_ i:Int,context:CGContext,force:Bool=false){
         let p=screenPosition(i);guard bounds.insetBy(dx:-100,dy:-100).contains(p) else{return}
         let active=i==selected,over=i==hovered
+        let markerColor = spatial ? NSColor(NookTheme.accent) : colors[i]
         let r = spatial ? sphereStyle(i).radius : (force ? 8:max(4,min(24,(16+Double(max(0,24-nodes[i].rank))*0.3)*sqrt(zoom))))
         let opacity = alpha(i) * (spatial && !active && !over ? sphereStyle(i).opacity : 1)
         if !spatial {
             context.setFillColor(colors[i].withAlphaComponent((active ? 0.30:0.15)*opacity).cgColor);context.fillEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
         }
         if !spatial || active || over {
-            context.setStrokeColor(colors[i].withAlphaComponent((active || over ? 0.95:0.65)*opacity).cgColor);context.setLineWidth(active ? 1.7:0.9);context.strokeEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
+            context.setStrokeColor(markerColor.withAlphaComponent((active || over ? 0.95:0.65)*opacity).cgColor);context.setLineWidth(active ? 1.7:0.9);context.strokeEllipse(in:CGRect(x:p.x-r,y:p.y-r,width:2*r,height:2*r))
         }
         if active {context.setStrokeColor(NSColor(NookTheme.accent).withAlphaComponent(0.25).cgColor);context.strokeEllipse(in:CGRect(x:p.x-r-5,y:p.y-r-5,width:2*r+10,height:2*r+10))}
-        if zoom>=0.55 || over || active && !force {
+        if (spatial ? zoom >= fitZoom * 2.5 : zoom >= 0.55) || over || active && !force {
             context.saveGState();context.setAlpha(opacity)
             let number=(nodes[i].article.isRead ? "✓" : "\(nodes[i].rank)") as NSString
             let attrs:[NSAttributedString.Key:Any]=[.font:NSFont.monospacedDigitSystemFont(ofSize:9,weight:active ? .semibold:.regular),.foregroundColor:spatial ? NSColor.labelColor.withAlphaComponent(0.9):colors[i]]
@@ -546,15 +578,15 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     }
     override func mouseMoved(with event:NSEvent){guard interactionEnabled else{return};let p=convert(event.locationInWindow,from:nil);let next=hit(p);if next != hovered {hovered=next;updateNeighbors();needsDisplay=true};(next == nil ? NSCursor.openHand:NSCursor.pointingHand).set()}
     override func mouseExited(with event:NSEvent){hovered=nil;updateNeighbors();needsDisplay=true}
-    override func mouseDown(with event:NSEvent){guard interactionEnabled else{return};if formationActive {formationCameraAdjusted=true};window?.makeFirstResponder(self);cameraAnimation=nil;momentum = .zero;lastMouse=convert(event.locationInWindow,from:nil);dragIndex=hit(lastMouse);mouseMovedDistance=0;dragHistory=[(CACurrentMediaTime(),lastMouse)];orbitVelocity = .zero;orbitPanning=event.modifierFlags.contains(.shift);if !spatial, let i=dragIndex {beginPhysics(i)};NSCursor.closedHand.set()}
-    override func mouseDragged(with event:NSEvent){guard interactionEnabled else{return};let p=convert(event.locationInWindow,from:nil);let dx=p.x-lastMouse.x,dy=p.y-lastMouse.y;mouseMovedDistance+=hypot(dx,dy)
+    override func mouseDown(with event:NSEvent){guard interactionEnabled else{return};rememberCamera();if formationActive {formationCameraAdjusted=true};window?.makeFirstResponder(self);cameraAnimation=nil;momentum = .zero;lastMouse=convert(event.locationInWindow,from:nil);dragIndex=hit(lastMouse);mouseMovedDistance=0;dragHistory=[(CACurrentMediaTime(),lastMouse)];orbitVelocity = .zero;orbitPanning=event.modifierFlags.contains(.shift);if !spatial, let i=dragIndex {beginPhysics(i)};NSCursor.closedHand.set()}
+    override func mouseDragged(with event:NSEvent){guard interactionEnabled else{return};defer {constrainNavigation()};let p=convert(event.locationInWindow,from:nil);let dx=p.x-lastMouse.x,dy=p.y-lastMouse.y;mouseMovedDistance+=hypot(dx,dy)
         if spatial && !orbitPanning { orbit.rotate(x: dx*0.006, y: -dy*0.006);projectionDirty=true }
         else if spatial { pan.x+=dx;pan.y+=dy }
         else if let i=dragIndex {move(i,to:CGPoint(x:positions[i].x+dx/zoom,y:positions[i].y+dy/zoom));velocity[i] = .zero;startTimer()}
         else {pan.x+=dx;pan.y+=dy}
         lastMouse=p;dragHistory.append((CACurrentMediaTime(),p));dragHistory=Array(dragHistory.suffix(5));needsDisplay=true
     }
-    override func mouseUp(with event:NSEvent){guard interactionEnabled else{return};let p=convert(event.locationInWindow,from:nil)
+    override func mouseUp(with event:NSEvent){guard interactionEnabled else{return};defer {constrainNavigation()};let p=convert(event.locationInWindow,from:nil)
         if mouseMovedDistance<4 {
             if let i=dragIndex {onSelect?(nodes[i].id);if event.clickCount==2 {onOpen?()}}
             else if !spatial, lodCell != nil,let closest=buckets().min(by:{hypot(screen($0.center).x-p.x,screen($0.center).y-p.y)<hypot(screen($1.center).x-p.x,screen($1.center).y-p.y)}),hypot(screen(closest.center).x-p.x,screen(closest.center).y-p.y)<35 {
@@ -572,42 +604,95 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         }
         dragIndex=nil;NSCursor.openHand.set();needsDisplay=true
     }
-    override func scrollWheel(with event:NSEvent){guard interactionEnabled else{super.scrollWheel(with:event);return};cameraAnimation=nil;momentum = .zero
+    override func scrollWheel(with event:NSEvent){
+        guard interactionEnabled else{return}
+        defer {constrainNavigation();publishOverview()}
+        let now=CACurrentMediaTime()
+        if event.phase == .began || event.phase.isEmpty && event.momentumPhase.isEmpty && now-lastWheel>0.35 {rememberCamera()}
+        lastWheel=now
+        cameraAnimation=nil;momentum = .zero
         if formationActive {formationCameraAdjusted=true}
         orbitVelocity = .zero
         let p=convert(event.locationInWindow,from:nil)
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) || !event.hasPreciseScrollingDeltas {zoomBy(exp(event.scrollingDeltaY*(event.hasPreciseScrollingDeltas ? 0.008:0.07)),anchor:p,animated:false)}
         else {pan.x+=event.scrollingDeltaX;pan.y+=event.scrollingDeltaY;needsDisplay=true}
     }
-    override func magnify(with event:NSEvent){guard interactionEnabled else{return};orbitVelocity = .zero;zoomBy(1+event.magnification,anchor:convert(event.locationInWindow,from:nil),animated:false)}
-    override func smartMagnify(with event:NSEvent){guard interactionEnabled else{return};if zoom>0.4 {fit(animated:true)} else {zoomBy(4,anchor:convert(event.locationInWindow,from:nil),animated:true)}}
-    override func keyDown(with event:NSEvent){guard interactionEnabled else{super.keyDown(with:event);return};switch event.keyCode {case 123:pan.x+=70;case 124:pan.x-=70;case 125:pan.y-=70;case 126:pan.y+=70;case 36:onOpen?();case 53:fit(animated:true);default:super.keyDown(with:event)};needsDisplay=true}
-    func zoomBy(_ factor:Double,anchor:CGPoint,animated:Bool){if formationActive {formationCameraAdjusted=true};let target=min(2.5,max(0.018,zoom*factor));let w=world(anchor);let next=CGPoint(x:anchor.x-w.x*target,y:anchor.y-w.y*target);setCamera(zoom:target,pan:next,animated:animated)}
+    override func magnify(with event:NSEvent){
+        guard interactionEnabled else{return}
+        if event.phase == .began {rememberCamera()}
+        orbitVelocity = .zero
+        zoomBy(1+event.magnification,anchor:convert(event.locationInWindow,from:nil),animated:false)
+    }
+    override func smartMagnify(with event:NSEvent){
+        guard interactionEnabled else{return}
+        rememberCamera()
+        if zoom > (spatial ? fitZoom*2 : 0.4) {fit(animated:true)}
+        else {zoomBy(4,anchor:convert(event.locationInWindow,from:nil),animated:true)}
+    }
+    override func keyDown(with event:NSEvent){
+        guard interactionEnabled else{return}
+        // Only the canvas responder handles these keys. Search fields (including
+        // marked IME text) keep their normal routing and Command shortcuts.
+        guard event.modifierFlags.intersection([.command,.control,.option]).isEmpty else {super.keyDown(with:event);return}
+        switch event.keyCode {
+        case 123...126:
+            if !event.isARepeat {rememberCamera()}
+            cameraAnimation=nil;momentum = .zero;orbitVelocity = .zero
+            switch event.keyCode {case 123:pan.x+=70;case 124:pan.x-=70;case 125:pan.y-=70;default:pan.y+=70}
+            constrainNavigation()
+        case 36:onOpen?()
+        case 53,29,115:navigateToFit()
+        case 3:focusSelection()
+        case 51:navigateBack()
+        default:super.keyDown(with:event)
+        }
+        needsDisplay=true;publishOverview()
+    }
+    func zoomBy(_ factor:Double,anchor:CGPoint,animated:Bool){
+        guard interactionEnabled, factor.isFinite, factor>0, !nodes.isEmpty else{return}
+        if formationActive {formationCameraAdjusted=true}
+        updateProjection()
+        let target=spatial ? min(maximumZoom,max(minimumZoom,zoom*factor)) : min(2.5,max(0.018,zoom*factor))
+        let w=world(anchor),next=CGPoint(x:anchor.x-w.x*target,y:anchor.y-w.y*target)
+        setCamera(zoom:target,pan:next,animated:animated)
+        if !animated || reduceMotion {constrainNavigation()}
+    }
     func fit(animated:Bool){guard !nodes.isEmpty else{return}
         if spatial {
             projectionCenter = CGPoint(x: contentBounds.midX,y: contentBounds.midY)
             projectionCenterDepth = 0;projectionDirty = true
             updateProjection()
             let box = projectedBounds
-            let scale = min((bounds.width-100)/box.width,(bounds.height-140)/box.height)
+            let scale = fitZoom
             animateCamera(to:max(0.018,min(1.1,scale)),center:CGPoint(x:box.midX,y:box.midY),animated:animated)
             return
         }
         let scale=min((bounds.width-100)/contentBounds.width,(bounds.height-150)/contentBounds.height);animateCamera(to:max(0.018,min(1.1,scale)),center:CGPoint(x:contentBounds.midX,y:contentBounds.midY),animated:animated)}
     func focusSelection(){
-        guard let selected else{return}
+        guard interactionEnabled,let selected else{return}
+        rememberCamera();markCameraInteraction()
         if spatial {
-            projectionCenter = positions[selected]
-            projectionCenterDepth = RecommendationOrbit.depth(at: positions[selected],seed: depthSeeds[selected])
-            projectionDirty = true
+            updateProjection()
+            // Frame real neighbors without moving the orbit pivot. Hovering a
+            // different story must not change the selected story's focus target.
+            var box=CGRect(origin:projected[selected].point,size:.zero)
+            for e in adjacency[selected].prefix(12) {
+                for id in [edges[e].a,edges[e].b] {
+                    if let i=lookup[id] {box=box.union(CGRect(origin:projected[i].point,size:.zero))}
+                }
+            }
+            let padding=max(180,75/max(0.02,fitZoom*3))
+            box=box.insetBy(dx:-padding,dy:-padding)
+            let scale=min(max(100,bounds.width-180)/box.width,max(100,bounds.height-180)/box.height)
+            animateCamera(to:max(fitZoom,min(maximumZoom,fitZoom*4,scale)),center:CGPoint(x:box.midX,y:box.midY))
+        } else {
+            animateCamera(to:max(0.85,zoom),center:positions[selected])
         }
-        updateProjection()
-        animateCamera(to:max(0.85,zoom),center:spatial ? projected[selected].point : positions[selected])
     }
     private func animateCamera(to scale:Double,center:CGPoint,animated:Bool=true){setCamera(zoom:scale,pan:CGPoint(x:bounds.midX-center.x*scale,y:bounds.midY-center.y*scale),animated:animated)}
     private func setCamera(zoom next:Double,pan point:CGPoint,animated:Bool){
         if !spatial && next>=0.5 {let rect=CGRect(x:-point.x/next,y:-point.y/next,width:bounds.width/next,height:bounds.height/next).insetBy(dx:-180,dy:-120);requestLabels(Array(index.query(rect).prefix(180)))}
-        momentum = .zero;if animated && !reduceMotion {cameraAnimation=(zoom,pan,next,point,CACurrentMediaTime());startTimer()} else {cameraAnimation=nil;zoom=next;pan=point;needsDisplay=true;onZoom?("\(Int(zoom*100))%")}}
+        momentum = .zero;if animated && !reduceMotion {cameraAnimation=(zoom,pan,next,point,CACurrentMediaTime());startTimer()} else {cameraAnimation=nil;zoom=next;pan=point;needsDisplay=true;publishOverview()}}
     private func move(_ i:Int,to p:CGPoint){let old=positions[i];positions[i]=p;index.move(i,from:old,to:p)}
     private func beginPhysics(_ i:Int){
         guard !reduceMotion else{return}
@@ -618,6 +703,8 @@ struct RecommendationCanvasHost:NSViewRepresentable {
     }
     private func startTimer(){guard timer==nil,interactionEnabled else{return};timer=Timer(timeInterval:1/60,repeats:true){[weak self] _ in MainActor.assumeIsolated {self?.tick()}};RunLoop.main.add(timer!,forMode:.common)}
     private func tick(){
+        let navigating=cameraAnimation != nil || hypot(momentum.x,momentum.y)>0.12 || hypot(orbitVelocity.x,orbitVelocity.y)>0.0002
+        defer {if navigating {constrainNavigation()};publishOverview()}
         var live=false
         if spatial && !reduceMotion && hypot(orbitVelocity.x, orbitVelocity.y) > 0.0002 {
             orbit.rotate(x: orbitVelocity.x, y: orbitVelocity.y)
@@ -633,7 +720,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
         if let (startZ,startP,endZ,endP,start)=cameraAnimation {
             let t=min(1,(CACurrentMediaTime()-start)/0.42),ease=1-pow(1-t,3)
             zoom=startZ+(endZ-startZ)*ease;pan=CGPoint(x:startP.x+(endP.x-startP.x)*ease,y:startP.y+(endP.y-startP.y)*ease)
-            onZoom?("\(Int(zoom*100))%");if t>=1{cameraAnimation=nil}else{live=true}
+            if t>=1{cameraAnimation=nil}else{live=true}
         }
         if hypot(momentum.x,momentum.y)>0.12 {pan.x+=momentum.x;pan.y+=momentum.y;momentum.x*=0.90;momentum.y*=0.90;live=true}
         if !activePhysics.isEmpty && !reduceMotion {
@@ -664,7 +751,7 @@ struct RecommendationCanvasHost:NSViewRepresentable {
 extension RecommendationCanvasView {
     func setSpatial(_ enabled: Bool) {
         guard spatial != enabled else { return }
-        spatial = enabled;orbit = RecommendationOrbit();orbitVelocity = .zero
+        spatial = enabled;orbit = RecommendationOrbit();orbitVelocity = .zero;clearCameraHistory()
         activePhysics.removeAll();momentum = .zero;projectionDirty = true
         setAccessibilityLabel(enabled ? String(localized: "Story map. Drag to rotate in 3D, Shift-drag or scroll to pan, pinch to zoom. Select a story to preview it.", bundle: .module) : String(localized: "Recommendation map. Scroll to pan, pinch to zoom, and select a story to preview it.", bundle: .module))
         if !nodes.isEmpty { fit(animated: false) }
@@ -678,6 +765,7 @@ extension RecommendationCanvasView {
         projectedIndex = RecommendationSpatialGrid(cell: 240)
         for i in projected.indices { projectedIndex.insert(i, projected[i].point) }
         projectionDirty = false
+        refreshNavigationGeometry()
     }
 
     private var projectedBounds: CGRect {
@@ -698,10 +786,15 @@ extension RecommendationCanvasView {
         RecommendationSphereStyle(projection: projected[i], sceneRadius: projectionRadius, zoom: zoom)
     }
 
+    private func material(_ i: Int) -> RecommendationSphereAtlas.Material {
+        adjacency[i].isEmpty ? .amberLens : .lightHalo
+    }
+
     private func drawSpatialMap(_ context: CGContext) {
         updateProjection()
         if sphereSprites.isEmpty {
-            sphereSprites = sphereAtlas.palette(groupColors, dark: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
+            let dark=effectiveAppearance.bestMatch(from:[.darkAqua,.aqua]) == .darkAqua
+            sphereSprites=[sphereAtlas.images(material:.amberLens,dark:dark),sphereAtlas.images(material:.lightHalo,dark:dark)]
         }
         if let morph, !dissolvingEdges.isEmpty {
             context.saveGState()
@@ -766,7 +859,7 @@ extension RecommendationCanvasView {
             let p = screenPosition(i), style = sphereStyle(i)
             guard bounds.insetBy(dx:-40,dy:-40).contains(p) else { continue }
             let ready = !formationActive || analyzed.contains(i)
-            let images = sphereSprites[colorGroups[i]]
+            let images = sphereSprites[material(i).rawValue]
             guard images.indices.contains(style.blurLevel) else { continue }
             // Sprite padding includes the complete Gaussian halo. Draw far to
             // near so close spheres naturally cover distant ones at crossings.
@@ -777,7 +870,7 @@ extension RecommendationCanvasView {
         context.restoreGState()
         // Text work is bounded separately from geometry. Rasterized labels are
         // reused as the camera moves, and only the selected neighborhood is named.
-        var labels = zoom >= 0.45 ? Array(sorted.reversed().filter { sphereStyle($0).proximity > 0.5 }.prefix(36)) : []
+        var labels = zoom >= fitZoom * 2.5 ? Array(sorted.reversed().filter { sphereStyle($0).proximity > 0.5 }.prefix(36)) : []
         if let selected { labels.removeAll { $0 == selected };labels.insert(selected,at:0) }
         if let hovered, hovered != selected { labels.removeAll { $0 == hovered };labels.insert(hovered,at:0) }
         requestLabels(labels)
@@ -813,6 +906,159 @@ extension RecommendationCanvasView {
     func inspectOrbit(x: Double = 0, y: Double = 0) -> (points: [String: CGPoint], yaw: Double, pitch: Double) {
         orbit.rotate(x: x,y: y);projectionDirty = true;updateProjection()
         return (Dictionary(uniqueKeysWithValues:nodes.indices.map { (nodes[$0].id,projected[$0].point) }),orbit.yaw,orbit.pitch)
+    }
+    #endif
+}
+
+extension RecommendationCanvasView {
+    private var fitZoom: Double {
+        let box = navigationBounds
+        return max(0.018, min(1.1, min(max(100, bounds.width - 140) / max(1, box.width),
+                                    max(100, bounds.height - 180) / max(1, box.height))))
+    }
+    private var minimumZoom: Double { fitZoom * 0.8 }
+    private var maximumZoom: Double { min(2.5, fitZoom * 12) }
+    private var cameraPosition: RecommendationCameraPosition {
+        RecommendationCameraPosition(zoom: zoom, pan: pan, orbit: orbit,
+                                     center: projectionCenter, centerDepth: projectionCenterDepth)
+    }
+    func clearCameraHistory() {
+        cameraHistory.removeAll();publishOverview()
+    }
+    private func markCameraInteraction() {
+        if formationActive { formationCameraAdjusted = true }
+        orbitVelocity = .zero;momentum = .zero;cameraAnimation = nil
+    }
+    private func rememberCamera() {
+        guard interactionEnabled, firstFit, !nodes.isEmpty else { return }
+        let current = cameraPosition
+        if let last = cameraHistory.last,
+           abs(last.zoom - current.zoom) < 0.0001,
+           hypot(last.pan.x-current.pan.x, last.pan.y-current.pan.y) < 2,
+           abs(last.orbit.yaw-current.orbit.yaw) < 0.001,
+           abs(last.orbit.pitch-current.orbit.pitch) < 0.001,
+           last.center == current.center, last.centerDepth == current.centerDepth { return }
+        cameraHistory.append(current)
+        if cameraHistory.count > 20 { cameraHistory.removeFirst() }
+        publishOverview()
+    }
+    func navigateBack() {
+        guard interactionEnabled, !nodes.isEmpty, let saved = cameraHistory.popLast() else { return }
+        markCameraInteraction()
+        orbit = saved.orbit;projectionCenter = saved.center;projectionCenterDepth = saved.centerDepth
+        projectionDirty = true;updateProjection()
+        setCamera(zoom: saved.zoom, pan: saved.pan, animated: false)
+        constrainNavigation();publishOverview()
+        needsDisplay = true
+    }
+    func navigateToFit() {
+        guard interactionEnabled else { return }
+        rememberCamera();markCameraInteraction();fit(animated: true)
+    }
+    func resetDirection() {
+        guard interactionEnabled, spatial else { return }
+        rememberCamera();markCameraInteraction()
+        orbit = RecommendationOrbit();projectionDirty = true
+        fit(animated: true)
+    }
+    func navigateZoom(_ factor: Double) {
+        guard interactionEnabled else { return }
+        rememberCamera();markCameraInteraction()
+        zoomBy(factor, anchor: CGPoint(x: bounds.midX, y: bounds.midY), animated: true)
+    }
+    func navigateOverview(to normalized: CGPoint, remember: Bool) {
+        guard interactionEnabled, spatial, !nodes.isEmpty,
+              normalized.x.isFinite, normalized.y.isFinite else { return }
+        if remember { rememberCamera();window?.makeFirstResponder(self) }
+        markCameraInteraction();updateProjection()
+        let box = navigationBounds
+        let requested = CGPoint(x: box.minX + min(1, max(0, normalized.x)) * box.width,
+                                y: box.minY + min(1, max(0, normalized.y)) * box.height)
+        // A click between clusters lands on a real overview story, not empty
+        // space. Both navigation and drawing reuse this bounded sample.
+        let point = overviewPoints.min { a, b in
+            hypot(a.x-requested.x, a.y-requested.y) < hypot(b.x-requested.x, b.y-requested.y)
+        } ?? requested
+        setCamera(zoom: zoom, pan: CGPoint(x: bounds.midX-point.x*zoom, y: bounds.midY-point.y*zoom), animated: false)
+        constrainNavigation()
+    }
+    private func refreshNavigationGeometry() {
+        navigationBounds = projectedBounds
+        let step = max(1, Int(ceil(Double(projected.count) / 600)))
+        overviewPoints = stride(from: 0, to: projected.count, by: step).map { projected[$0].point }
+    }
+    private func constrainNavigation() {
+        guard interactionEnabled, spatial, !nodes.isEmpty, bounds.width > 0, bounds.height > 0 else { return }
+        updateProjection()
+        let previous = pan
+        let nextZoom = min(maximumZoom, max(minimumZoom, zoom))
+        if nextZoom != zoom {
+            let center = world(CGPoint(x: bounds.midX, y: bounds.midY))
+            zoom = nextZoom;pan = CGPoint(x: bounds.midX-center.x*zoom, y: bounds.midY-center.y*zoom)
+        }
+        let box = navigationBounds
+        let inset = min(90, min(bounds.width, bounds.height) * 0.15)
+        pan.x = min(bounds.width - inset - box.minX * zoom, max(inset - box.maxX * zoom, pan.x))
+        pan.y = min(bounds.height - inset - box.minY * zoom, max(inset - box.maxY * zoom, pan.y))
+        let visible = CGRect(x: (inset-pan.x)/zoom, y: (inset-pan.y)/zoom, width: (bounds.width-2*inset)/zoom, height: (bounds.height-2*inset)/zoom)
+        let hasContent = overviewPoints.contains { visible.contains($0) }
+            || projectedIndex.query(visible).contains { visible.contains(projected[$0].point) }
+        let currentScale = zoom, offset = pan, canvasSize = bounds.size
+        if !hasContent, let closest = overviewPoints.min(by: { a, b in
+            func distance(_ p: CGPoint) -> Double {
+                let q = CGPoint(x: p.x*currentScale+offset.x, y: p.y*currentScale+offset.y)
+                let dx = max(inset-q.x, 0, q.x-(canvasSize.width-inset))
+                let dy = max(inset-q.y, 0, q.y-(canvasSize.height-inset))
+                return dx*dx+dy*dy
+            }
+            return distance(a) < distance(b)
+        }) {
+            let q = screen(closest)
+            pan.x += min(bounds.width-inset, max(inset, q.x)) - q.x
+            pan.y += min(bounds.height-inset, max(inset, q.y)) - q.y
+        }
+        if abs(pan.x-previous.x) > 0.5 { momentum.x = 0 }
+        if abs(pan.y-previous.y) > 0.5 { momentum.y = 0 }
+    }
+    private var overviewSnapshot: RecommendationMapOverview {
+        guard !nodes.isEmpty else { return RecommendationMapOverview() }
+        guard spatial else {
+            return RecommendationMapOverview(canGoBack: !cameraHistory.isEmpty, percent: Int((zoom*100).rounded()))
+        }
+        let box = navigationBounds
+        func normalize(_ p: CGPoint) -> CGPoint {
+            CGPoint(x: (p.x-box.minX)/box.width, y: (p.y-box.minY)/box.height)
+        }
+        let viewport = CGRect(x: -pan.x/zoom, y: -pan.y/zoom, width: bounds.width/zoom, height: bounds.height/zoom)
+        return RecommendationMapOverview(points: overviewPoints.map(normalize),
+            viewport: CGRect(origin: normalize(viewport.origin), size: CGSize(width: viewport.width/box.width, height: viewport.height/box.height)),
+            selected: selected.flatMap { projected.indices.contains($0) ? normalize(projected[$0].point) : nil },
+            canGoBack: !cameraHistory.isEmpty, percent: Int((zoom/fitZoom*100).rounded()))
+    }
+    private func publishOverview() {
+        guard onOverview != nil, !overviewQueued else { return }
+        overviewQueued = true
+        let delay = max(0, 0.05 - (CACurrentMediaTime() - overviewPublished))
+        // Defer outside AppKit drawing/SwiftUI updates; only the minimap leaf
+        // observes this snapshot. Graph and inspector never update per frame.
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            self.overviewQueued = false
+            guard self.interactionEnabled else { return }
+            self.overviewPublished = CACurrentMediaTime()
+            self.updateProjection()
+            self.onOverview?(self.overviewSnapshot)
+        }
+    }
+
+    #if DEBUG
+    var navigationInspection: (overview: RecommendationMapOverview, minimumZoom: Double, maximumZoom: Double, visible: Int, history: Int) {
+        updateProjection()
+        let visible = projected.filter { bounds.insetBy(dx: 2, dy: 2).contains(screen($0.point)) }.count
+        return (overviewSnapshot, minimumZoom, maximumZoom, visible, cameraHistory.count)
+    }
+    func materialForStory(_ id: String) -> RecommendationSphereAtlas.Material? {
+        lookup[id].map { material($0) }
     }
     #endif
 }

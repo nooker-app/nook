@@ -1,15 +1,13 @@
 # Nook map material study
 
-A standalone macOS 26 demo for choosing a new map material before changing the
-shipping app. The default **Connected** mode uses **Amber Lens** for isolated
+A standalone macOS 26 study of the Glass materials now integrated in Nook. The default **Connected** mode uses **Amber Lens** for isolated
 stories and **Light Halo** for stories with one or more graph edges, independently
-of category or rank. Both individual materials and the **current dots** remain
-available for comparison
-on the same native 3D canvas. Drag, scroll, pinch, select stories, and switch
+of category or rank. Both individual materials remain available for comparison on the same native
+3D canvas. Drag, scroll, pinch, select stories, and switch
 appearance without changing the library or recommendation state.
 
 Navigation follows Apple's [map guidance](https://developer.apple.com/design/human-interface-guidelines/maps)
-to retain context when panning and reveal detail as people zoom. The demo adds:
+to retain context when panning and reveal detail as people zoom. The app and demo share:
 
 - A live projected overview, capped at 600 points, with a viewport rectangle;
   click or drag it to move to the nearest overview story, including when clicking
@@ -56,9 +54,9 @@ fetches articles, or opens the user's main app. Selecting a story only previews
 it; **Open original** opens its URL if the user clicks the link.
 
 The build script copies the production canvas, projection, marker renderer and
-Nook palette into the output directory. It adds the demo material and navigation
-hooks to the copy; exact-match guards fail if the production injection points change.
+Nook palette into the output directory. It adds only an individual-material override to the copy; camera navigation and
+adaptive markers are production code. Exact-match guards detect changed hooks.
 The Swift models here adapt the saved graph to that canvas. Demo source files
 are outside every production target. Do not commit the generated app, graph,
-or local screenshots. This is a visual prototype, not a completed integration
-or a large-library performance certification.
+or local screenshots. The demo is for visual comparison; production performance measurements live in
+`docs/perf/magazine-and-spatial-map.md`.

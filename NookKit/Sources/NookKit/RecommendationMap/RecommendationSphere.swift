@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import CoreImage
 
 /// Camera-relative depth cues. World positions and recommendation ranks never
 /// change to produce this effect; rotating the camera changes which side is foggy.
@@ -13,105 +14,81 @@ struct RecommendationSphereStyle {
         let depth = min(1, max(0, 0.5 + projection.depth / max(1800, sceneRadius * 0.9)))
         proximity = depth * depth * (3 - 2 * depth)
         radius = min(16, max(1.8, (4 + sqrt(zoom) * 6) * pow(projection.scale, 1.1) * (0.6 + proximity)))
-        opacity = 0.18 + proximity * 0.82
-        blurLevel = Int(((1 - proximity) * Double(RecommendationSphereAtlas.levels - 1)).rounded())
+        opacity = 0.34 + proximity * 0.66
+        blurLevel = Int((pow(1 - proximity, 2) * Double(RecommendationSphereAtlas.levels - 1)).rounded())
     }
 }
 
-/// Small premultiplied sprites, shared by color and focus level, not by story.
-/// Soft tonal depth and Gaussian convolution are baked once. Camera frames only blit
-/// images in depth order; they never create gradients, filters or blur layers.
-@MainActor
-final class RecommendationSphereAtlas {
+/// Two translucent Nook materials, shared by all stories and twelve focus levels.
+/// The rim, soft illumination and depth blur are baked once per appearance;
+/// camera frames only composite sprites, never create a glass view per article.
+@MainActor final class RecommendationSphereAtlas {
     nonisolated static let levels = 12
     nonisolated static let side = 96
     nonisolated static let sphereRadius = 24.0
-    private var cache: [UInt32: [CGImage]] = [:]
 
-    func palette(_ colors: [NSColor], dark: Bool) -> [[CGImage]] {
-        colors.map { color in
-            let rgb = color.usingColorSpace(.sRGB) ?? .gray
-            let key = UInt32(dark ? 1 : 0) << 24
-                | UInt32((rgb.redComponent * 255).rounded()) << 16
-                | UInt32((rgb.greenComponent * 255).rounded()) << 8
-                | UInt32((rgb.blueComponent * 255).rounded())
-            if let images = cache[key] { return images }
-            // The map has five topic colors. Bound retained variants as well
-            // when the accent or system appearance changes during a session.
-            if cache.count >= 16 { cache.removeAll(keepingCapacity: true) }
-            let tint = SIMD3<Float>(Float(rgb.redComponent), Float(rgb.greenComponent), Float(rgb.blueComponent))
-            let images = Self.lightMaps.compactMap { map -> CGImage? in
-                var pixels = [UInt8](repeating: 0, count: Self.side * Self.side * 4)
-                for i in map.indices {
-                    let sample = map[i], alpha = sample.x
-                    // Content markers use a quiet translucent tint. Broad light
-                    // and a fine rim replace the old point reflection and black
-                    // hemisphere; neither appearance should resemble a marble.
-                    let body = dark ? tint : tint * 0.86
-                    let color = body * sample.y + SIMD3<Float>(repeating: sample.z * (dark ? 1 : 0.65))
-                    for channel in 0..<3 { pixels[i * 4 + channel] = UInt8(min(alpha, max(0, color[channel])) * 255) }
-                    pixels[i * 4 + 3] = UInt8(min(1, max(0, alpha)) * 255)
-                }
-                guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
-                return CGImage(width: Self.side, height: Self.side, bitsPerComponent: 8, bitsPerPixel: 32,
-                    bytesPerRow: Self.side * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                    bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                    provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
-            }
-            cache[key] = images
-            return images
-        }
-    }
+    enum Material: Int { case amberLens, lightHalo }
 
-    // x = opacity, y = premultiplied tint, z = premultiplied soft illumination.
-    // Blurring these three channels before tinting is equivalent to blurring
-    // each colored sphere, so the expensive work is shared by the entire palette.
-    nonisolated private static let lightMaps: [[SIMD3<Float>]] = {
-        var sharp = [SIMD3<Float>](repeating: .zero, count: side * side)
+    private var cache: [Int: [CGImage]] = [:]
+    private let context = CIContext(options: [.cacheIntermediates: false])
+
+    func images(material: Material, dark: Bool) -> [CGImage] {
+        let key = material.rawValue * 2 + (dark ? 1 : 0)
+        if let images = cache[key] { return images }
+        let side = Self.side
+        let radius = Self.sphereRadius
+        var bytes = [UInt8](repeating: 0, count: side * side * 4)
+        let amber = dark ? SIMD3<Double>(0.92, 0.70, 0.42) : SIMD3<Double>(0.58, 0.35, 0.13)
+        let pearl = dark ? SIMD3<Double>(1, 0.96, 0.85) : SIMD3<Double>(0.42, 0.29, 0.16)
         for y in 0..<side {
             for x in 0..<side {
-                let nx = (Double(x) + 0.5 - Double(side) / 2) / sphereRadius
-                let ny = (Double(y) + 0.5 - Double(side) / 2) / sphereRadius
-                let squared = nx * nx + ny * ny
-                guard squared < 1 else { continue }
-                let nz = sqrt(1 - squared)
-                let coverage = min(1, (1 - sqrt(squared)) * sphereRadius)
-                let opacity = coverage * (0.76 + 0.14 * nz)
-                let body = 0.78 + 0.12 * nz - 0.035 * nx - 0.055 * ny
-                let wash = 0.11 * exp(-((nx + 0.3) * (nx + 0.3) / 0.75 + (ny + 0.38) * (ny + 0.38) / 0.65))
-                let rim = 0.19 * pow(1 - nz, 5) * max(0, -0.45 * nx - 0.65 * ny + 0.15)
-                let bounce = 0.035 * pow(1 - nz, 3) * max(0, 0.4 * nx + 0.7 * ny)
-                sharp[y * side + x] = SIMD3(Float(opacity), Float(opacity * body), Float(opacity * (wash + rim + bounce)))
+                let nx = (Double(x) + 0.5 - Double(side) / 2) / radius
+                let ny = (Double(y) + 0.5 - Double(side) / 2) / radius
+                let r = hypot(nx, ny)
+                guard r < 1.18 else { continue }
+                var rgb = SIMD3<Double>.zero, alpha = 0.0
+                func layer(_ color: SIMD3<Double>, _ amount: Double) {
+                    let a = min(1, max(0, amount))
+                    rgb = color * a + rgb * (1 - a)
+                    alpha = a + alpha * (1 - a)
+                }
+                let coverage = min(1, max(0, (1 - r) * radius))
+                let halo = material == .lightHalo
+                let top = max(0, (-nx * 0.48 - ny * 0.75) / max(0.01, r))
+                let bottom = max(0, (nx * 0.45 + ny * 0.78) / max(0.01, r))
+                let rim = exp(-pow((r - 0.955) / 0.036, 2))
+                let inner = exp(-pow((r - 0.87) / 0.10, 2))
+                let wash = exp(-pow((nx + 0.30) / 0.8, 2) - pow((ny + 0.45) / 0.7, 2))
+                layer(amber, exp(-pow((r - 0.99) / 0.10, 2)) * (halo ? 0.08 : 0.045))
+                layer(amber, coverage * (halo ? 0.025 : 0.065 + max(0, ny) * 0.06))
+                layer(pearl, coverage * wash * (halo ? 0.018 : 0.12))
+                layer(amber, inner * bottom * (halo ? 0.08 : 0.30) * coverage)
+                layer(pearl, rim * (0.11 + top * (halo ? 0.48 : 0.72)))
+                layer(amber, rim * bottom * (halo ? 0.33 : 0.55))
+                if halo {
+                    layer(amber, exp(-r*r / 0.13) * 0.14)
+                    layer(amber, min(1, max(0, (0.15 - r) * radius)) * 0.85)
+                    layer(pearl, exp(-r*r / 0.004) * 0.5)
+                }
+                let i = (y * side + x) * 4
+                for channel in 0..<3 { bytes[i + channel] = UInt8(min(alpha, max(0, rgb[channel])) * 255) }
+                bytes[i + 3] = UInt8(alpha * 255)
             }
         }
-        return (0..<levels).map { level in
-            guard level > 0 else { return sharp }
-            let sigma = pow(Double(level) / Double(levels - 1), 1.4) * sphereRadius * 0.32
-            let radius = max(1, Int(ceil(sigma * 3)))
-            var weights = (-radius...radius).map { Float(exp(-Double($0 * $0) / (2 * sigma * sigma))) }
-            let total = weights.reduce(0, +)
-            weights = weights.map { $0 / total }
-            var horizontal = sharp, output = sharp
-            for y in 0..<side {
-                for x in 0..<side {
-                    var value = SIMD3<Float>.zero
-                    for offset in -radius...radius where (0..<side).contains(x + offset) {
-                        value += sharp[y * side + x + offset] * weights[offset + radius]
-                    }
-                    horizontal[y * side + x] = value
-                }
-            }
-            for y in 0..<side {
-                for x in 0..<side {
-                    var value = SIMD3<Float>.zero
-                    for offset in -radius...radius where (0..<side).contains(y + offset) {
-                        value += horizontal[(y + offset) * side + x] * weights[offset + radius]
-                    }
-                    output[y * side + x] = value
-                }
-            }
-            return output
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let image = CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: side * 4, space: space,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else { return [] }
+        let input = CIImage(cgImage: image)
+        let images = (0..<Self.levels).map { level -> CGImage in
+            guard level > 0 else { return image }
+            let sigma = pow(Double(level) / 11, 1.4) * radius * 0.32
+            return context.createCGImage(input.applyingGaussianBlur(sigma: sigma), from: input.extent) ?? image
         }
-    }()
+        cache[key] = images
+        return images
+    }
 }
 #endif

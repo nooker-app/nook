@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor @Observable final class Study {
     var material = DemoMaterial.adaptive
-    var overview = DemoOverviewSnapshot()
+    var overview = RecommendationMapOverview()
     var dark = true
     var selectedID: String?
     let control = RecommendationCanvasControl()
@@ -40,8 +40,7 @@ struct MapSurface: NSViewRepresentable {
         view.setSpatial(true)
         view.install(study.graph, revision: 1, layoutRevision: 1)
         view.onSelect = { study.select($0) }
-        view.onDemoOverview = { study.overview = $0 }
-        view.onZoom = { text in if study.control.zoomText != text { study.control.zoomText = text } }
+        view.onOverview = { study.overview = $0 }
         return view
     }
     func updateNSView(_ view: RecommendationCanvasView, context: Context) {
@@ -56,11 +55,8 @@ struct MaterialSample: View {
     var material: DemoMaterial
     var dark: Bool
     private static let glass = DemoGlassAtlas()
-    private static let original = RecommendationSphereAtlas()
     var body: some View {
-        let sprite = material == .original
-            ? Self.original.palette([NSColor(srgbRed: 0.43, green: 0.65, blue: 0.54, alpha: 1)], dark: dark)[0][0]
-            : Self.glass.images(material: material, dark: dark, sample: true)[0]
+        let sprite = Self.glass.images(material: material, dark: dark, sample: true)[0]
         ZStack {
             Canvas { context, size in
                 var line = Path()
@@ -176,7 +172,7 @@ struct StudyView: View {
                 HStack {
                     Text("질감 살펴보기").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                     Spacer()
-                    Text(study.material == .adaptive ? "CONNECTED" : study.material == .original ? "BEFORE" : "CONCEPT \(study.material == .lens ? "A" : "B")")
+                    Text(study.material == .adaptive ? "CONNECTED" : "CONCEPT \(study.material == .lens ? "A" : "B")")
                         .font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(NookTheme.accent)
                 }
                 if study.material == .adaptive {

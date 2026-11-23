@@ -351,32 +351,16 @@ private struct RecommendationMapCanvas: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
             .onChange(of: model.focusRequest) { _, _ in control.view?.updateSelection(model.selectedID); control.focus() }
             .overlay(alignment: .bottom) {
-                HStack(spacing: 12) {
-                    Button { spatial.toggle() } label: {
-                        Text(verbatim: spatial ? "3D" : "2D").font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(spatial ? NookTheme.accent : .secondary)
-                    }
-                    .accessibilityValue(Text(verbatim: spatial ? "3D" : "2D"))
-                    .help(Text("Switch between 2D and 3D", bundle: .module))
-                    .accessibilityLabel(Text("Switch between 2D and 3D", bundle: .module))
-                    Divider().frame(height: 14)
-                    Button { control.fit() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
-                        .help(Text("Fit map", bundle: .module)).accessibilityLabel(Text("Fit map", bundle: .module))
-                    Divider().frame(height: 14)
-                    Button { control.zoom(0.77) } label: { Image(systemName: "minus") }
-                        .accessibilityLabel(Text("Zoom out", bundle: .module))
-                    Text(control.zoomText).font(.system(size: 10, design: .monospaced)).frame(width: 35).foregroundStyle(.secondary)
-                    Button { control.zoom(1.3) } label: { Image(systemName: "plus") }
-                        .accessibilityLabel(Text("Zoom in", bundle: .module))
-                    Divider().frame(height: 14)
-                    Button { control.focus() } label: { Image(systemName: "location") }
-                        .help(Text("Focus selected story", bundle: .module)).accessibilityLabel(Text("Focus selected story", bundle: .module))
-                    Button { model.focus.toggle() } label: { Image(systemName: "scope").foregroundStyle(model.focus ? NookTheme.accent : .secondary) }
-                        .help(Text("Focus on connections", bundle: .module)).accessibilityLabel(Text("Focus on connections", bundle: .module))
-                        .accessibilityAddTraits(model.focus ? .isSelected : [])
+                RecommendationMapNavigation(model: model, control: control, spatial: $spatial)
+                    .disabled(!model.isInteractive || model.graph.nodes.isEmpty)
+                    .padding(.bottom, 20)
+            }
+            .overlay(alignment: .bottomLeading) {
+                if spatial && !model.graph.nodes.isEmpty {
+                    RecommendationMapMinimap(control: control)
+                        .disabled(!model.isInteractive)
+                        .padding(.leading, 18).padding(.bottom, 82)
                 }
-                .font(.system(size: 12)).buttonStyle(MagazinePlainButtonStyle(capsule: true))
-                .padding(.horizontal, 18).padding(.vertical, 13).glassEffect(.regular, in: .capsule).padding(.bottom, 20)
             }
             .overlay(alignment: .topLeading) {
                 if spatial && !model.graph.nodes.isEmpty {

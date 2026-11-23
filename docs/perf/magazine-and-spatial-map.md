@@ -169,23 +169,38 @@ search result selection using Down/Return, opening the selected article, and
 returning from the reader to an interactive map. The optimized isolated preview
 was left running; the installed app and user's library were not replaced.
 
-### Depth and spherical markers
+### Glass markers and navigation
 
 The 3D canvas uses camera-relative depth for marker size, opacity and Gaussian
-defocus. Markers use a translucent tint, broad soft illumination and a fine rim;
-there is no point reflection or dark hemisphere. Their size is capped at a
-16-point radius, and the palette adapts to light and dark appearance. This keeps
-the content quieter than the Glass navigation controls, consistent with Apple's
-[materials guidance](https://developer.apple.com/design/human-interface-guidelines/materials).
-The five topic colors share twelve baked focus levels per color; rotation only
-draws cached images, far to near. Selection rings and labels remain readable,
-and hit testing picks the visible front sphere at overlaps. The 2D renderer is
-unchanged. No per-story filters, shadows or retained layers are created.
+defocus. Isolated stories use **Amber Lens** (transparent center, fine warm rim);
+stories with actual edges use **Light Halo** (a small luminous center). Categories
+and ranks do not select the material. Two materials share twelve cached focus
+levels per appearance; camera frames only composite images, far to near. Size
+is capped at a 16-point radius. Hit testing picks the visible front marker at
+crossings. The 2D renderer remains unchanged.
 
-With the same 20k native-window benchmark, the flat markers took **6.87 ms median /
-7.48 ms p95**, and the soft markers took **6.34 ms / 7.08 ms** per draw.
-Both runs had 240 measured display callbacks at **16.67 ms p99**, with none over
-25 ms. The final initial draw was **15.20 ms** (reported separately from warm
-camera motion). These are local native drawing/callback measurements, not GPU
-presentation timestamps. Actual-app visual checks used the same 165-story RSS
-snapshot and verified near/far focus, lighting, rotation and article selection.
+System Liquid Glass belongs to the navigation controls and minimap. The map
+uses custom optical sprites to avoid one retained Glass view/filter per story.
+The minimap samples at most 600 projected points, coalesces snapshots to 20 Hz,
+and observes them independently from the graph/search/inspector. Fit-relative
+zoom, bounded panning, framing selected neighbors and twenty-entry camera
+history preserve context. Routine graph updates do not reframe the camera.
+
+The same optimized 20k native-window benchmark after integration measured:
+
+- Canvas draws: **6.44 ms median / 8.34 ms p95**.
+- 240 display callbacks: **16.67 ms p99**, worst **39.90 ms**, **2** over 25 ms.
+- Initial sprite preparation/draw: **46.10 ms**, separately from warm rotation.
+- Final draw: 1,398 representatives and 1,600 edges; no overview labels.
+
+The former soft spheres measured **6.34 ms / 7.08 ms** per draw in an earlier
+run, with a **15.20 ms** initial draw. These are local canvas/callback timings,
+not GPU presentation timestamps or a whole-app FPS guarantee. The standalone
+benchmark does not render SwiftUI's minimap or inspector; appearance preparation
+is still a one-time cost. No new model, download or SDK is required.
+
+`RecommendationNavigationTests` exercises extreme wheel input, min/max zoom,
+minimap corners, resize, camera restoration, routine read-state updates, input
+locking behind the reader, actual-edge material selection and empty/2D state.
+The geometry/stability/navigation suites contain twelve tests. Their offscreen
+bitmap timings use unoptimized code/software rasterization, not presentation.
