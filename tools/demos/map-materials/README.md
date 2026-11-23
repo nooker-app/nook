@@ -1,9 +1,30 @@
 # Nook map material study
 
 A standalone macOS 26 demo for choosing a new map material before changing the
-shipping app. It offers **Amber Lens**, **Light Halo**, and the **current dots**
+shipping app. The default **Connected** mode uses **Amber Lens** for isolated
+stories and **Light Halo** for stories with one or more graph edges, independently
+of category or rank. Both individual materials and the **current dots** remain
+available for comparison
 on the same native 3D canvas. Drag, scroll, pinch, select stories, and switch
 appearance without changing the library or recommendation state.
+
+Navigation follows Apple's [map guidance](https://developer.apple.com/design/human-interface-guidelines/maps)
+to retain context when panning and reveal detail as people zoom. The demo adds:
+
+- A live projected overview, capped at 600 points, with a viewport rectangle;
+  click or drag it to move to the nearest overview story, including when clicking
+  empty space between clusters. Updates are coalesced to at most 20 Hz.
+- Pan boundaries that keep a story in view and stop inertial drift at the edge.
+- Zoom limits relative to the fitted map (80–1,200%); a fitted map reads 100%.
+- Full-map (`0` or Escape), selected neighborhood (`F`), previous camera position
+  (Delete), and reset-orientation controls. Camera history is capped at 20 entries.
+- Selection focus that fits nearby connected stories instead of using a fixed
+  magnification. Coordinates and connections are unchanged by navigation.
+
+Geometry checks exercised all four overview corners, extreme continuous wheel
+events, repeated minimum/maximum zoom, 30 selected-story targets, and restoring
+the previous camera on both a 107-story local RSS snapshot and a 20,000-node
+fixture. They check visibility and camera state, not presented-frame performance.
 
 The toolbar uses SwiftUI's system Liquid Glass. The graph uses custom cached
 optical sprites, not a live system Glass view for every article: transparent
@@ -35,8 +56,8 @@ fetches articles, or opens the user's main app. Selecting a story only previews
 it; **Open original** opens its URL if the user clicks the link.
 
 The build script copies the production canvas, projection, marker renderer and
-Nook palette into the output directory. It adds only the demo material hook to
-the copy; exact-match guards fail if the production injection points change.
+Nook palette into the output directory. It adds the demo material and navigation
+hooks to the copy; exact-match guards fail if the production injection points change.
 The Swift models here adapt the saved graph to that canvas. Demo source files
 are outside every production target. Do not commit the generated app, graph,
 or local screenshots. This is a visual prototype, not a completed integration

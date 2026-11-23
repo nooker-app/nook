@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 @MainActor @Observable final class Study {
-    var material = DemoMaterial.lens
+    var material = DemoMaterial.adaptive
+    var overview = DemoOverviewSnapshot()
     var dark = true
     var selectedID: String?
     let control = RecommendationCanvasControl()
@@ -18,6 +19,7 @@ import SwiftUI
         }, edges: snapshot.edges)
         selectedID = nil
     }
+    var connectedCount: Int { Set(snapshot.edges.flatMap { [$0.a, $0.b] }).count }
     var selected: DemoStory? { snapshot.nodes.first { $0.id == selectedID } }
     var related: [DemoStory] {
         guard let selectedID else { return [] }
@@ -38,6 +40,7 @@ struct MapSurface: NSViewRepresentable {
         view.setSpatial(true)
         view.install(study.graph, revision: 1, layoutRevision: 1)
         view.onSelect = { study.select($0) }
+        view.onDemoOverview = { study.overview = $0 }
         view.onZoom = { text in if study.control.zoomText != text { study.control.zoomText = text } }
         return view
     }
@@ -100,7 +103,14 @@ struct StudyView: View {
                         .padding(.horizontal, 30).padding(.top, 25)
                         Spacer()
                     }.allowsHitTesting(false)
-                    cameraControls.padding(.bottom, 24)
+                    VStack {
+                        Spacer()
+                        HStack {
+                            OverviewMap(study: study).padding(.leading, 20)
+                            Spacer()
+                        }.padding(.bottom, 82)
+                    }
+                    NavigationControls(study: study).padding(.bottom, 24)
                 }
                 Rectangle().fill(NookTheme.hairline.opacity(0.45)).frame(width: 0.5)
                 sidebar.frame(width: 294)
@@ -160,30 +170,31 @@ struct StudyView: View {
         }
         .padding(.leading, 92).padding(.trailing, 23).frame(height: 73)
     }
-    private var cameraControls: some View {
-        HStack(spacing: 12) {
-            Text("3D").font(.system(size: 11, weight: .semibold)).foregroundStyle(NookTheme.accent)
-            Divider().frame(height: 14)
-            Button { study.control.fit() } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
-                .help("전체 지도").accessibilityLabel("전체 지도")
-            Button { study.control.zoom(0.75) } label: { Image(systemName: "minus") }.help("축소").accessibilityLabel("축소")
-            Text(study.control.zoomText).font(.system(size: 11, design: .monospaced)).frame(width: 36)
-            Button { study.control.zoom(1.3) } label: { Image(systemName: "plus") }.help("확대").accessibilityLabel("확대")
-        }
-        .buttonStyle(.plain).font(.system(size: 12)).padding(.horizontal, 18).padding(.vertical, 13)
-        .glassEffect(.regular, in: .capsule)
-    }
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     Text("질감 살펴보기").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                     Spacer()
-                    Text(study.material == .original ? "BEFORE" : "CONCEPT \(study.material == .lens ? "A" : "B")")
+                    Text(study.material == .adaptive ? "CONNECTED" : study.material == .original ? "BEFORE" : "CONCEPT \(study.material == .lens ? "A" : "B")")
                         .font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(NookTheme.accent)
                 }
-                MaterialSample(material: study.material, dark: study.dark)
-                    .background(NookTheme.card.opacity(0.4), in: .rect(cornerRadius: 18))
+                if study.material == .adaptive {
+                    HStack(spacing: 8) {
+                        VStack(spacing: 8) {
+                            MaterialSample(material: .lens, dark: study.dark).scaleEffect(0.64).frame(width: 112, height: 88)
+                            Text("연결 없음 · \(study.graph.nodes.count-study.connectedCount)").font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                        VStack(spacing: 8) {
+                            MaterialSample(material: .halo, dark: study.dark).scaleEffect(0.64).frame(width: 112, height: 88)
+                            Text("연결 있음 · \(study.connectedCount)").font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                    }.frame(height: 132).frame(maxWidth: .infinity)
+                        .background(NookTheme.card.opacity(0.4), in: .rect(cornerRadius: 18))
+                } else {
+                    MaterialSample(material: study.material, dark: study.dark)
+                        .background(NookTheme.card.opacity(0.4), in: .rect(cornerRadius: 18))
+                }
                 Text(study.material.title).font(.system(size: 24, weight: .semibold, design: .serif))
                 Text(study.material.caption).font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(5)
                 Rectangle().fill(NookTheme.hairline.opacity(0.5)).frame(height: 0.5).padding(.vertical, 6)
