@@ -131,11 +131,12 @@ extension NookWidgetCollection {
 
 struct NookWidgetBackground: View {
     var body: some View {
-        // No opaque brand plate: full-color widgets use native glass too.
-        // In Clear/Tinted mode WidgetKit replaces this removable background
-        // with its own system material and recolors the content groups.
-        Color.clear
-            .glassEffect(.regular.tint(NookWidgetStyle.accent.opacity(0.035)), in: ContainerRelativeShape())
+        // Use a backdrop material in full-color mode, not a second glass
+        // surface inside WidgetKit's host. Regular glass adds a dark plate
+        // here. The host owns the outer glass treatment and replaces this
+        // removable background entirely in Clear/Tinted appearances.
+        ContainerRelativeShape()
+            .fill(.ultraThinMaterial)
     }
 }
 
