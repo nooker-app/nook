@@ -53,6 +53,7 @@ struct NookWidget: Widget {
         .configurationDisplayName("Reading shortcuts")
         .description("Your unread count and a shortcut to every collection.")
         .supportedFamilies([.systemSmall, .systemMedium])
+        .nookHostBackground()
     }
 }
 
@@ -80,6 +81,7 @@ private struct NookReadingConfiguration {
         .configurationDisplayName(collection.title)
         .description(collection.detail)
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .nookHostBackground()
     }
 }
 
@@ -131,12 +133,13 @@ extension NookWidgetCollection {
 
 struct NookWidgetBackground: View {
     var body: some View {
-        // Use a backdrop material in full-color mode, not a second glass
-        // surface inside WidgetKit's host. Regular glass adds a dark plate
-        // here. The host owns the outer glass treatment and replaces this
-        // removable background entirely in Clear/Tinted appearances.
-        ContainerRelativeShape()
-            .fill(.ultraThinMaterial)
+        if NookWidgetHostBackground.isAvailable {
+            // The host provides blur and tint. A material inside this container
+            // would restore the dark plate over that translucent background.
+            Color.clear
+        } else {
+            ContainerRelativeShape().fill(.ultraThinMaterial)
+        }
     }
 }
 

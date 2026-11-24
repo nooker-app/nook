@@ -62,11 +62,31 @@ only. Actual WidgetKit timelines succeeded for all three variants on macOS
 | Private host blur + clear container | Blurred background color with readable tint |
 | Private transparent host + clear container | Much more visible underlying content |
 
-The user selected **host blur (B)**. This is an experimentally verified private
-API path, not a supported public WidgetKit feature or a production integration.
-The system settings and real library were unchanged. Earlier temporary Nook
-bundle replacements were restored to the signed 0.1.76 (80) release; the lab
-remains a separate app. Its private declarations are absent from normal builds.
+The user selected **host blur (B)** and authorized production deployment. All
+four macOS widget kinds now apply that host request with a clear removable
+container. `NookWidgetHostBackground` weak-links the function, opaque result
+descriptor, blur case and enum metadata accessor, checking every symbol before
+forming the private configuration. Its stored type contains only the public
+configuration; the guarded computed projection is not inlined into fallback.
+If the API is absent, the original material background remains available.
+
+The widget target alone generates a six-file SDK declaration overlay under
+DerivedData using a sandboxed build phase with explicit inputs and outputs.
+Nothing modifies the installed SDK or embeds Apple's framework in the app.
+The iOS targets do not use the bridge. This is still an unsupported API:
+present symbols cannot guarantee identical behavior after every OS update.
+
+Validation includes `make build`, a Release widget for both arm64 and x86_64,
+and inspection of all four weak imports in each architecture. Running
+`python3 tools/check-widget-host-background.py` builds the actual widget source
+both normally and with its private function/opaque metadata imports renamed to
+nonexistent symbols. Both executables launch and construct all four public
+widget configurations; the missing-symbol case reports the fallback available.
+This check covers linking and configuration construction, not an OS without
+the API rendering a timeline. The installed Release widget also generated
+accepted actual-article timelines for Latest and Recommended and placeholders
+for every supported widget kind/size on macOS 26.5.1. System appearance and
+library data were unchanged.
 
 ## Measured refresh costs
 

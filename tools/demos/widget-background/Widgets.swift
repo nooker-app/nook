@@ -1,8 +1,7 @@
 import SwiftUI
 import WidgetKit
 
-// Isolated experiment only. The private declarations live in a temporary SDK
-// overlay created by build.py, never in the Nook app or its widget target.
+// Isolated comparison app; B exercises the same optional host bridge as Nook.
 struct LabProvider: TimelineProvider {
     func placeholder(in context: Context) -> NookEntry {
         NookEntry(date: .now, snapshot: .preview)
@@ -39,7 +38,9 @@ struct PublicMaterialWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "GlassLabPublic", provider: LabProvider()) { entry in
             LabContent(entry: entry, label: "A · PUBLIC MATERIAL")
-                .containerBackground(for: .widget) { NookWidgetBackground() }
+                .containerBackground(for: .widget) {
+                    ContainerRelativeShape().fill(.ultraThinMaterial)
+                }
         }
         .configurationDisplayName("A · Public Material")
         .description("Control: Nook's current public SwiftUI material background.")
@@ -56,7 +57,7 @@ struct PrivateBlurWidget: Widget {
         .configurationDisplayName("B · Home Blur")
         .description("Experiment: request the host blur background used by Home.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
-        .preferredBackgroundStyle(.blur)
+        .nookHostBackground()
     }
 }
 

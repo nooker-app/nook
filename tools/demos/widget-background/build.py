@@ -21,22 +21,8 @@ root = args.output.resolve()
 root.mkdir(parents=True, exist_ok=True)
 sdk = Path(subprocess.check_output(["xcrun", "--show-sdk-path"], text=True).strip())
 framework = root / "Frameworks/WidgetKit.framework"
-run("ditto", sdk / "System/Library/Frameworks/WidgetKit.framework", framework)
-
-# Non-frozen declarations preserve runtime enum case layout and the opaque
-# result's system metadata. Do not hardcode enum tags or guess return storage.
-private_interface = """
-public enum WidgetBackgroundStyle {
-    case transparent
-    case blur
-    case opaque
-}
-extension SwiftUI.WidgetConfiguration {
-    @_Concurrency.MainActor @preconcurrency public func preferredBackgroundStyle(_ style: WidgetKit.WidgetBackgroundStyle) -> some SwiftUI.WidgetConfiguration
-}
-"""
-for interface in (framework / "Modules/WidgetKit.swiftmodule").glob("*.swiftinterface"):
-    interface.write_text(interface.read_text() + private_interface)
+run("/usr/bin/python3", repo / "tools/prepare-widget-host-sdk.py", "--sdk", sdk,
+    "--output", framework.parent)
 
 app = root / "Nook Glass Lab.app"
 extension = app / "Contents/PlugIns/GlassLabWidgets.appex"
@@ -85,7 +71,8 @@ compile_args = ["xcrun", "swiftc", "-parse-as-library", "-O", "-target", "arm64-
                 "-sdk", sdk, "-module-cache-path", root / "module-cache"]
 run(*compile_args, "-F", root / "Frameworks", "-application-extension",
     "-module-name", "GlassLabWidgets", "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain",
-    source / "Widgets.swift", root / "ProductionContent.swift", root / "WidgetShared.swift",
+    source / "Widgets.swift", repo / "NookWidget/NookWidgetHostBackground.swift",
+    root / "ProductionContent.swift", root / "WidgetShared.swift",
     root / "WidgetSnapshot.swift", "-o", extension / "Contents/MacOS/GlassLabWidgets")
 run(*compile_args, source / "App.swift", "-o", app / "Contents/MacOS/Nook Glass Lab")
 

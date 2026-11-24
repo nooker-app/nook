@@ -355,6 +355,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 22E39C413000BD9A00C3ECB6 /* Build configuration list for PBXNativeTarget "NookWidgetExtension" */;
 			buildPhases = (
+				2D5749444745540000000001 /* Prepare optional widget host SDK */,
 				22E39C243000BD9900C3ECB6 /* Sources */,
 				22E39C253000BD9900C3ECB6 /* Frameworks */,
 				22E39C263000BD9900C3ECB6 /* Resources */,
@@ -593,6 +594,40 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		2D5749444745540000000001 /* Prepare optional widget host SDK */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(SRCROOT)/tools/prepare-widget-host-sdk.py",
+				"$(SDKROOT)/System/Library/Frameworks/WidgetKit.framework/Versions/A/WidgetKit.tbd",
+				"$(SDKROOT)/System/Library/Frameworks/WidgetKit.framework/Versions/A/Headers/WidgetKit.h",
+				"$(SDKROOT)/System/Library/Frameworks/WidgetKit.framework/Versions/A/Headers/WGWidgetDefines.h",
+				"$(SDKROOT)/System/Library/Frameworks/WidgetKit.framework/Versions/A/Modules/module.modulemap",
+				"$(SDKROOT)/System/Library/Frameworks/WidgetKit.framework/Versions/A/Modules/WidgetKit.swiftmodule/arm64e-apple-macos.swiftinterface",
+				"$(SDKROOT)/System/Library/Frameworks/WidgetKit.framework/Versions/A/Modules/WidgetKit.swiftmodule/x86_64-apple-macos.swiftinterface",
+			);
+			name = "Prepare optional widget host SDK";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Headers",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Modules",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Modules/WidgetKit.swiftmodule",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/WidgetKit.tbd",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Headers/WidgetKit.h",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Headers/WGWidgetDefines.h",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Modules/module.modulemap",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Modules/WidgetKit.swiftmodule/arm64e-apple-macos.swiftinterface",
+				"$(DERIVED_FILE_DIR)/NookWidgetHostSDK/WidgetKit.framework/Modules/WidgetKit.swiftmodule/x86_64-apple-macos.swiftinterface",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/usr/bin/python3 \"$SRCROOT/tools/prepare-widget-host-sdk.py\" --sdk \"$SDKROOT\" --output \"$DERIVED_FILE_DIR/NookWidgetHostSDK\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		22E39C243000BD9900C3ECB6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -708,6 +743,7 @@
 				DEVELOPMENT_TEAM = F7WUT95TT6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = ("$(DERIVED_FILE_DIR)/NookWidgetHostSDK", "$(inherited)", );
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NookWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NookWidget;
@@ -748,6 +784,7 @@
 				DEVELOPMENT_TEAM = F7WUT95TT6;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = ("$(DERIVED_FILE_DIR)/NookWidgetHostSDK", "$(inherited)", );
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NookWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NookWidget;

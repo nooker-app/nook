@@ -1,8 +1,8 @@
 # Widget background experiment
 
 An isolated macOS WidgetKit app comparing the same production Nook content with
-three background paths. This is **not** a production fix and is not included in
-the Nook Xcode project, release build, or app group.
+three background paths. The lab app is not included in the Nook release or app
+group. B now exercises Nook's optional production host-background bridge.
 
 | Widget | Container content | Host request |
 | --- | --- | --- |
@@ -13,11 +13,13 @@ the Nook Xcode project, release build, or app group.
 The installed Home extension imports `preferredBackgroundStyle` and the `blur`
 enum case. The public macOS 26.5 WidgetKit Swift interface does not expose them;
 an ordinary compile fails with “no member preferredBackgroundStyle”. The SDK's
-linker stub does export the symbols. The build script copies the SDK framework
-to a temporary directory and adds minimal declarations to that copy only. The
+linker stub does export the symbols. The build script uses
+`tools/prepare-widget-host-sdk.py` to copy the required SDK declarations to a
+temporary directory and add weak-linked declarations to that copy only. The
 app links Apple's installed WidgetKit; no Apple framework or modified SDK is
 embedded or checked into the repository. This unsupported ABI can change with
-macOS updates and must not enter the production target through this experiment.
+macOS updates. The production bridge checks its required symbols before use;
+the standalone C variant is an experiment without that compatibility wrapper.
 
 Build from the repository root with a local signing identity:
 
@@ -57,6 +59,6 @@ transmitting substantially more of the background. Home was visible alongside
 the variants. The selected appearance is **B · Home Blur**.
 
 This confirms the mechanism in the actual host on this OS, not compatibility
-with other macOS versions or approval for a production release. Nook remains
-on its signed 0.1.76 (80) release; the temporary replacements used earlier in
-the investigation were restored before this independent experiment.
+with all future macOS versions. The selected B style is implemented for Nook's
+macOS widgets through `NookWidgetHostBackground.swift`. The lab remains a
+separate app with sample data.
