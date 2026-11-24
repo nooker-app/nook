@@ -122,7 +122,7 @@ import os
             engine = RecommendationGraphEngine.shared(scope: nextScope)
         }
         loading = libraryGraph.nodes.isEmpty
-        let snapshot = await store.recommendationMapSnapshot()
+        guard let snapshot = await store.recommendationMapSnapshot() else { return }
         Self.log.debug("snapshot generation=\(expected) current=\(self.generation) cancelled=\(Task.isCancelled) matchingScope=\(snapshot.scope == self.scope) engine=\(self.engine != nil) articles=\(snapshot.library.articles.count)")
         guard !Task.isCancelled, generation == expected, snapshot.scope == scope, let engine else { return }
         feedback.selectLibrary(scope)

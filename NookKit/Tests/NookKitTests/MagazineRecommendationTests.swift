@@ -6,6 +6,32 @@ import Testing
 struct MagazineRecommendationTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @Test("A long-lived widget ranker adopts other readers' feedback and resets only when the profile changes")
+    @MainActor func sharedProfileRefresh() throws {
+        let name = "WidgetRecommendations.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let reader = MagazineRecommendationController(defaults: defaults)
+        let widget = MagazineRecommendationController(defaults: defaults)
+        reader.selectLibrary("one")
+        widget.selectLibrary("one")
+        let revision = widget.revision
+        defaults.set(true, forKey: "unrelated-setting")
+        #expect(!widget.reloadStoredHistory())
+        #expect(widget.revision == revision)
+        _ = reader.markNotInterested("story")
+        #expect(widget.reloadStoredHistory())
+        #expect(widget.isNotInterested("story"))
+        #expect(!widget.reloadStoredHistory())
+        MagazineRecommendationController.reset(defaults: defaults)
+        #expect(widget.reloadStoredHistory())
+        #expect(!widget.isNotInterested("story"))
+        widget.selectLibrary("two")
+        _ = reader.markNotInterested("other-library-story")
+        #expect(!widget.reloadStoredHistory())
+        #expect(!widget.isNotInterested("other-library-story"))
+    }
+
     @Test("Explicit skips change ranking immediately without hiding the article from the library")
     func skipRanking() async throws {
         let first = article("first", title: "Swift architecture")

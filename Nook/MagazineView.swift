@@ -55,7 +55,7 @@ struct MagazineView: View {
 
     private var magazineMediaEnabled: Bool {
         #if DEBUG
-        return perfMediaEnabled && opened == nil && store.isForegroundActive
+        return perfMediaEnabled && opened == nil && (store.isForegroundActive || PerfLaunch.isBackground)
         #else
         return opened == nil && store.isForegroundActive
         #endif
@@ -750,56 +750,13 @@ struct MagazineView: View {
         #endif
         if let article = store.listedArticle(withID: row.id) {
             Button { openArticle(article.id, fromRecommendation: isRecommendationList || lead) } label: {
-                VStack(alignment: .leading, spacing: lead ? 20 : 18) {
-                    if lead {
-                        Label(recommendation?.personalized == true ? "Picked for you" : "Fresh from your subscriptions",
-                              systemImage: recommendation?.personalized == true ? "bookmark" : "sun.max")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(NookTheme.accent)
-                            .padding(.trailing, 210)
-                            .help(recommendation?.personalized == true
-                                ? Text("Based on your reading time, starred stories, and interests. Ranked on this Mac.")
-                                : Text("Read and star stories to make future picks more personal."))
-                    }
-                    MagazineArticleHeading(article: article, feedTitle: row.feedDisplayTitle ?? "",
-                                           namespace: hero, expanded: false, lead: lead, matched: opened != row.id,
-                                           trailingControlSpace: isRecommendationList && !lead ? 38 : 0)
-                        .allowsHitTesting(false)
-                    MagazineCategoryLabels(store.categories(forArticle: article))
-                    MagazineTranslatedSummary(id: article.id, summary: article.summary, size: lead ? 15 : 13)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: lead ? 900 : .infinity, alignment: .leading)
-                        .allowsHitTesting(false)
-                    Spacer(minLength: lead ? 8 : 0)
-                    HStack(spacing: 8) {
-                        if !article.isRead { Circle().fill(NookTheme.accent).frame(width: 5, height: 5) }
-                        if store.smartSelection == .recent, let date = store.recentlyRead.opened[article.id] {
-                            Image(systemName: "clock")
-                            Text(date, format: .relative(presentation: .named))
-                        } else {
-                            Text(article.publishedAt, style: .date)
-                        }
-                        Text("·")
-                        ArticleReadingTimeLabel(article: article, viewportBound: true)
-                        Spacer()
-                        if recommendations.isNotInterested(article.id) {
-                            Image(systemName: "hand.thumbsdown").help("Excluded from recommendations")
-                        }
-                        if article.isStarred { Image(systemName: "star.fill").foregroundStyle(.orange) }
-                        Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .medium))
-                    }.font(.system(size: 11)).foregroundStyle(.secondary)
-                        .allowsHitTesting(false)
-                }
-                .padding(lead ? 32 : 24)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .frame(minHeight: lead ? 300 : 310, maxHeight: .infinity, alignment: .topLeading)
-                .background {
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(NookTheme.card)
-                        .modifier(MagazineMatch(id: "surface-\(row.id)", namespace: hero, enabled: opened != row.id))
-                }
-                .opacity(opened == row.id ? 0 : 1)
-                .contentShape(RoundedRectangle(cornerRadius: 18))
+                MagazineCardSurface(article: article, feedTitle: row.feedDisplayTitle ?? "",
+                    categories: store.categories(forArticle: article), namespace: hero, lead: lead,
+                    matched: opened != row.id, personalized: recommendation?.personalized == true,
+                    showsDismissal: isRecommendationList && !lead,
+                    recentlyOpened: store.smartSelection == .recent ? store.recentlyRead.opened[article.id] : nil,
+                    notInterested: recommendations.isNotInterested(article.id))
+                    .equatable()
             }
             .buttonStyle(MagazineCardStyle())
             .overlay(alignment: .topTrailing) {
@@ -1162,4 +1119,76 @@ struct MagazineArticleHeading: View {
 private struct MagazineCardBoundary<Content: View>: View {
     @ViewBuilder var content: () -> Content
     var body: some View { content() }
+}
+
+/// A refresh changes the library collection, but unchanged cards keep their
+/// native text/layout subtree. Live translation and thumbnail state remain in
+/// the leaf views and still update independently of this value comparison.
+private struct MagazineCardSurface: View, Equatable {
+    let article: Article
+    let feedTitle: String
+    let categories: [ArticleCategory]
+    let namespace: Namespace.ID
+    let lead: Bool
+    let matched: Bool
+    let personalized: Bool
+    let showsDismissal: Bool
+    let recentlyOpened: Date?
+    let notInterested: Bool
+
+    var body: some View {
+        #if DEBUG
+        let _ = MainThreadLog.add("magazine.card.surface", ms: 0)
+        #endif
+        VStack(alignment: .leading, spacing: lead ? 20 : 18) {
+            if lead {
+                Label(personalized ? "Picked for you" : "Fresh from your subscriptions",
+                      systemImage: personalized ? "bookmark" : "sun.max")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(NookTheme.accent)
+                    .padding(.trailing, 210)
+                    .help(personalized
+                        ? Text("Based on your reading time, starred stories, and interests. Ranked on this Mac.")
+                        : Text("Read and star stories to make future picks more personal."))
+            }
+            MagazineArticleHeading(article: article, feedTitle: feedTitle,
+                                   namespace: namespace, expanded: false, lead: lead, matched: matched,
+                                   trailingControlSpace: showsDismissal ? 38 : 0)
+                .allowsHitTesting(false)
+            MagazineCategoryLabels(categories)
+            MagazineTranslatedSummary(id: article.id, summary: article.summary, size: lead ? 15 : 13)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: lead ? 900 : .infinity, alignment: .leading)
+                .allowsHitTesting(false)
+            Spacer(minLength: lead ? 8 : 0)
+            HStack(spacing: 8) {
+                if !article.isRead { Circle().fill(NookTheme.accent).frame(width: 5, height: 5) }
+                if let date = recentlyOpened {
+                    Image(systemName: "clock")
+                    Text(date, format: .relative(presentation: .named))
+                } else {
+                    Text(article.publishedAt, style: .date)
+                }
+                Text("·")
+                ArticleReadingTimeLabel(article: article, viewportBound: true)
+                Spacer()
+                if notInterested {
+                    Image(systemName: "hand.thumbsdown").help("Excluded from recommendations")
+                }
+                if article.isStarred { Image(systemName: "star.fill").foregroundStyle(.orange) }
+                Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .medium))
+            }.font(.system(size: 11)).foregroundStyle(.secondary)
+                .allowsHitTesting(false)
+        }
+        .padding(lead ? 32 : 24)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(minHeight: lead ? 300 : 310, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: 18)
+                .fill(NookTheme.card)
+                .modifier(MagazineMatch(id: "surface-\(article.id)", namespace: namespace, enabled: matched))
+        }
+        .opacity(matched ? 1 : 0)
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+    }
 }

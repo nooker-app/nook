@@ -243,3 +243,18 @@ in a standalone optimized native-window benchmark with 20,000 fixture nodes.
 It opens a foreground window and exits after 260 display callbacks. See
 [the measurement report](../../docs/perf/magazine-and-spatial-map.md) for scope,
 controls and results. Classic scenarios and their table probe are unchanged.
+
+## Background-only captures
+
+Pass `-NookPerfBackground YES` in a scenario's `launchArgs` to leave the user's
+foreground application alone. The driver skips activation and keeps its window
+behind other windows. In this isolated DEBUG launch only, Magazine preview
+requests remain enabled despite the inactive scene, so originals and thumbnails
+can still be exercised. Widget publishing writes `.nook-perf-widget.json` inside
+the fixture and never reloads installed widgets. The production foreground and
+network-demand rules are unchanged.
+
+Use main-thread watchdog stalls and phase timings for these runs. Occlusion can
+throttle display callbacks; do not present background frame statistics as the
+user's foreground scrolling FPS. See
+[widget and refresh investigation](../../docs/perf/widget-and-refresh.md).

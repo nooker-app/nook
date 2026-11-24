@@ -929,7 +929,9 @@ public final class ReaderStore {
     public var magazineContentRevision: Int { displayRevision }
 
     #if os(macOS)
-    func recommendationMapSnapshot() async -> RecommendationLibrarySnapshot {
+    @ObservationIgnored private let recommendationSnapshots = RecommendationSnapshotBuilder()
+
+    func recommendationMapSnapshot() async -> RecommendationLibrarySnapshot? {
         let scope = syncFolderURL?.standardizedFileURL.path ?? "local"
         var eligible = articles.filter { !filteredArticleIDs.contains($0.id) }
         for index in eligible.indices {
@@ -943,9 +945,8 @@ public final class ReaderStore {
         for article in eligible {
             if case .ready(let content) = readerContentStates[article.id] { html[article.id] = content }
         }
-        return await Task.detached(priority: .utility) {
-            RecommendationLibrarySnapshot(scope: scope, library: library, readerHTML: html)
-        }.value
+        guard !Task.isCancelled, scope == (syncFolderURL?.standardizedFileURL.path ?? "local") else { return nil }
+        return try? await recommendationSnapshots.snapshot(scope: scope, library: library, readerHTML: html)
     }
 
     public func refreshArticleSearch() {

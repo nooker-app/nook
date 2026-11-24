@@ -37,7 +37,9 @@ final class PerfDriver {
     static func prepareLaunchIfRequested() {
         guard PerfLaunch.isActive else { return }
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        if !UserDefaults.standard.bool(forKey: "NookPerfBackground") {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         MainThreadLog.note("perf.activation", extra: "pid=\(ProcessInfo.processInfo.processIdentifier) windows=\(NSApp.windows.count) policy=\(NSApp.activationPolicy().rawValue)")
         MainThreadLog.flush()
         requestInitialWindow(after: 1, retry: true)
@@ -415,8 +417,12 @@ final class PerfDriver {
         window.setFrameAutosaveName("")
         window.setContentSize(NSSize(width: 1440, height: 900))
         window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if UserDefaults.standard.bool(forKey: "NookPerfBackground") {
+            window.orderBack(nil)
+        } else {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
         // Let the resize lay out before the dividers are placed against it.
         try await Task.sleep(for: .milliseconds(300))
         if UserDefaults.standard.string(forKey: "macLayoutMode") == "magazine" {

@@ -72,7 +72,14 @@ public struct MagazineArticleThumbnail: View {
     }
 
     private var taskID: String {
-        "\(article.id)|\(article.url)|\(visible)|\(expanded)|\(scenePhase == .active)|\(preferences.revision)"
+        "\(article.id)|\(article.url)|\(visible)|\(expanded)|\(mayFetch)|\(preferences.revision)"
+    }
+
+    private var mayFetch: Bool {
+        #if DEBUG
+        if PerfLaunch.isBackground { return true }
+        #endif
+        return scenePhase == .active
     }
 
     public var body: some View {
@@ -96,7 +103,7 @@ public struct MagazineArticleThumbnail: View {
                 guard !Task.isCancelled else { return }
                 show(cached, animated: false)
             }
-            guard visible, !expanded, scenePhase == .active, preferences.policy(for: article.feedID).enabled else { return }
+            guard visible, !expanded, mayFetch, preferences.policy(for: article.feedID).enabled else { return }
             do {
                 // Ignore cards crossed during a fast flick, and let the lead start
                 // first without prefetching the entire loaded page of articles.

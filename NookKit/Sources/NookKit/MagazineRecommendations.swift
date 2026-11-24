@@ -273,6 +273,7 @@ public final class MagazineRecommendationController {
     public private(set) var revision = 0
     private var history = MagazineReadingHistory()
     private var scope = ""
+    private var storedHistory: Data?
     private let defaults: UserDefaults
     private let ranker = MagazineRecommendationRanker()
     private var storageKey: String { "magazineReadingHistory.v1." + scope }
@@ -347,18 +348,38 @@ public final class MagazineRecommendationController {
     }
 
     private func saveFeedback() {
-        if !scope.isEmpty, let data = try? JSONEncoder().encode(history) { defaults.set(data, forKey: storageKey) }
+        persistHistory()
         revision &+= 1
+    }
+
+    private func persistHistory() {
+        guard !scope.isEmpty, let data = try? JSONEncoder().encode(history) else { return }
+        storedHistory = data
+        defaults.set(data, forKey: storageKey)
     }
 
     public func selectLibrary(_ identifier: String) {
         let key = SHA256.hash(data: Data(identifier.utf8)).map { String(format: "%02x", $0) }.joined()
         guard key != scope else { return }
         scope = key
-        history = defaults.data(forKey: storageKey).flatMap {
+        storedHistory = defaults.data(forKey: storageKey)
+        history = storedHistory.flatMap {
             try? JSONDecoder().decode(MagazineReadingHistory.self, from: $0)
         } ?? MagazineReadingHistory()
         revision &+= 1
+    }
+
+    /// Other reading surfaces may save feedback. Keep the ranker's expensive
+    /// token/vector caches while adopting only an actual profile change.
+    @discardableResult public func reloadStoredHistory() -> Bool {
+        guard !scope.isEmpty else { return false }
+        let data = defaults.data(forKey: storageKey)
+        guard data != storedHistory else { return false }
+        storedHistory = data
+        history = data.flatMap { try? JSONDecoder().decode(MagazineReadingHistory.self, from: $0) }
+            ?? MagazineReadingHistory()
+        revision &+= 1
+        return true
     }
 
     public func recordSelection(articleID: Article.ID, now: Date = .now) {
@@ -370,7 +391,7 @@ public final class MagazineRecommendationController {
     public func recordReading(articleID: Article.ID, seconds: Double, now: Date = .now) {
         guard !scope.isEmpty else { return }
         history.record(articleID, seconds: seconds, now: now)
-        if let data = try? JSONEncoder().encode(history) { defaults.set(data, forKey: storageKey) }
+        persistHistory()
         revision &+= 1
     }
 

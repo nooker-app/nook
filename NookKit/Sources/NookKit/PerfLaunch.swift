@@ -9,6 +9,8 @@ public enum PerfLaunch {
     /// another flag's value does not count.
     public static var isActive: Bool { value(for: "-NookPerfLibrary") != nil }
 
+    public static var isBackground: Bool { isActive && value(for: "-NookPerfBackground") == "YES" }
+
     /// The value after `key` in this process's arguments, if any.
     public static func value(for key: String) -> String? {
         value(for: key, in: ProcessInfo.processInfo.arguments)

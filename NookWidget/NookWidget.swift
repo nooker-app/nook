@@ -1,5 +1,7 @@
 import SwiftUI
 import WidgetKit
+import Darwin
+import os
 
 struct NookEntry: TimelineEntry {
     let date: Date
@@ -9,20 +11,34 @@ struct NookEntry: TimelineEntry {
 
 struct NookProvider: TimelineProvider {
     func placeholder(in context: Context) -> NookEntry {
-        NookEntry(date: .now, snapshot: .preview, isPlaceholder: true)
+        retireReplacedExecutable()
+        return NookEntry(date: .now, snapshot: .preview, isPlaceholder: true)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (NookEntry) -> Void) {
+        retireReplacedExecutable()
         completion(NookEntry(date: .now, snapshot: context.isPreview ? .preview : load()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<NookEntry>) -> Void) {
+        retireReplacedExecutable()
         completion(Timeline(entries: [NookEntry(date: .now, snapshot: load())],
                             policy: .after(Date.now.addingTimeInterval(15 * 60))))
     }
 
     private func load() -> NookWidgetSnapshot {
         NookWidgetStorage.read(from: NookWidgetStorage.fileURL) ?? NookWidgetSnapshot()
+    }
+
+    private func retireReplacedExecutable() {
+        // chronod restarts this read-only extension. Do not signal another
+        // process, reset WidgetKit's database, or touch the library/container.
+        guard Bundle.main.bundleIdentifier == "com.tim.nook.NookWidget" else { return }
+        if NookWidgetRuntime.executableWasReplaced() {
+            Logger(subsystem: "com.tim.nook", category: "widgets")
+                .notice("Installed widget executable changed; restarting the extension")
+            exit(EXIT_SUCCESS)
+        }
     }
 }
 
