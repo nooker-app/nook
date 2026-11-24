@@ -36,6 +36,38 @@ the already-stuck process in this investigation was recovered separately.
 References: Apple's [WidgetCenter](https://developer.apple.com/documentation/widgetkit/widgetcenter)
 and [timeline updates](https://developer.apple.com/documentation/widgetkit/keeping-a-widget-up-to-date).
 
+## Background compositing in full-color mode
+
+The update-recovery problem and the dark background are separate. After the
+current extension was running, `.ultraThinMaterial` still looked like an opaque
+dark plate in Notification Center. A `Color.clear` container produced black;
+an isolated SwiftUI material preview did not predict the WidgetKit result.
+Home, Reminders and Nook were all logged in `fullColor` with background policy
+`Include`, so the comparison did not involve different system appearance modes.
+
+The installed Home extension imports WidgetKit's non-public
+`preferredBackgroundStyle` and `WidgetBackgroundStyle.blur`. The macOS 26.5
+public Swift interface omits them, and a normal type check rejects the call.
+The SDK linker stub exports the symbols. This explains why replacing only the
+SwiftUI container's content did not reproduce Home's host background request.
+
+The [independent widget experiment](../../tools/demos/widget-background/README.md)
+uses temporary SDK declarations, separate app/extension IDs and preview stories
+only. Actual WidgetKit timelines succeeded for all three variants on macOS
+26.5.1. The user's comparison over a bright colored background confirmed:
+
+| Variant | Actual appearance in `fullColor` |
+| --- | --- |
+| Public material | Dark plate |
+| Private host blur + clear container | Blurred background color with readable tint |
+| Private transparent host + clear container | Much more visible underlying content |
+
+The user selected **host blur (B)**. This is an experimentally verified private
+API path, not a supported public WidgetKit feature or a production integration.
+The system settings and real library were unchanged. Earlier temporary Nook
+bundle replacements were restored to the signed 0.1.76 (80) release; the lab
+remains a separate app. Its private declarations are absent from normal builds.
+
 ## Measured refresh costs
 
 Measurements used optimized (`-O`) DEBUG app builds on the same Mac, with a
