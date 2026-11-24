@@ -1,7 +1,7 @@
 # Widget background experiment
 
 An isolated macOS WidgetKit app comparing the same production Nook content with
-three background paths. The lab app is not included in the Nook release or app
+background paths and a separate stacked-story experiment. The lab app is not included in the Nook release or app
 group. B now exercises Nook's optional production host-background bridge.
 
 | Widget | Container content | Host request |
@@ -9,6 +9,7 @@ group. B now exercises Nook's optional production host-background bridge.
 | A · Public Material | Nook's `ultraThinMaterial` | Default |
 | B · Home Blur | Clear | Private `preferredBackgroundStyle(.blur)` |
 | C · Transparent | Clear | Private `preferredBackgroundStyle(.transparent)` |
+| D · Stacked Glass | Clear, with individual material story capsules | Private transparent background requests |
 
 The installed Home extension imports `preferredBackgroundStyle` and the `blur`
 enum case. The public macOS 26.5 WidgetKit Swift interface does not expose them;
@@ -62,3 +63,45 @@ This confirms the mechanism in the actual host on this OS, not compatibility
 with all future macOS versions. The selected B style is implemented for Nook's
 macOS widgets through `NookWidgetHostBackground.swift`. The lab remains a
 separate app with sample data.
+
+## Stacked story experiment
+
+Add **D · Stacked Glass** from the same widget gallery: small contains one
+story, medium two, and large four. Each story is a separate rounded capsule;
+the rows overlap by 5 points and narrow slightly toward the back of the stack.
+Links use only `nookglasslab://story/...`, never real reader links. The demo
+does not change the production widgets or system appearance.
+
+The lab app contains a native motion preview with size selection, two colored
+backdrops, and a replay button. `StackedContent.swift` shares layout and motion
+between the app and the widget. Its material toggle deliberately distinguishes
+the widget-compatible surface from native `glassEffect`; a successful native
+preview is not evidence of WidgetKit's desktop compositing.
+The native window was visually checked at all three sizes, including the
+intermediate and settled states of a replay in the same running process.
+The signed standalone build and `make build` both pass.
+
+On macOS 26.5.1, applying `glassEffect` to the whole capsule produced a blank
+widget, despite successful timeline archives and accessible story buttons.
+The widget now keeps text outside the effect and uses `ultraThinMaterial` plus
+a restrained gradient and stroke for each capsule. The user's colored-desktop
+capture confirmed the capsules display. It also confirmed a surrounding system
+Glass plate and outline remain: this is **not yet a borderless widget**.
+The `isTransparent(true)` experiment did not remove that plate. D also probes
+the older private `backgroundStyle(.transparent)` request; do not assume this
+eliminates host chrome without checking the real host. These extra declarations
+exist only in the demo's generated SDK copy, not the production build overlay.
+
+The demo timeline has two entries: a folded stack followed three seconds later
+by an expanded stack. Each row requests a 0.48-second transition with 0.065-second
+stagger, disabled for Reduce Motion. The app's widget-replay button requests only
+D's timeline reload. WidgetKit decides when to honor it; no timer loop, network
+request, or continuous redraw is used. Notification Center opening does not
+guarantee replay, and the native preview is not proof of actual widget animation.
+Apple documents a maximum two-second duration for widget update animations:
+https://developer.apple.com/documentation/widgetkit/animating-data-updates-in-widgets-and-live-activities
+
+Verify the final host result over a colored background, including the space
+between capsules, and capture an actual timeline transition before considering
+production integration. A frameless desktop overlay app would be a different
+product from a system-managed WidgetKit widget; the lab does not install one.

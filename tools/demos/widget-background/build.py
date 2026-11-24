@@ -23,6 +23,12 @@ sdk = Path(subprocess.check_output(["xcrun", "--show-sdk-path"], text=True).stri
 framework = root / "Frameworks/WidgetKit.framework"
 run("/usr/bin/python3", repo / "tools/prepare-widget-host-sdk.py", "--sdk", sdk,
     "--output", framework.parent)
+# Additional experiment only: distinguish a transparent background preference
+# from transparent widget host chrome. Never part of the production SDK overlay.
+for interface in (framework / "Modules/WidgetKit.swiftmodule").glob("*.swiftinterface"):
+    with interface.open("a") as output:
+        output.write("\nextension SwiftUI.WidgetConfiguration {\n"
+                     "    @_weakLinked nonisolated public func backgroundStyle(_ style: WidgetKit.WidgetBackgroundStyle) -> some SwiftUI.WidgetConfiguration\n}\n")
 
 app = root / "Nook Glass Lab.app"
 extension = app / "Contents/PlugIns/GlassLabWidgets.appex"
@@ -37,13 +43,15 @@ for bundle, name, identifier, kind in [
         "CFBundleName": name,
         "CFBundleDisplayName": "Nook Glass Lab",
         "CFBundlePackageType": kind,
-        "CFBundleShortVersionString": "1.0",
-        "CFBundleVersion": "1",
+        "CFBundleShortVersionString": "1.1",
+        "CFBundleVersion": "5",
         "LSMinimumSystemVersion": "26.0",
     }
     if kind == "XPC!":
         info["NSExtension"] = {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"}
     else:
+        info["NSPrincipalClass"] = "NSApplication"
+        info["NSHighResolutionCapable"] = True
         info["CFBundleURLTypes"] = [{"CFBundleURLSchemes": ["nookglasslab"]}]
     (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
 
@@ -71,10 +79,10 @@ compile_args = ["xcrun", "swiftc", "-parse-as-library", "-O", "-target", "arm64-
                 "-sdk", sdk, "-module-cache-path", root / "module-cache"]
 run(*compile_args, "-F", root / "Frameworks", "-application-extension",
     "-module-name", "GlassLabWidgets", "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain",
-    source / "Widgets.swift", repo / "NookWidget/NookWidgetHostBackground.swift",
+    source / "Widgets.swift", source / "StackedContent.swift", repo / "NookWidget/NookWidgetHostBackground.swift",
     root / "ProductionContent.swift", root / "WidgetShared.swift",
     root / "WidgetSnapshot.swift", "-o", extension / "Contents/MacOS/GlassLabWidgets")
-run(*compile_args, source / "App.swift", "-o", app / "Contents/MacOS/Nook Glass Lab")
+run(*compile_args, source / "App.swift", source / "StackedContent.swift", "-o", app / "Contents/MacOS/Nook Glass Lab")
 
 entitlements = root / "Lab.entitlements"
 entitlements.write_bytes(plistlib.dumps({"com.apple.security.app-sandbox": True}))

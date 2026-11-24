@@ -74,11 +74,63 @@ struct PrivateTransparentWidget: Widget {
     }
 }
 
+struct StackEntry: TimelineEntry {
+    let date: Date
+    let expanded: Bool
+}
+
+struct StackProvider: TimelineProvider {
+    func placeholder(in context: Context) -> StackEntry {
+        StackEntry(date: .now, expanded: true)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (StackEntry) -> Void) {
+        completion(placeholder(in: context))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<StackEntry>) -> Void) {
+        let now = Date.now
+        // One finite demonstration, not a polling loop. WidgetKit owns timing;
+        // opening Notification Center does not re-run a widget's onAppear.
+        completion(Timeline(entries: [
+            StackEntry(date: now, expanded: false),
+            StackEntry(date: now.addingTimeInterval(3), expanded: true),
+        ], policy: .never))
+    }
+}
+
+struct StackWidgetContent: View {
+    let entry: StackEntry
+    @Environment(\.widgetFamily) private var family
+
+    var body: some View {
+        StackedGlassContent(size: family == .systemSmall ? .small : family == .systemLarge ? .large : .medium,
+                            expanded: entry.expanded, widgetSurface: true)
+            .containerBackground(for: .widget) { Color.clear }
+            .widgetURL(URL(string: "nookglasslab://stack"))
+    }
+}
+
+struct StackedGlassWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "GlassLabStacked", provider: StackProvider()) { entry in
+            StackWidgetContent(entry: entry)
+        }
+        .configurationDisplayName("D · Stacked Glass")
+        .description("Transparent host with one, two or four individual glass story capsules. Experimental.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+        .preferredBackgroundStyle(.transparent)
+        .backgroundStyle(.transparent)
+    }
+}
+
 @main
 struct GlassLabWidgets: WidgetBundle {
     var body: some Widget {
         PublicMaterialWidget()
         PrivateBlurWidget()
         PrivateTransparentWidget()
+        StackedGlassWidget()
     }
 }
