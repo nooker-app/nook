@@ -14,6 +14,11 @@ struct StackStory: Identifiable {
         StackStory(id: 2, title: "기술과 일상 사이, 오래 남는 이야기", source: "The Browser", time: "1시간 전"),
         StackStory(id: 3, title: "오늘의 호기심을 내일의 아이디어로", source: "Another Perspective", time: "2시간 전"),
     ]
+
+    static func replacement(_ sequence: Int) -> Self {
+        let titles = ["느리게 읽을 때 비로소 보이는 것들", "좋은 도구는 생각할 공간을 남겨준다", "흩어진 호기심이 하나의 이야기로", "익숙한 일상에서 찾은 새로운 질문"]
+        return StackStory(id: 4 + sequence, title: titles[sequence % titles.count], source: "Nook Discoveries", time: "방금 전")
+    }
 }
 
 enum StackSize: String, CaseIterable, Identifiable {
@@ -26,6 +31,8 @@ enum StackSize: String, CaseIterable, Identifiable {
 
 struct StackedGlassContent: View {
     let size: StackSize
+    var stories = StackStory.samples
+    var incomingStoryID: Int?
     var expanded = true
     var widgetSurface = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -36,21 +43,29 @@ struct StackedGlassContent: View {
         GeometryReader { geometry in
             let overlap: CGFloat = 5
             let height = (geometry.size.height - 16 + overlap * CGFloat(size.count - 1)) / CGFloat(size.count)
-            VStack(spacing: -overlap) {
-                ForEach(Array(StackStory.samples.prefix(size.count))) { story in
+            ZStack(alignment: .top) {
+                // Absolute slots keep surviving stories still while SwiftUI
+                // retains both the outgoing and incoming story during a swap.
+                ForEach(Array(stories.prefix(size.count).enumerated()), id: \.element.id) { index, story in
                     Link(destination: URL(string: "nookglasslab://story/\(story.id)")!) {
                         card(story, height: height)
                     }
                     .buttonStyle(.plain)
-                    .padding(.horizontal, CGFloat(story.id) * 2)
-                    .offset(y: expanded ? 0 : -CGFloat(story.id) * (height - overlap - 9))
-                    .scaleEffect(expanded ? 1 : 1 - CGFloat(story.id) * 0.035, anchor: .top)
-                    .zIndex(Double(size.count - story.id))
-                    .transition(.offset(y: 12).combined(with: .opacity))
-                    .animation(reduceMotion ? nil : .smooth(duration: 0.48).delay(Double(story.id) * 0.065), value: expanded)
+                    .padding(.horizontal, CGFloat(index) * 2)
+                    .offset(y: CGFloat(index) * (expanded ? height - overlap : 9))
+                    .scaleEffect(expanded ? 1 : 1 - CGFloat(index) * 0.035, anchor: .top)
+                    .zIndex(story.id == incomingStoryID ? -1 : Double(size.count - index))
+                    .transition(reduceMotion ? .identity : .asymmetric(
+                        insertion: .offset(y: geometry.size.height - 16 - CGFloat(index) * (height - overlap))
+                            .combined(with: .scale(scale: 0.96, anchor: .bottom)).combined(with: .opacity),
+                        removal: .opacity))
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.48).delay(Double(index) * 0.065), value: expanded)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.55), value: stories.map(\.id))
             .padding(8)
+            .clipped()
         }
     }
 

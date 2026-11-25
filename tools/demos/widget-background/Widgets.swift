@@ -77,6 +77,8 @@ struct PrivateTransparentWidget: Widget {
 struct StackEntry: TimelineEntry {
     let date: Date
     let expanded: Bool
+    var stories = StackStory.samples
+    var incomingStoryID: Int?
 }
 
 struct StackProvider: TimelineProvider {
@@ -85,17 +87,52 @@ struct StackProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (StackEntry) -> Void) {
-        completion(placeholder(in: context))
+        let now = Date.now
+        guard let start = UserDefaults.standard.object(forKey: startKey(context)) as? Date else {
+            completion(placeholder(in: context))
+            return
+        }
+        let current = sequence(start: start, family: context.family).last(where: { $0.date <= now })
+            ?? placeholder(in: context)
+        completion(StackEntry(date: now, expanded: true, stories: current.stories, incomingStoryID: current.incomingStoryID))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StackEntry>) -> Void) {
         let now = Date.now
-        // One finite demonstration, not a polling loop. WidgetKit owns timing;
-        // opening Notification Center does not re-run a widget's onAppear.
-        completion(Timeline(entries: [
-            StackEntry(date: now, expanded: false),
-            StackEntry(date: now.addingTimeInterval(3), expanded: true),
-        ], policy: .never))
+        // Static widgets share their timeline by kind/family. Remember the demo
+        // start in this extension's sandbox, not the production app or vault.
+        // A reload or process restart must never fold already displayed stories.
+        let key = startKey(context)
+        let start: Date
+        if let saved = UserDefaults.standard.object(forKey: key) as? Date {
+            start = saved
+        } else {
+            start = now
+            UserDefaults.standard.set(start, forKey: key)
+        }
+        let steps = sequence(start: start, family: context.family)
+        let current = steps.last(where: { $0.date <= now }) ?? steps[0]
+        let entries = [StackEntry(date: now, expanded: current.expanded, stories: current.stories, incomingStoryID: current.incomingStoryID)]
+            + steps.filter { $0.date > now }
+        completion(Timeline(entries: entries, policy: .never))
+    }
+
+    private func startKey(_ context: Context) -> String {
+        "stacked-story-sequence-start-v1.\(context.family.rawValue)"
+    }
+
+    private func sequence(start: Date, family: WidgetFamily) -> [StackEntry] {
+        let count = family == .systemSmall ? 1 : family == .systemLarge ? 4 : 2
+        var firstUpdate = StackStory.samples
+        firstUpdate[min(1, count - 1)] = .replacement(0)
+        var secondUpdate = firstUpdate
+        secondUpdate[count - 1] = .replacement(1)
+        return [
+            StackEntry(date: start, expanded: false),
+            StackEntry(date: start.addingTimeInterval(3), expanded: true),
+            StackEntry(date: start.addingTimeInterval(12), expanded: true, stories: firstUpdate, incomingStoryID: 4),
+            StackEntry(date: start.addingTimeInterval(21), expanded: true, stories: secondUpdate, incomingStoryID: 5),
+        ]
     }
 }
 
@@ -105,6 +142,7 @@ struct StackWidgetContent: View {
 
     var body: some View {
         StackedGlassContent(size: family == .systemSmall ? .small : family == .systemLarge ? .large : .medium,
+                            stories: entry.stories, incomingStoryID: entry.incomingStoryID,
                             expanded: entry.expanded, widgetSurface: true)
             .containerBackground(for: .widget) { Color.clear }
             .widgetURL(URL(string: "nookglasslab://stack"))

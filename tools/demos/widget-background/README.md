@@ -73,7 +73,7 @@ Links use only `nookglasslab://story/...`, never real reader links. The demo
 does not change the production widgets or system appearance.
 
 The lab app contains a native motion preview with size selection, two colored
-backdrops, and a replay button. `StackedContent.swift` shares layout and motion
+backdrops, **First display** and **Replace one story** buttons. `StackedContent.swift` shares layout and motion
 between the app and the widget. Its material toggle deliberately distinguishes
 the widget-compatible surface from native `glassEffect`; a successful native
 preview is not evidence of WidgetKit's desktop compositing.
@@ -92,10 +92,24 @@ the older private `backgroundStyle(.transparent)` request; do not assume this
 eliminates host chrome without checking the real host. These extra declarations
 exist only in the demo's generated SDK copy, not the production build overlay.
 
-The demo timeline has two entries: a folded stack followed three seconds later
-by an expanded stack. Each row requests a 0.48-second transition with 0.065-second
-stagger, disabled for Reduce Motion. The app's widget-replay button requests only
-D's timeline reload. WidgetKit decides when to honor it; no timer loop, network
+First display and data updates have separate animation ownership. Only first
+display unfolds all rows (0.48 seconds, with a 0.065-second stagger). Story
+updates never change the expanded state: each retained article keeps its ID,
+absolute slot, size and position. Only a replaced article fades out while its
+replacement rises from the bottom of the stack over 0.55 seconds. An absolute
+ZStack prevents outgoing and incoming views from reflowing the other rows.
+Reduce Motion disables both transitions. **First display** explicitly resets
+the native preview for inspection; **Replace one story** cycles through the
+visible slots without resetting the stack.
+
+The widget's finite sample timeline expands after three seconds, replaces one
+story at 12 seconds, then one at 21 seconds. Its start date is persisted in the
+demo extension's sandbox by widget family. Later provider calls, process
+restarts and snapshots reuse the same sequence/current stories instead of
+restarting the folded stack. StaticConfiguration shares timelines by kind and
+family; this is not an independent first-show flag for every widget instance.
+The app's widget-refresh button requests only D's timeline reload and never
+resets this history. WidgetKit decides when to honor it; no timer loop, network
 request, or continuous redraw is used. Notification Center opening does not
 guarantee replay, and the native preview is not proof of actual widget animation.
 Apple documents a maximum two-second duration for widget update animations:

@@ -43,8 +43,8 @@ for bundle, name, identifier, kind in [
         "CFBundleName": name,
         "CFBundleDisplayName": "Nook Glass Lab",
         "CFBundlePackageType": kind,
-        "CFBundleShortVersionString": "1.1",
-        "CFBundleVersion": "5",
+        "CFBundleShortVersionString": "1.2",
+        "CFBundleVersion": "7",
         "LSMinimumSystemVersion": "26.0",
     }
     if kind == "XPC!":

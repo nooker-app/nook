@@ -19,6 +19,10 @@ struct StackPreview: View {
     @State private var reloadRequested = false
     @State private var selectedStory: String?
     @State private var widgetSurface = true
+    @State private var stories = StackStory.samples
+    @State private var nextStory = 0
+    @State private var nextSlot = 1
+    @State private var incomingStoryID: Int?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -41,9 +45,24 @@ struct StackPreview: View {
                 Toggle("위젯용 재질 미리보기", isOn: $widgetSurface)
                     .font(.system(size: 12))
                 HStack {
-                    Button("다시 펼치기", systemImage: "arrow.counterclockwise") { replay += 1 }
+                    Button("첫 표시 재현", systemImage: "arrow.counterclockwise") { replay += 1 }
                         .buttonStyle(.glass)
+                    Button("글 하나 교체", systemImage: "rectangle.stack.badge.plus") {
+                        let slot = nextSlot % size.count
+                        stories[slot] = .replacement(nextStory)
+                        incomingStoryID = stories[slot].id
+                        nextStory += 1
+                        nextSlot = (slot + 1) % size.count
+                    }
+                    .disabled(!expanded)
+                    .buttonStyle(.glass)
+                }
+                HStack {
+                    Text("유지되는 글은 그대로, 새 글만 아래에서.")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
                     Button("배경 바꾸기", systemImage: "circle.lefthalf.filled") { blueBackground.toggle() }
+                        .labelStyle(.iconOnly)
                         .buttonStyle(.glass)
                 }
                 Divider()
@@ -51,7 +70,7 @@ struct StackPreview: View {
                     Text("실제 위젯에서도 비교하기").font(.headline)
                     Text("위젯 편집 → Nook Glass Lab\nD · Stacked Glass를 추가하세요.")
                         .font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(4)
-                    Button(reloadRequested ? "갱신 요청됨 · 다시 요청" : "위젯 펼치기 요청", systemImage: "arrow.clockwise") {
+                    Button(reloadRequested ? "갱신 요청됨 · 다시 요청" : "위젯 갱신 요청", systemImage: "arrow.clockwise") {
                         WidgetCenter.shared.reloadTimelines(ofKind: "GlassLabStacked")
                         reloadRequested = true
                     }
@@ -67,22 +86,33 @@ struct StackPreview: View {
             .frame(width: 350, height: 680)
             ZStack {
                 backdrop
-                StackedGlassContent(size: size, expanded: expanded, widgetSurface: widgetSurface)
+                StackedGlassContent(size: size, stories: stories, incomingStoryID: incomingStoryID,
+                                    expanded: expanded, widgetSurface: widgetSurface)
                     .frame(width: size.dimensions.width, height: size.dimensions.height)
                     .id(size)
             }
             .frame(width: 424, height: 680)
             .clipped()
             .overlay(alignment: .bottom) {
-                Text("MOTION PREVIEW · \(size.count) STORIES")
+                Text("MOTION PREVIEW · \(size.count) \(size.count == 1 ? "STORY" : "STORIES")")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(20)
             }
         }
         .task(id: replay) {
+            // Explicit first-display rehearsal only. Data updates never change
+            // `expanded` or replace the identity of the entire stack.
+            var reset = Transaction(animation: nil)
+            reset.disablesAnimations = true
+            withTransaction(reset) {
+                stories = StackStory.samples
+                nextStory = 0
+                nextSlot = 1
+                incomingStoryID = nil
+                expanded = reduceMotion
+            }
             guard !reduceMotion else { expanded = true; return }
-            expanded = false
             do { try await Task.sleep(for: .milliseconds(650)) } catch { return }
             expanded = true
         }
