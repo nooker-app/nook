@@ -98,6 +98,24 @@ updates never change the expanded state: each retained article keeps its ID,
 absolute slot, size and position. Only a replaced article fades out while its
 replacement rises from the bottom of the stack over 0.55 seconds. An absolute
 ZStack prevents outgoing and incoming views from reflowing the other rows.
+Each slot is a stable parent with a fixed z-index (top to bottom: 4, 3, 2, 1
+for large widgets). Article identity and replacement transitions live inside
+that parent. Never assign an arriving article a shared negative z-index:
+it otherwise stays behind the wrong neighbors after arrival and jumps in front
+when the next replacement changes the arriving ID. No delayed z-index reset or
+animation-completion callback is needed, including for overlapping updates.
+Two noninteractive reserve surfaces peek out behind the bottom story before an
+update. The layout reserves 16 points for this tail within the actual widget
+bounds. A replacement starts at the front reserve card's origin, slightly
+scaled down, and slides into its fixed slot; it no longer materializes from
+outside the widget. Reserve surfaces share the story material and are excluded
+from accessibility and hit testing. They do not trigger full-stack unfolding.
+Native captures of a single replacement kept all three capsule-overlap bands
+and the reserve deck pixel-identical before and after settlement. As a negative
+control, reintroducing a second-slot z-index of -1 in an offscreen copy changed
+1,957 of 2,170 pixels in the second/third overlap band; repeated correct renders
+changed none. This checks layer order, not WidgetKit backdrop compositing.
+The reserve tail was also checked at small, medium and large sizes.
 Reduce Motion disables both transitions. **First display** explicitly resets
 the native preview for inspection; **Replace one story** cycles through the
 visible slots without resetting the stack.

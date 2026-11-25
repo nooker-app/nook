@@ -32,7 +32,6 @@ enum StackSize: String, CaseIterable, Identifiable {
 struct StackedGlassContent: View {
     let size: StackSize
     var stories = StackStory.samples
-    var incomingStoryID: Int?
     var expanded = true
     var widgetSurface = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -42,28 +41,51 @@ struct StackedGlassContent: View {
     var body: some View {
         GeometryReader { geometry in
             let overlap: CGFloat = 5
-            let height = (geometry.size.height - 16 + overlap * CGFloat(size.count - 1)) / CGFloat(size.count)
+            let deckDepth: CGFloat = 16
+            let height = (geometry.size.height - 16 - deckDepth + overlap * CGFloat(size.count - 1)) / CGFloat(size.count)
+            let lastSlot = CGFloat(size.count - 1) * (height - overlap)
+            let deckOrigin = lastSlot + 12
             ZStack(alignment: .top) {
-                // Absolute slots keep surviving stories still while SwiftUI
-                // retains both the outgoing and incoming story during a swap.
-                ForEach(Array(stories.prefix(size.count).enumerated()), id: \.element.id) { index, story in
-                    Link(destination: URL(string: "nookglasslab://story/\(story.id)")!) {
-                        card(story, height: height)
+                // Visible reserve cards establish the origin before any update.
+                // They are decoration, never duplicate story links or hit areas.
+                ForEach(0..<2, id: \.self) { depth in
+                    capsuleSurface
+                        .frame(height: height)
+                        .padding(.horizontal, CGFloat(size.count - 1) * 2 + CGFloat(depth + 1) * 5)
+                        .scaleEffect(depth == 0 ? 0.97 : 0.94, anchor: .top)
+                        .offset(y: (expanded ? lastSlot : CGFloat(size.count - 1) * 9) + 12 + CGFloat(depth) * 8)
+                        .opacity(depth == 0 ? 0.72 : 0.48)
+                        .zIndex(-Double(depth + 1))
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.48).delay(Double(size.count - 1) * 0.065), value: expanded)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                // The slots own stacking order for their entire lifetime.
+                // Only the keyed content inside a slot participates in swaps,
+                // so retained outgoing views cannot reorder other capsules.
+                ForEach(0..<min(size.count, stories.count), id: \.self) { index in
+                    let story = stories[index]
+                    ZStack {
+                        Link(destination: URL(string: "nookglasslab://story/\(story.id)")!) {
+                            card(story, height: height)
+                        }
+                        .buttonStyle(.plain)
+                        .id(story.id)
+                        .transition(reduceMotion ? .identity : .asymmetric(
+                            insertion: .offset(y: deckOrigin - CGFloat(index) * (height - overlap))
+                                .combined(with: .scale(scale: 0.94, anchor: .top)).combined(with: .opacity),
+                            removal: .opacity))
                     }
-                    .buttonStyle(.plain)
+                    .frame(height: height)
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.55), value: story.id)
                     .padding(.horizontal, CGFloat(index) * 2)
                     .offset(y: CGFloat(index) * (expanded ? height - overlap : 9))
                     .scaleEffect(expanded ? 1 : 1 - CGFloat(index) * 0.035, anchor: .top)
-                    .zIndex(story.id == incomingStoryID ? -1 : Double(size.count - index))
-                    .transition(reduceMotion ? .identity : .asymmetric(
-                        insertion: .offset(y: geometry.size.height - 16 - CGFloat(index) * (height - overlap))
-                            .combined(with: .scale(scale: 0.96, anchor: .bottom)).combined(with: .opacity),
-                        removal: .opacity))
+                    .zIndex(Double(size.count - index))
                     .animation(reduceMotion ? nil : .smooth(duration: 0.48).delay(Double(index) * 0.065), value: expanded)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.55), value: stories.map(\.id))
             .padding(8)
             .clipped()
         }
@@ -105,25 +127,27 @@ struct StackedGlassContent: View {
         .padding(.horizontal, size == .small ? 17 : 19)
         .frame(maxWidth: .infinity)
         .frame(height: height)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: size == .small ? 31 : 34, style: .continuous)
-            if widgetSurface {
-                // WidgetKit's remote display list drops glassEffect content on
-                // the tested OS. Keep text outside the material effect.
-                shape.fill(.ultraThinMaterial)
-                    .overlay {
-                        shape.fill(LinearGradient(colors: [.white.opacity(0.12), .white.opacity(0.025)],
-                                                  startPoint: .topLeading, endPoint: .bottomTrailing))
-                    }
-                    .overlay {
-                        shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.42), .white.opacity(0.06), .white.opacity(0.18)],
-                                                          startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.7)
-                    }
-            } else {
-                shape.fill(.clear)
-                    .glassEffect(.regular.tint(amber.opacity(0.035)), in: shape)
-            }
-        }
+        .background { capsuleSurface }
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var capsuleSurface: some View {
+        let shape = RoundedRectangle(cornerRadius: size == .small ? 31 : 34, style: .continuous)
+        if widgetSurface {
+            // WidgetKit's remote display list drops glassEffect content on
+            // the tested OS. Keep text outside the material effect.
+            shape.fill(.ultraThinMaterial)
+                .overlay {
+                    shape.fill(LinearGradient(colors: [.white.opacity(0.12), .white.opacity(0.025)],
+                                              startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
+                .overlay {
+                    shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.42), .white.opacity(0.06), .white.opacity(0.18)],
+                                                      startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.7)
+                }
+        } else {
+            shape.fill(.clear)
+                .glassEffect(.regular.tint(amber.opacity(0.035)), in: shape)
+        }
     }
 }

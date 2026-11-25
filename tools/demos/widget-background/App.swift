@@ -22,7 +22,6 @@ struct StackPreview: View {
     @State private var stories = StackStory.samples
     @State private var nextStory = 0
     @State private var nextSlot = 1
-    @State private var incomingStoryID: Int?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -50,7 +49,6 @@ struct StackPreview: View {
                     Button("글 하나 교체", systemImage: "rectangle.stack.badge.plus") {
                         let slot = nextSlot % size.count
                         stories[slot] = .replacement(nextStory)
-                        incomingStoryID = stories[slot].id
                         nextStory += 1
                         nextSlot = (slot + 1) % size.count
                     }
@@ -58,7 +56,7 @@ struct StackPreview: View {
                     .buttonStyle(.glass)
                 }
                 HStack {
-                    Text("유지되는 글은 그대로, 새 글만 아래에서.")
+                    Text("대기하던 카드가 덱에서 빈자리로.")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                     Spacer(minLength: 4)
                     Button("배경 바꾸기", systemImage: "circle.lefthalf.filled") { blueBackground.toggle() }
@@ -86,8 +84,7 @@ struct StackPreview: View {
             .frame(width: 350, height: 680)
             ZStack {
                 backdrop
-                StackedGlassContent(size: size, stories: stories, incomingStoryID: incomingStoryID,
-                                    expanded: expanded, widgetSurface: widgetSurface)
+                StackedGlassContent(size: size, stories: stories, expanded: expanded, widgetSurface: widgetSurface)
                     .frame(width: size.dimensions.width, height: size.dimensions.height)
                     .id(size)
             }
@@ -109,7 +106,6 @@ struct StackPreview: View {
                 stories = StackStory.samples
                 nextStory = 0
                 nextSlot = 1
-                incomingStoryID = nil
                 expanded = reduceMotion
             }
             guard !reduceMotion else { expanded = true; return }
