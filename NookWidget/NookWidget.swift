@@ -81,6 +81,7 @@ private struct NookReadingConfiguration {
         .configurationDisplayName(collection.title)
         .description(collection.detail)
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
         .nookHostBackground()
     }
 }
@@ -169,10 +170,12 @@ struct NookReadingWidgetContent: View {
     let collection: NookWidgetCollection
     let family: WidgetFamily
     let renderingMode: WidgetRenderingMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var stories: [NookWidgetStory] { entry.snapshot.stories(for: collection) }
     private var isSmall: Bool { family == .systemSmall }
     private var count: Int { family == .systemLarge ? 4 : isSmall ? 1 : 2 }
+    private var accent: Color { renderingMode == .fullColor ? NookWidgetStyle.accent : .primary }
 
     private func url(_ story: NookWidgetStory) -> URL {
         guard let libraryID = entry.snapshot.libraryID else { return WidgetShared.openAppURL }
@@ -181,87 +184,147 @@ struct NookReadingWidgetContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: family == .systemLarge ? 10 : 8) {
-            header
+            header.frame(height: isSmall ? 18 : 22)
             if stories.isEmpty {
                 empty
-            } else if isSmall, let first = stories.first {
-                story(first, prominent: true)
-                Spacer(minLength: 0)
-                HStack {
-                    Text(first.publishedAt, format: .dateTime.month(.abbreviated).day())
-                        .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer(minLength: 4)
-                    Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
             } else {
-                ForEach(Array(stories.prefix(count).enumerated()), id: \.element.id) { index, item in
-                    if index > 0 { Rectangle().fill(.primary.opacity(0.09)).frame(height: 0.5) }
-                    Link(destination: url(item)) {
-                        story(item, prominent: family == .systemLarge && index == 0)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text(item.title + ", " + item.source))
-                    .accessibilityHint(Text("Open in Nook reader"))
-                }
+                shelf
+                    // Never animate a story from one library into another.
+                    .id(entry.snapshot.libraryID)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, isSmall ? 12 : 14)
+        .padding(.vertical, family == .systemLarge ? 14 : 12)
         .redacted(reason: entry.isPlaceholder ? .placeholder : [])
         .widgetURL(isSmall ? stories.first.map(url) ?? collection.sourceURL : collection.sourceURL)
     }
 
+    private var shelf: some View {
+        GeometryReader { geometry in
+            let height = max(0, (geometry.size.height - 10) / CGFloat(count))
+            let lastOrigin = CGFloat(count - 1) * height
+            // The snapshot already contains up to six actual stories. Keep
+            // two waiting candidates in the same identity domain as the rows;
+            // an existing candidate can move into its new slot on an update.
+            ZStack(alignment: .top) {
+                ForEach(Array(stories.prefix(count + 2).enumerated()), id: \.element.id) { index, item in
+                    let waiting = index >= count
+                    let depth = max(0, index - count)
+                    let origin = waiting ? lastOrigin + CGFloat(depth + 1) * 5 : CGFloat(index) * height
+                    Group {
+                        if isSmall {
+                            shelfRow(item, index: index, waiting: waiting, height: height)
+                        } else {
+                            Link(destination: url(item)) {
+                                shelfRow(item, index: index, waiting: waiting, height: height)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text(item.title + ", " + item.source))
+                            .accessibilityHint(Text("Open in Nook reader"))
+                        }
+                    }
+                    .padding(.horizontal, waiting ? CGFloat(depth + 1) * 6 : 0)
+                    .scaleEffect(waiting ? 0.97 - CGFloat(depth) * 0.025 : 1, anchor: .top)
+                    .offset(y: origin)
+                    .opacity(waiting ? (depth == 0 ? 0.55 : 0.28) : 1)
+                    .zIndex(waiting ? -Double(depth + 1) : Double(count - index))
+                    .transition(reduceMotion ? .identity : .asymmetric(
+                        insertion: .offset(y: max(0, lastOrigin - origin) + 5).combined(with: .opacity),
+                        removal: .opacity))
+                    .disabled(waiting || entry.isPlaceholder)
+                    .allowsHitTesting(!waiting && !entry.isPlaceholder)
+                    .accessibilityHidden(waiting)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.55), value: stories.map(\.id))
+            .clipped()
+        }
+    }
+
     private var header: some View {
-        HStack(spacing: 6) {
+        ViewThatFits(in: .horizontal) {
+            headerRow(includeBrand: true)
+            headerRow(includeBrand: false)
+        }
+    }
+
+    private func headerRow(includeBrand: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: collection.icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(renderingMode == .fullColor ? NookWidgetStyle.accent : .primary)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(accent)
                 .widgetAccentable()
             Text(collection.title).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                .fixedSize(horizontal: includeBrand, vertical: false)
             Spacer(minLength: 2)
-            if !isSmall {
-                Text("Nook").font(.system(size: 14, weight: .semibold, design: .serif))
-                    .foregroundStyle(.secondary)
+            if includeBrand {
+                Text("Nook").font(.system(size: isSmall ? 13 : 15, weight: .bold, design: .serif))
+                    .foregroundStyle(.secondary).fixedSize()
             }
         }
     }
 
-    private func story(_ item: NookWidgetStory, prominent: Bool) -> some View {
-        VStack(alignment: .leading, spacing: prominent ? 7 : 5) {
-            Text(item.title)
-                .font(.system(size: prominent ? (isSmall ? 17 : 21) : 14,
-                              weight: .semibold, design: prominent ? NookWidgetStyle.headlineDesign(item.title) : .default))
-                .lineLimit(isSmall ? 3 : 2)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
-                .foregroundStyle(.primary)
-            HStack(spacing: 5) {
-                if item.isUnread {
-                    Circle().fill(renderingMode == .fullColor ? NookWidgetStyle.accent : .primary)
-                        .frame(width: 4, height: 4).widgetAccentable()
+    private func shelfRow(_ item: NookWidgetStory, index: Int, waiting: Bool, height: CGFloat) -> some View {
+        HStack(spacing: 9) {
+            if !isSmall {
+                Text(String(format: "%02d", index + 1))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(accent.opacity(0.8)).widgetAccentable()
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: isSmall ? 7 : family == .systemMedium ? 3 : 4) {
+                HStack(spacing: 4) {
+                    if item.isUnread {
+                        Circle().fill(accent).frame(width: 3, height: 3).widgetAccentable()
+                    }
+                    Text(item.source).lineLimit(1)
+                    Spacer(minLength: 2)
+                    if !isSmall {
+                        Text(item.publishedAt, format: .dateTime.month(.abbreviated).day()).fixedSize()
+                    }
                 }
-                Text(item.source).lineLimit(1)
-                if !isSmall {
-                    Spacer(minLength: 4)
-                    Text(item.publishedAt, format: .dateTime.month(.abbreviated).day()).lineLimit(1)
-                    Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .medium))
+                .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                Text(item.title)
+                    .font(.system(size: isSmall ? 17 : family == .systemMedium ? 12 : 13, weight: .semibold))
+                    .lineLimit(isSmall ? 3 : 2)
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isSmall {
+                    HStack {
+                        Text(item.publishedAt, format: .dateTime.month(.abbreviated).day()).lineLimit(1)
+                        Spacer(minLength: 2)
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
                 }
             }
-            .font(.system(size: 10)).foregroundStyle(.secondary)
         }
+        .opacity(waiting ? 0 : 1)
+        .padding(.horizontal, 3)
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(waiting ? accent.opacity(0.24) : .primary.opacity(0.12))
+                .frame(height: 0.5).padding(.horizontal, 3)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 
     private var empty: some View {
         let title = entry.snapshot.libraryID == nil ? String(localized: "Make room for a good read") : collection.emptyTitle
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: isSmall ? 6 : 8) {
             Spacer(minLength: 0)
             Text(title)
-                .font(.system(size: isSmall ? 17 : 20, weight: .semibold, design: NookWidgetStyle.headlineDesign(title)))
-                .lineLimit(3)
+                .font(.system(size: isSmall ? 15 : 20, weight: .semibold, design: NookWidgetStyle.headlineDesign(title)))
+                .lineLimit(isSmall ? 2 : 3)
+                .minimumScaleFactor(0.9)
             Text(entry.snapshot.libraryID == nil ? String(localized: "Open Nook to connect your library.") : collection.emptyDetail)
-                .font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                .font(.system(size: isSmall ? 11 : 12)).foregroundStyle(.secondary).lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Label("Open Nook", systemImage: "arrow.up.right").font(.caption.weight(.medium))
                 .foregroundStyle(renderingMode == .fullColor ? NookWidgetStyle.accent : .primary)

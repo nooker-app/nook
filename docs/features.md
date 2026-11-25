@@ -66,7 +66,7 @@ List-title translation expands a row and reveals the translated title beneath th
 - Synchronize seen state so an article noticed on one device does not produce a later new-article alert on another.
 - Keep device-local delivery receipts so the same device alerts at most once for an article.
 - Treat a Mac as engaged only while the app and reader window are active, visible, the login session is awake, and system input has occurred within ten minutes. Otherwise iOS background refresh can own the alert even if Nook remains open on the Mac.
-- On macOS, show latest stories, personal recommendations, or recently read stories in small, medium, and large widgets; selecting a story opens its native reader directly.
+- On macOS, show latest stories, personal recommendations, or recently read stories in small, medium, and large widgets; selecting a story opens its native reader directly. The Quiet Shelf layout uses one Glass surface, amber row numbers, source/date metadata, and fine dividers, with one, two, or four visible stories.
 - Keep the existing reading-shortcuts widget, with the live unread count and links to Today, Starred, and Recently Read. Widgets use a local App Group snapshot, native Glass backgrounds, and the system's Clear/Tinted appearances.
 
 iOS controls the exact background refresh schedule, so notifications are best effort rather than an exact polling promise. Settings includes authorization and background-refresh diagnostics plus a test notification.

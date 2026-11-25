@@ -88,6 +88,52 @@ accepted actual-article timelines for Latest and Recommended and placeholders
 for every supported widget kind/size on macOS 26.5.1. System appearance and
 library data were unchanged.
 
+## Quiet Shelf reading layout
+
+The reading widgets adopt the selected G design from the isolated Glass Lab.
+The system frame is the only surrounding Glass plate. Equal-height rows use
+amber ordinal markers and fine dividers, with source/date above the headline.
+The existing Latest, Recommended and Recently Read kinds remain stable, showing
+one, two or four stories in small, medium and large sizes. Reading shortcuts
+keep their existing configuration. The host blur bridge and fallback remain
+unchanged; the content does not draw an additional material or outer stroke.
+
+Reading configurations disable the system content margins and own their
+12–14-point insets. Headers keep the collection name and omit the wordmark if
+both cannot fit. Small headlines use three lines; other sizes use two. Medium
+rows use 12-point headlines with extra vertical room for long titles. Empty and
+unconnected-library messages retain their collection-specific actions.
+
+The bounded App Group snapshot supplies up to two waiting candidates beyond
+the visible rows. Waiting and visible stories share one `ForEach` keyed by
+article ID, so a candidate moving into view keeps its identity. Waiting rows
+hide their text, hit targets and accessibility elements. Known rows retain
+their positions unless their collection order changes; new arrivals enter
+from the bottom. Transitions use 0.55 seconds and respect Reduce Motion. Each
+library has a separate presentation identity, preventing cross-library reuse.
+
+Every production timeline entry is immediately readable. Unlike the motion
+demo, the provider does not publish a folded intermediate timeline or start
+an unfolding timer: WidgetKit may defer later entries. Data update animations
+follow [WidgetKit's supported transitions](https://developer.apple.com/documentation/widgetkit/animating-data-updates-in-widgets-and-live-activities);
+their actual playback remains controlled by the host.
+
+Article links keep their library-scoped token and recommendation attribution;
+the entire small widget opens its first story, while larger rows have individual
+links. Presentation changes do not fetch feeds, run recommendation inference,
+change snapshot schemas, or write user library state.
+
+Verification uses the actual production SwiftUI content with a read-only local
+snapshot, long Korean/English headlines, empty collections and no library.
+Small/medium/large layout captures cover light and dark appearances, with extra
+placeholder and accented-branch captures. The small English header initially
+truncated the wordmark; adaptive header selection fixes it. Medium two-line
+headlines have additional room above the separator. The main build, existing
+snapshot/deep-link tests and host API presence/absence construction checks pass.
+These renders verify content layout, not Notification Center compositing or
+the timing of actual timeline animations. The installed app is not replaced
+by the layout harness.
+
 ## Measured refresh costs
 
 Measurements used optimized (`-O`) DEBUG app builds on the same Mac, with a
