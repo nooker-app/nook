@@ -161,6 +161,38 @@ struct StackedGlassWidget: Widget {
     }
 }
 
+struct FramedGlassWidget: Widget {
+    let design: FrameDesign
+
+    init() { design = .tray }
+    init(design: FrameDesign) { self.design = design }
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: design.kind, provider: StackProvider()) { entry in
+            FramedWidgetContent(design: design, entry: entry)
+        }
+        .configurationDisplayName(design.code + " · " + design.title)
+        .description(design.subtitle)
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .contentMarginsDisabled()
+        .nookHostBackground()
+    }
+}
+
+struct FramedWidgetContent: View {
+    let design: FrameDesign
+    let entry: StackEntry
+    @Environment(\.widgetFamily) private var family
+
+    var body: some View {
+        FramedGlassContent(design: design,
+                           size: family == .systemSmall ? .small : family == .systemLarge ? .large : .medium,
+                           deck: entry.deck, expanded: entry.expanded)
+            .containerBackground(for: .widget) { Color.clear }
+            .widgetURL(URL(string: "nookglasslab://stack"))
+    }
+}
+
 @main
 struct GlassLabWidgets: WidgetBundle {
     var body: some Widget {
@@ -168,5 +200,8 @@ struct GlassLabWidgets: WidgetBundle {
         PrivateBlurWidget()
         PrivateTransparentWidget()
         StackedGlassWidget()
+        FramedGlassWidget(design: .tray)
+        FramedGlassWidget(design: .folio)
+        FramedGlassWidget(design: .shelf)
     }
 }

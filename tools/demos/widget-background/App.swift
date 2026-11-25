@@ -5,7 +5,7 @@ import WidgetKit
 struct GlassLabApp: App {
     var body: some Scene {
         WindowGroup("Nook Glass Lab") {
-            StackPreview()
+            FrameComparisonPreview()
         }
         .windowResizability(.contentSize)
     }

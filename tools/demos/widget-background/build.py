@@ -43,8 +43,8 @@ for bundle, name, identifier, kind in [
         "CFBundleName": name,
         "CFBundleDisplayName": "Nook Glass Lab",
         "CFBundlePackageType": kind,
-        "CFBundleShortVersionString": "1.2",
-        "CFBundleVersion": "10",
+        "CFBundleShortVersionString": "1.3",
+        "CFBundleVersion": "11",
         "LSMinimumSystemVersion": "26.0",
     }
     if kind == "XPC!":
@@ -79,10 +79,11 @@ compile_args = ["xcrun", "swiftc", "-parse-as-library", "-O", "-target", "arm64-
                 "-sdk", sdk, "-module-cache-path", root / "module-cache"]
 run(*compile_args, "-F", root / "Frameworks", "-application-extension",
     "-module-name", "GlassLabWidgets", "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain",
-    source / "Widgets.swift", source / "StackedContent.swift", repo / "NookWidget/NookWidgetHostBackground.swift",
+    source / "Widgets.swift", source / "StackedContent.swift", source / "FramedContent.swift", repo / "NookWidget/NookWidgetHostBackground.swift",
     root / "ProductionContent.swift", root / "WidgetShared.swift",
     root / "WidgetSnapshot.swift", "-o", extension / "Contents/MacOS/GlassLabWidgets")
-run(*compile_args, source / "App.swift", source / "StackedContent.swift", "-o", app / "Contents/MacOS/Nook Glass Lab")
+run(*compile_args, source / "App.swift", source / "StackedContent.swift", source / "FramedContent.swift",
+    source / "FramePreview.swift", "-o", app / "Contents/MacOS/Nook Glass Lab")
 
 entitlements = root / "Lab.entitlements"
 entitlements.write_bytes(plistlib.dumps({"com.apple.security.app-sandbox": True}))

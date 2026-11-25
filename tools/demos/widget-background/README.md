@@ -10,6 +10,9 @@ group. B now exercises Nook's optional production host-background bridge.
 | B · Home Blur | Clear | Private `preferredBackgroundStyle(.blur)` |
 | C · Transparent | Clear | Private `preferredBackgroundStyle(.transparent)` |
 | D · Stacked Glass | Clear, with individual material story capsules | Private transparent background requests |
+| E · Glass Tray | Inset cards with subtle glass edges | Home blur |
+| F · Reading Folio | Lead story and compact secondary stories | Home blur |
+| G · Quiet Shelf | Typography, amber markers and fine dividers | Home blur |
 
 The installed Home extension imports `preferredBackgroundStyle` and the `blur`
 enum case. The public macOS 26.5 WidgetKit Swift interface does not expose them;
@@ -138,3 +141,41 @@ Verify the final host result over a colored background, including the space
 between capsules, and capture an actual timeline transition before considering
 production integration. A frameless desktop overlay app would be a different
 product from a system-managed WidgetKit widget; the lab does not install one.
+
+## Designs that embrace the host frame
+
+The native app opens a side-by-side E/F/G comparison. All three include a
+visible rounded outer plate approximation; it is not an exact reproduction of
+Notification Center. Select small, medium or large to see one, two or four
+stories, replay first display, or replace the same story in all three designs.
+The original D preview remains available through **Original D**.
+
+- **E · Glass Tray** is the closest continuation of the stacked-card concept:
+  a small collection header and rounded cards inset from the system frame.
+  Restrained fills and fine highlights avoid layering several heavy materials.
+- **F · Reading Folio** gives the first story more space and an amber wash,
+  with compact secondary stories below. The frame reads as a publication cover.
+- **G · Quiet Shelf** uses one surface, numbered rows and fine separators.
+  Removing the inner card outlines favors scanning and text density.
+
+`FramedContent.swift` is compiled into both the app and extension. The actual
+E/F/G widgets use the same host blur request as B with a clear container and
+no additional outer stroke; macOS supplies that frame. Inner content uses
+archive-compatible shapes and fills, never a full-card `glassEffect`.
+The two waiting cards and promoted story share the same identity domain as D.
+Unchanged rows keep their positions. Each design maintains its own slot geometry,
+including the larger first slot in F. Reduce Motion skips the transitions.
+
+The sample provider shares the lab's existing finite timeline and its start by
+family. Adding E/F/G after that sequence finished shows its settled result;
+use the app to replay motion. Verify live host appearance by adding the desired
+E/F/G widget from the gallery over a colored background. These are independent
+demo kinds, not a production widget redesign or a change to macOS appearance.
+
+The native comparison was captured at all three sizes using the same running
+app. A first-display replay and one second-slot promotion were captured before
+and after settlement; all three designs promoted waiting story 4 and retained
+stories 0, 2 and 3. Shared-content static renders also covered all nine layouts.
+The signed lab build and main macOS build pass. The E/F/G host appearance still
+needs a Notification Center comparison; native captures are layout evidence,
+not proof of the system's final blur or timeline animation.
