@@ -96,26 +96,27 @@ First display and data updates have separate animation ownership. Only first
 display unfolds all rows (0.48 seconds, with a 0.065-second stagger). Story
 updates never change the expanded state: each retained article keeps its ID,
 absolute slot, size and position. Only a replaced article fades out while its
-replacement rises from the bottom of the stack over 0.55 seconds. An absolute
-ZStack prevents outgoing and incoming views from reflowing the other rows.
-Each slot is a stable parent with a fixed z-index (top to bottom: 4, 3, 2, 1
-for large widgets). Article identity and replacement transitions live inside
-that parent. Never assign an arriving article a shared negative z-index:
-it otherwise stays behind the wrong neighbors after arrival and jumps in front
-when the next replacement changes the arriving ID. No delayed z-index reset or
-animation-completion callback is needed, including for overlapping updates.
-Two noninteractive reserve surfaces peek out behind the bottom story before an
-update. The layout reserves 16 points for this tail within the actual widget
-bounds. A replacement starts at the front reserve card's origin, slightly
-scaled down, and slides into its fixed slot; it no longer materializes from
-outside the widget. Reserve surfaces share the story material and are excluded
-from accessibility and hit testing. They do not trigger full-stack unfolding.
-Native captures of a single replacement kept all three capsule-overlap bands
-and the reserve deck pixel-identical before and after settlement. As a negative
-control, reintroducing a second-slot z-index of -1 in an offscreen copy changed
-1,957 of 2,170 pixels in the second/third overlap band; repeated correct renders
-changed none. This checks layer order, not WidgetKit backdrop compositing.
-The reserve tail was also checked at small, medium and large sizes.
+replacement moves from the real waiting deck over 0.55 seconds. `StackDeck`
+owns the displayed stories and two waiting stories. A single `ForEach`, keyed
+only by story ID, renders both roles. Promotion consumes the front waiting
+story, preserving that existing view while its offset, scale and content
+visibility animate into its destination. The second waiting card advances and
+a new card fades into the back. Do not recreate an incoming view over a static
+decorative deck, or key cards by their changing role/slot.
+
+An absolute ZStack prevents reflow. Slot ranks remain fixed (top to bottom:
+4, 3, 2, 1 for large widgets); waiting ranks are -1 and -2. On pickup a card
+uses its destination slot's rank, which remains correct after arrival. Never
+leave an active card at a shared negative "incoming" rank or use a delayed
+global reset; later/overlapping replacements must not alter previous ranks.
+
+The waiting cards peek out within 16 reserved points behind the bottom story.
+They carry real next-story IDs, but hide text, links and accessibility until
+picked up. During first display they start fully transparent, smaller, and
+tucked behind the first card. Their edges reveal with a slight delay as the
+last story settles, instead of protruding from the folded stack. The native
+preview starts folded before its first task runs to avoid an initial flash.
+Story updates never replay this introduction.
 Reduce Motion disables both transitions. **First display** explicitly resets
 the native preview for inspection; **Replace one story** cycles through the
 visible slots without resetting the stack.

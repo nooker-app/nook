@@ -13,14 +13,13 @@ struct GlassLabApp: App {
 
 struct StackPreview: View {
     @State private var size: StackSize = .large
-    @State private var expanded = true
+    @State private var expanded = false
     @State private var blueBackground = true
     @State private var replay = 0
     @State private var reloadRequested = false
     @State private var selectedStory: String?
     @State private var widgetSurface = true
-    @State private var stories = StackStory.samples
-    @State private var nextStory = 0
+    @State private var deck = StackDeck()
     @State private var nextSlot = 1
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -48,8 +47,7 @@ struct StackPreview: View {
                         .buttonStyle(.glass)
                     Button("글 하나 교체", systemImage: "rectangle.stack.badge.plus") {
                         let slot = nextSlot % size.count
-                        stories[slot] = .replacement(nextStory)
-                        nextStory += 1
+                        deck.replaceStory(at: slot)
                         nextSlot = (slot + 1) % size.count
                     }
                     .disabled(!expanded)
@@ -84,7 +82,7 @@ struct StackPreview: View {
             .frame(width: 350, height: 680)
             ZStack {
                 backdrop
-                StackedGlassContent(size: size, stories: stories, expanded: expanded, widgetSurface: widgetSurface)
+                StackedGlassContent(size: size, deck: deck, expanded: expanded, widgetSurface: widgetSurface)
                     .frame(width: size.dimensions.width, height: size.dimensions.height)
                     .id(size)
             }
@@ -103,8 +101,7 @@ struct StackPreview: View {
             var reset = Transaction(animation: nil)
             reset.disablesAnimations = true
             withTransaction(reset) {
-                stories = StackStory.samples
-                nextStory = 0
+                deck = StackDeck()
                 nextSlot = 1
                 expanded = reduceMotion
             }

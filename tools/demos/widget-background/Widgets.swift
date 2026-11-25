@@ -77,7 +77,7 @@ struct PrivateTransparentWidget: Widget {
 struct StackEntry: TimelineEntry {
     let date: Date
     let expanded: Bool
-    var stories = StackStory.samples
+    var deck = StackDeck()
 }
 
 struct StackProvider: TimelineProvider {
@@ -93,7 +93,7 @@ struct StackProvider: TimelineProvider {
         }
         let current = sequence(start: start, family: context.family).last(where: { $0.date <= now })
             ?? placeholder(in: context)
-        completion(StackEntry(date: now, expanded: true, stories: current.stories))
+        completion(StackEntry(date: now, expanded: true, deck: current.deck))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StackEntry>) -> Void) {
@@ -111,7 +111,7 @@ struct StackProvider: TimelineProvider {
         }
         let steps = sequence(start: start, family: context.family)
         let current = steps.last(where: { $0.date <= now }) ?? steps[0]
-        let entries = [StackEntry(date: now, expanded: current.expanded, stories: current.stories)]
+        let entries = [StackEntry(date: now, expanded: current.expanded, deck: current.deck)]
             + steps.filter { $0.date > now }
         completion(Timeline(entries: entries, policy: .never))
     }
@@ -122,15 +122,15 @@ struct StackProvider: TimelineProvider {
 
     private func sequence(start: Date, family: WidgetFamily) -> [StackEntry] {
         let count = family == .systemSmall ? 1 : family == .systemLarge ? 4 : 2
-        var firstUpdate = StackStory.samples
-        firstUpdate[min(1, count - 1)] = .replacement(0)
+        var firstUpdate = StackDeck()
+        firstUpdate.replaceStory(at: min(1, count - 1))
         var secondUpdate = firstUpdate
-        secondUpdate[count - 1] = .replacement(1)
+        secondUpdate.replaceStory(at: count - 1)
         return [
             StackEntry(date: start, expanded: false),
             StackEntry(date: start.addingTimeInterval(3), expanded: true),
-            StackEntry(date: start.addingTimeInterval(12), expanded: true, stories: firstUpdate),
-            StackEntry(date: start.addingTimeInterval(21), expanded: true, stories: secondUpdate),
+            StackEntry(date: start.addingTimeInterval(12), expanded: true, deck: firstUpdate),
+            StackEntry(date: start.addingTimeInterval(21), expanded: true, deck: secondUpdate),
         ]
     }
 }
@@ -141,7 +141,7 @@ struct StackWidgetContent: View {
 
     var body: some View {
         StackedGlassContent(size: family == .systemSmall ? .small : family == .systemLarge ? .large : .medium,
-                            stories: entry.stories, expanded: entry.expanded, widgetSurface: true)
+                            deck: entry.deck, expanded: entry.expanded, widgetSurface: true)
             .containerBackground(for: .widget) { Color.clear }
             .widgetURL(URL(string: "nookglasslab://stack"))
     }
